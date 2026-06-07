@@ -168,6 +168,7 @@ func mountSessionRoutes(r chi.Router, h *sessionHandlers) {
 			return
 		}
 		runTurn := false
+		hasInterrupt := false
 		for _, ev := range body.Events {
 			var meta struct {
 				Type string `json:"type"`
@@ -180,13 +181,19 @@ func mountSessionRoutes(r chi.Router, h *sessionHandlers) {
 				writeError(w, http.StatusBadRequest, "invalid event type")
 				return
 			}
+			if isInterruptEventType(meta.Type) {
+				hasInterrupt = true
+			}
 			if isTurnTriggerEventType(meta.Type) {
 				runTurn = true
 			}
 		}
+		if hasInterrupt {
+			runTurn = false
+		}
 
 		if err := h.registry.EnqueueEvents(
-			req.Context(), id, body.Events, runTurn, nil,
+			req.Context(), id, body.Events, runTurn, hasInterrupt, nil,
 		); err != nil {
 			writeError(w, http.StatusConflict, err.Error())
 			return

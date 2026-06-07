@@ -24,3 +24,7 @@ func isTurnTriggerEventType(eventType string) bool {
 	_, ok := turnTriggerEventTypes[eventType]
 	return ok
 }
+
+func isInterruptEventType(eventType string) bool {
+	return eventType == "user.interrupt"
+}

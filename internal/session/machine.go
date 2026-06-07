@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"sync"
@@ -34,10 +35,15 @@ type Machine struct {
 	Models      *modelresolve.Resolver
 	activeTurn  string
 	activeTurnM sync.Mutex
+	cancelTurn  context.CancelFunc
+	cancelTurnM sync.Mutex
 }
 
 // RunTurn executes a harness turn using persisted session history.
 func (m *Machine) RunTurn(ctx context.Context) error {
+	turnCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	m.activeTurnM.Lock()
 	if m.activeTurn != "" {
 		m.activeTurnM.Unlock()
@@ -45,11 +51,13 @@ func (m *Machine) RunTurn(ctx context.Context) error {
 	}
 	turnID := randomTurnID()
 	m.activeTurn = turnID
+	m.setCancelTurn(cancel)
 	m.activeTurnM.Unlock()
 
 	defer func() {
 		m.activeTurnM.Lock()
 		m.activeTurn = ""
+		m.clearCancelTurn()
 		m.activeTurnM.Unlock()
 	}()
 
@@ -101,7 +109,7 @@ func (m *Machine) RunTurn(ctx context.Context) error {
 		return err
 	}
 
-	resp, err := m.Harness.RunTurn(ctx, harness.TurnRequest{
+	resp, err := m.Harness.RunTurn(turnCtx, harness.TurnRequest{
 		SessionID: m.SessionID,
 		Agent:     agent,
 		Model:     modelCfg,
@@ -109,6 +117,9 @@ func (m *Machine) RunTurn(ctx context.Context) error {
 		Workdir:   workdirPath,
 	})
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return m.finishInterruptedTurn(ctx, turnID)
+		}
 		return m.failTurn(ctx, turnID, err)
 	}
 
@@ -123,6 +134,57 @@ func (m *Machine) RunTurn(ctx context.Context) error {
 
 	outEvents := append(resp.Events, lifecycleEnd)
 	return m.publishEvents(ctx, outEvents)
+}
+
+// CancelActiveTurn aborts the in-flight harness turn, if any.
+func (m *Machine) CancelActiveTurn() bool {
+	m.cancelTurnM.Lock()
+	cancel := m.cancelTurn
+	m.cancelTurnM.Unlock()
+	if cancel == nil {
+		return false
+	}
+	cancel()
+	return true
+}
+
+// PublishStatusIdle appends a session.status_idle marker (OMA-aligned).
+func (m *Machine) PublishStatusIdle(ctx context.Context) error {
+	idleEvent, err := json.Marshal(map[string]any{
+		"type":        "session.status_idle",
+		"stop_reason": map[string]string{"type": "end_turn"},
+	})
+	if err != nil {
+		return err
+	}
+	return m.publishEvents(ctx, []json.RawMessage{idleEvent})
+}
+
+func (m *Machine) setCancelTurn(cancel context.CancelFunc) {
+	m.cancelTurnM.Lock()
+	m.cancelTurn = cancel
+	m.cancelTurnM.Unlock()
+}
+
+func (m *Machine) clearCancelTurn() {
+	m.cancelTurnM.Lock()
+	m.cancelTurn = nil
+	m.cancelTurnM.Unlock()
+}
+
+func (m *Machine) finishInterruptedTurn(
+	ctx context.Context,
+	turnID string,
+) error {
+	lifecycleEnd, err := json.Marshal(map[string]any{
+		"type":    "session.lifecycle",
+		"phase":   "turn_end",
+		"turn_id": turnID,
+	})
+	if err != nil {
+		return err
+	}
+	return m.publishEvents(ctx, []json.RawMessage{lifecycleEnd})
 }
 
 func (m *Machine) failTurn(

@@ -37,15 +37,20 @@ func (r *Registry) EnqueueUserMessage(
 	userEvent json.RawMessage,
 	onDone func(error),
 ) error {
-	return r.EnqueueEvents(ctx, sessionID, []json.RawMessage{userEvent}, true, onDone)
+	return r.EnqueueEvents(
+		ctx, sessionID, []json.RawMessage{userEvent}, true, false, onDone,
+	)
 }
 
 // EnqueueEvents appends client events and optionally runs a harness turn.
+// When handleInterrupt is true, cancels any active turn, drains queued turns,
+// and emits session.status_idle when state changed (OMA user.interrupt).
 func (r *Registry) EnqueueEvents(
 	ctx context.Context,
 	sessionID string,
 	events []json.RawMessage,
 	runTurn bool,
+	handleInterrupt bool,
 	onDone func(error),
 ) error {
 	lane, err := r.lane(sessionID)
@@ -66,6 +71,11 @@ func (r *Registry) EnqueueEvents(
 		})
 	}
 	lane.appendMu.Unlock()
+
+	if handleInterrupt {
+		lane.handleInterrupt(ctx)
+		runTurn = false
+	}
 
 	if !runTurn {
 		return nil
@@ -106,6 +116,30 @@ func newSessionLane(machine *Machine) *sessionLane {
 
 func (lane *sessionLane) scheduleTurn(onDone func(error)) {
 	lane.turnCh <- turnJob{onDone: onDone}
+}
+
+func (lane *sessionLane) handleInterrupt(ctx context.Context) {
+	hadActive := lane.machine.CancelActiveTurn()
+	drained := lane.drainPendingTurns()
+	if !hadActive && drained == 0 {
+		return
+	}
+	_ = lane.machine.PublishStatusIdle(ctx)
+}
+
+func (lane *sessionLane) drainPendingTurns() int {
+	n := 0
+	for {
+		select {
+		case job := <-lane.turnCh:
+			n++
+			if job.onDone != nil {
+				job.onDone(nil)
+			}
+		default:
+			return n
+		}
+	}
 }
 
 func (lane *sessionLane) runTurnWorker() {

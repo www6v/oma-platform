@@ -186,7 +186,7 @@ func TestRegistrySerializesConcurrentAppends(t *testing.T) {
 				"index": i,
 			})
 			errCh <- reg.EnqueueEvents(
-				ctx, sess.ID, []json.RawMessage{payload}, false, nil,
+				ctx, sess.ID, []json.RawMessage{payload}, false, false, nil,
 			)
 		}()
 	}
