@@ -1,0 +1,23 @@
+{
+  "source": "open-managed-agents/test/unit/history-conversion.test.ts tool_use",
+  "input": [
+    {
+      "type": "tool_use",
+      "id": "tc_1",
+      "name": "bash",
+      "input": {
+        "command": "ls"
+      }
+    }
+  ],
+  "expected": [
+    {
+      "type": "agent.tool_use",
+      "id": "tc_1",
+      "name": "bash",
+      "input": {
+        "command": "ls"
+      }
+    }
+  ]
+}

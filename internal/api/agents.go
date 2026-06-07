@@ -95,6 +95,10 @@ func mountAgentRoutes(r chi.Router, agents *store.AgentRepo) {
 		if sys == "" {
 			sys = body.System
 		}
+		if err := validateAgentTools(body.Tools); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		agent, err := agents.Create(req.Context(), store.CreateAgentInput{
 			TenantID:     defaultTenant,
 			Name:         body.Name,
@@ -196,6 +200,10 @@ func mountAgentRoutes(r chi.Router, agents *store.AgentRepo) {
 			patch.Description = body.Description
 		}
 		if body.Tools != nil {
+			if err := validateAgentTools(*body.Tools); err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
 			patch.Tools = *body.Tools
 			patch.ToolsSet = true
 		}

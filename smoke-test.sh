@@ -17,6 +17,9 @@ export SMOKE_MODEL_CARD_ID="${SMOKE_MODEL_CARD_ID:-smoke-claude}"
 export SMOKE_TIMEOUT_SEC="${SMOKE_TIMEOUT_SEC:-120}"
 export SMOKE_POLL_SEC="${SMOKE_POLL_SEC:-2}"
 export SMOKE_SKIP_LLM="${SMOKE_SKIP_LLM:-0}"
+export SMOKE_SKIP_TOOLS="${SMOKE_SKIP_TOOLS:-0}"
+export SMOKE_TOOLS_ONLY="${SMOKE_TOOLS_ONLY:-0}"
+export SMOKE_TOOL_TIMEOUT_SEC="${SMOKE_TOOL_TIMEOUT_SEC:-180}"
 export HARNESS_URL="${HARNESS_URL:-http://127.0.0.1:8090}"
 
 DEFAULT_ENV_ID="env-local-default"
@@ -113,6 +116,86 @@ sys.exit(2)' <<<"${events}"
 
   echo "error: timed out after ${SMOKE_TIMEOUT_SEC}s waiting for real agent.message" >&2
   echo "hint: ensure start-platform.sh and start-harness.sh are running with OMA_FAKE_HARNESS=0" >&2
+  echo "${events}" >&2
+  return 1
+}
+
+wait_for_bash_uname_chain() {
+  local sid="$1"
+  local uname_s="$2"
+  local uname_m="$3"
+  local deadline=$((SECONDS + SMOKE_TOOL_TIMEOUT_SEC))
+  local events=""
+  local status=0
+  local polls=0
+  local chain_err=""
+
+  while (( SECONDS < deadline )); do
+    events="$(
+      api_get "/v1/sessions/${sid}/events?order=asc"
+    )"
+    status=0
+    chain_err="$(
+      python3 -c 'import json,sys
+uname_s=sys.argv[1]
+uname_m=sys.argv[2]
+events=json.load(sys.stdin)["data"]
+bash_use=False
+tool_ok=False
+for evt in events:
+    if evt.get("type") == "session.error":
+        msg=evt.get("message") or evt.get("error") or "session.error"
+        print(msg)
+        sys.exit(3)
+    if evt.get("id") == "evt_fake":
+        sys.exit(1)
+    if evt.get("type") == "agent.tool_use" and evt.get("name") == "bash":
+        bash_use=True
+    if evt.get("type") != "agent.tool_result":
+        continue
+    text=""
+    for block in evt.get("content") or []:
+        if block.get("type") == "text":
+            text += block.get("text", "")
+    if "Working directory does not exist" in text:
+        print("bash workdir missing — restart platform after SANDBOX_WORKDIR abs fix")
+        sys.exit(4)
+    if uname_s in text and uname_m in text:
+        tool_ok=True
+if bash_use and tool_ok:
+    sys.exit(0)
+sys.exit(2)' "${uname_s}" "${uname_m}" <<<"${events}"
+    )" || status=$?
+
+    if [[ "${status}" -eq 0 ]]; then
+      echo "${events}"
+      return 0
+    fi
+    if [[ "${status}" -eq 1 ]]; then
+      echo "error: got evt_fake during tool chain smoke" >&2
+      echo "${events}" >&2
+      return 1
+    fi
+    if [[ "${status}" -eq 3 ]]; then
+      echo "error: harness tool turn failed: ${chain_err}" >&2
+      echo "${events}" >&2
+      return 1
+    fi
+    if [[ "${status}" -eq 4 ]]; then
+      echo "error: ${chain_err}" >&2
+      echo "restart ./start-platform.sh so workdir paths are absolute for harness" >&2
+      echo "${events}" >&2
+      return 1
+    fi
+    polls=$((polls + 1))
+    if (( polls % 5 == 0 )); then
+      echo "   ... waiting for bash+uname ($((polls)) polls, $((deadline - SECONDS))s left)" >&2
+    fi
+    sleep "${SMOKE_POLL_SEC}"
+  done
+
+  echo "error: timed out after ${SMOKE_TOOL_TIMEOUT_SEC}s waiting for bash uname tool chain" >&2
+  echo "hint: agent needs tools=[{type:agent_toolset_20260401}] and OMA_FAKE_HARNESS=0" >&2
   echo "${events}" >&2
   return 1
 }
@@ -296,20 +379,21 @@ if [[ "${SMOKE_SKIP_LLM}" == "1" ]]; then
   exit 0
 fi
 
-echo "==> send message"
-EVENT_RESP="$(
-  api_post_json "/v1/sessions/${SID}/events" \
-    '{"events":[{"type":"user.message","content":[{"type":"text","text":"Reply with one short sentence only."}]}]}'
-)"
-echo "${EVENT_RESP}"
+if [[ "${SMOKE_TOOLS_ONLY}" != "1" ]]; then
+  echo "==> send message (basic LLM)"
+  EVENT_RESP="$(
+    api_post_json "/v1/sessions/${SID}/events" \
+      '{"events":[{"type":"user.message","content":[{"type":"text","text":"Reply with one short sentence only."}]}]}'
+  )"
+  echo "${EVENT_RESP}"
 
-echo "==> wait for real LLM response (timeout=${SMOKE_TIMEOUT_SEC}s)"
-EVENTS="$(wait_for_agent_reply "${SID}")"
-echo "${EVENTS}"
-echo ""
+  echo "==> wait for real LLM response (timeout=${SMOKE_TIMEOUT_SEC}s)"
+  EVENTS="$(wait_for_agent_reply "${SID}")"
+  echo "${EVENTS}"
+  echo ""
 
-REPLY_TEXT="$(
-  python3 -c 'import json,sys
+  REPLY_TEXT="$(
+    python3 -c 'import json,sys
 for evt in json.load(sys.stdin)["data"]:
     if evt.get("type") != "agent.message" or evt.get("id") == "evt_fake":
         continue
@@ -318,7 +402,50 @@ for evt in json.load(sys.stdin)["data"]:
             print(block.get("text", ""))
             raise SystemExit(0)
 raise SystemExit(1)' <<<"${EVENTS}"
+  )"
+
+  echo "AGENT_REPLY=${REPLY_TEXT}"
+fi
+
+if [[ "${SMOKE_SKIP_TOOLS}" == "1" ]]; then
+  echo "smoke test passed (LLM only, SMOKE_SKIP_TOOLS=1)"
+  exit 0
+fi
+
+UNAME_LINE="$(uname -a)"
+UNAME_SYS="$(uname -s)"
+UNAME_MACHINE="$(uname -m)"
+echo "==> tool chain smoke: bash + uname (local=${UNAME_LINE})"
+
+echo "==> send message (Run: uname -a)"
+TOOL_RESP="$(
+  api_post_json "/v1/sessions/${SID}/events" \
+    '{"events":[{"type":"user.message","content":[{"type":"text","text":"Run: uname -a"}]}]}'
+)"
+echo "${TOOL_RESP}"
+
+echo "==> wait for bash tool_use + uname output (timeout=${SMOKE_TOOL_TIMEOUT_SEC}s)"
+TOOL_EVENTS="$(wait_for_bash_uname_chain "${SID}" "${UNAME_SYS}" "${UNAME_MACHINE}")"
+echo "${TOOL_EVENTS}"
+echo ""
+
+TOOL_SUMMARY="$(
+  python3 -c 'import json,sys
+bash_cmd=""
+tool_text=""
+for evt in json.load(sys.stdin)["data"]:
+    if evt.get("type") == "agent.tool_use" and evt.get("name") == "bash":
+        inp=evt.get("input") or {}
+        bash_cmd=str(inp.get("command") or inp.get("cmd") or "")
+    if evt.get("type") != "agent.tool_result":
+        continue
+    for block in evt.get("content") or []:
+        if block.get("type") == "text":
+            tool_text=block.get("text", "").strip()
+            break
+print(f"bash_command={bash_cmd!r}")
+print(f"tool_result={tool_text!r}")' <<<"${TOOL_EVENTS}"
 )"
 
-echo "AGENT_REPLY=${REPLY_TEXT}"
-echo "smoke test passed (P1 APIs + real LLM)"
+echo "${TOOL_SUMMARY}"
+echo "smoke test passed (P1 APIs + real LLM + bash/uname tool chain)"

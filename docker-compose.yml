@@ -10,18 +10,26 @@ services:
       SANDBOX_WORKDIR: /data/sandboxes
       HARNESS_URL: http://oma-harness:8090
       OMA_API_KEY: ${OMA_API_KEY:-dev-key}
+      OMA_FAKE_HARNESS: ${OMA_FAKE_HARNESS:-1}
     volumes:
       - ./data:/data
     depends_on:
-      - oma-harness
+      oma-harness:
+        condition: service_healthy
 
   oma-harness:
     build:
       context: ..
-      dockerfile: oma-building/Dockerfile.harness
+      dockerfile: oma-platform/Dockerfile.harness
     ports:
       - "8090:8090"
     environment:
       OMA_FAKE_HARNESS: ${OMA_FAKE_HARNESS:-1}
     volumes:
       - ${HOME}/.pi/agent:/root/.pi/agent:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s

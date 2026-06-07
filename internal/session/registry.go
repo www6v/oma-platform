@@ -8,22 +8,26 @@ import (
 	"github.com/open-ma/oma-building/internal/stream"
 )
 
-// Registry runs session turns asynchronously.
+// Registry runs session turns asynchronously with per-session serialization.
 type Registry struct {
-	mu       sync.Mutex
-	machines map[string]*Machine
+	mu    sync.Mutex
+	lanes map[string]*sessionLane
 }
 
 // NewRegistry returns an empty session registry.
 func NewRegistry() *Registry {
-	return &Registry{machines: make(map[string]*Machine)}
+	return &Registry{lanes: make(map[string]*sessionLane)}
 }
 
-// Register stores a machine for a session id.
+// Register stores a machine for a session id and starts its turn worker.
 func (r *Registry) Register(sessionID string, machine *Machine) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.machines[sessionID] = machine
+	if lane, ok := r.lanes[sessionID]; ok {
+		lane.machine = machine
+		return
+	}
+	r.lanes[sessionID] = newSessionLane(machine)
 }
 
 // EnqueueUserMessage appends the user event and runs the turn in background.
@@ -44,35 +48,73 @@ func (r *Registry) EnqueueEvents(
 	runTurn bool,
 	onDone func(error),
 ) error {
-	r.mu.Lock()
-	machine, ok := r.machines[sessionID]
-	r.mu.Unlock()
-	if !ok {
-		return ErrNotRegistered
-	}
-
-	stored, err := machine.Events.AppendEvents(ctx, sessionID, events)
+	lane, err := r.lane(sessionID)
 	if err != nil {
 		return err
 	}
+
+	lane.appendMu.Lock()
+	stored, err := lane.machine.Events.AppendEvents(ctx, sessionID, events)
+	if err != nil {
+		lane.appendMu.Unlock()
+		return err
+	}
 	for _, ev := range stored {
-		machine.Hub.Publish(sessionID, stream.Event{
+		lane.machine.Hub.Publish(sessionID, stream.Event{
 			Seq:     ev.Seq,
 			Payload: ev.Payload,
 		})
 	}
+	lane.appendMu.Unlock()
 
 	if !runTurn {
 		return nil
 	}
 
-	go func() {
-		err := machine.RunTurn(context.Background())
-		if onDone != nil {
-			onDone(err)
-		}
-	}()
+	lane.scheduleTurn(onDone)
 	return nil
+}
+
+func (r *Registry) lane(sessionID string) (*sessionLane, error) {
+	r.mu.Lock()
+	lane, ok := r.lanes[sessionID]
+	r.mu.Unlock()
+	if !ok {
+		return nil, ErrNotRegistered
+	}
+	return lane, nil
+}
+
+type sessionLane struct {
+	machine  *Machine
+	appendMu sync.Mutex
+	turnCh   chan turnJob
+}
+
+type turnJob struct {
+	onDone func(error)
+}
+
+func newSessionLane(machine *Machine) *sessionLane {
+	lane := &sessionLane{
+		machine: machine,
+		turnCh:  make(chan turnJob, 32),
+	}
+	go lane.runTurnWorker()
+	return lane
+}
+
+func (lane *sessionLane) scheduleTurn(onDone func(error)) {
+	lane.turnCh <- turnJob{onDone: onDone}
+}
+
+func (lane *sessionLane) runTurnWorker() {
+	for job := range lane.turnCh {
+		err := lane.machine.RunTurn(context.Background())
+		if job.onDone != nil {
+			job.onDone(err)
+		}
+	}
 }
 
 // ErrNotRegistered means the session has no registered machine.

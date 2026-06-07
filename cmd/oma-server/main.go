@@ -22,6 +22,11 @@ func main() {
 	addr := envOrDefault("OMA_LISTEN_ADDR", ":8787")
 	dbPath := envOrDefault("DATABASE_PATH", "./data/oma.db")
 	workdirBase := envOrDefault("SANDBOX_WORKDIR", "./data/sandboxes")
+	absWorkdir, err := filepath.Abs(workdirBase)
+	if err != nil {
+		log.Fatal(err)
+	}
+	workdirBase = absWorkdir
 	harnessURL := envOrDefault("HARNESS_URL", "http://127.0.0.1:8090")
 	apiKey := os.Getenv("OMA_API_KEY")
 

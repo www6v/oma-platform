@@ -1,0 +1,25 @@
+{
+  "source": "open-managed-agents/test/unit/harness.test.ts eventsToMessages",
+  "input": [
+    {
+      "type": "assistant_message",
+      "content": [
+        {
+          "type": "text",
+          "text": "done"
+        }
+      ]
+    }
+  ],
+  "expected": [
+    {
+      "type": "agent.message",
+      "content": [
+        {
+          "type": "text",
+          "text": "done"
+        }
+      ]
+    }
+  ]
+}

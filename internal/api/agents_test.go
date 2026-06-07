@@ -77,6 +77,18 @@ func TestPostAgent(t *testing.T) {
 	}
 }
 
+func TestPostAgentRejectsStringTools(t *testing.T) {
+	handler := testRouter(t)
+	body := `{"name":"demo","model":"claude-sonnet-4-20250514","tools":"agent_toolset_20260401"}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/agents", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestPostAgentWithTools(t *testing.T) {
 	handler := testRouter(t)
 	body := `{"name":"demo","model":"claude-sonnet-4-20250514","description":"hi","tools":[{"type":"agent_toolset_20260401"}]}`

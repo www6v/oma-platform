@@ -1,0 +1,22 @@
+{
+  "source": "open-managed-agents/test/unit/history-conversion.test.ts tool_result",
+  "input": [
+    {
+      "type": "tool_result",
+      "toolCallId": "tc_1",
+      "result": "file1.txt\nfile2.txt"
+    }
+  ],
+  "expected": [
+    {
+      "type": "agent.tool_result",
+      "tool_use_id": "tc_1",
+      "content": [
+        {
+          "type": "text",
+          "text": "file1.txt\nfile2.txt"
+        }
+      ]
+    }
+  ]
+}

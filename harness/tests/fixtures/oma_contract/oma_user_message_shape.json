@@ -1,0 +1,21 @@
+{
+  "source": "open-managed-agents/test/unit/history-conversion.test.ts user.message",
+  "event": {
+    "type": "user.message",
+    "content": [
+      {
+        "type": "text",
+        "text": "Run: uname -a"
+      }
+    ]
+  },
+  "required_fields": {
+    "type": "user.message",
+    "content": [
+      {
+        "type": "text",
+        "text": "Run: uname -a"
+      }
+    ]
+  }
+}

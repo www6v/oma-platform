@@ -1,0 +1,56 @@
+{
+  "source": "open-managed-agents/test/unit/harness.test.ts eventsToMessages tool chain",
+  "input": [
+    {
+      "type": "tool_use",
+      "id": "tc_1",
+      "name": "bash",
+      "input": {
+        "command": "ls"
+      }
+    },
+    {
+      "type": "tool_result",
+      "toolCallId": "tc_1",
+      "result": "file1.txt\nfile2.txt"
+    },
+    {
+      "type": "assistant_message",
+      "content": [
+        {
+          "type": "text",
+          "text": "Here are the files."
+        }
+      ]
+    }
+  ],
+  "expected": [
+    {
+      "type": "agent.tool_use",
+      "id": "tc_1",
+      "name": "bash",
+      "input": {
+        "command": "ls"
+      }
+    },
+    {
+      "type": "agent.tool_result",
+      "tool_use_id": "tc_1",
+      "content": [
+        {
+          "type": "text",
+          "text": "file1.txt\nfile2.txt"
+        }
+      ]
+    },
+    {
+      "type": "agent.message",
+      "content": [
+        {
+          "type": "text",
+          "text": "Here are the files."
+        }
+      ]
+    }
+  ]
+}
