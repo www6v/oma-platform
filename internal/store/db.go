@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"sort"
 	"strings"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -40,19 +41,100 @@ func Open(path string) (*sql.DB, error) {
 }
 
 func migrate(db *sql.DB) error {
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS schema_migrations (
+			name TEXT PRIMARY KEY,
+			applied_at INTEGER NOT NULL
+		)
+	`); err != nil {
+		return fmt.Errorf("create schema_migrations: %w", err)
+	}
+
 	names, err := fs.Glob(migrationFiles, "migrations/*.sql")
 	if err != nil {
 		return fmt.Errorf("list migrations: %w", err)
 	}
 	sort.Strings(names)
 	for _, name := range names {
+		applied, err := migrationApplied(db, name)
+		if err != nil {
+			return err
+		}
+		if applied {
+			continue
+		}
+		if shouldBootstrapMigration(db, name) {
+			if err := recordMigration(db, name); err != nil {
+				return err
+			}
+			continue
+		}
 		body, err := migrationFiles.ReadFile(name)
 		if err != nil {
 			return fmt.Errorf("read migration %s: %w", name, err)
 		}
-		if _, err := db.Exec(string(body)); err != nil {
+		tx, err := db.Begin()
+		if err != nil {
+			return fmt.Errorf("begin migration %s: %w", name, err)
+		}
+		if _, err := tx.Exec(string(body)); err != nil {
+			_ = tx.Rollback()
 			return fmt.Errorf("apply migration %s: %w", name, err)
 		}
+		if _, err := tx.Exec(
+			`INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)`,
+			name,
+			time.Now().Unix(),
+		); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("record migration %s: %w", name, err)
+		}
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("commit migration %s: %w", name, err)
+		}
+	}
+	return nil
+}
+
+func migrationApplied(db *sql.DB, name string) (bool, error) {
+	var applied int
+	err := db.QueryRow(
+		`SELECT 1 FROM schema_migrations WHERE name = ?`,
+		name,
+	).Scan(&applied)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("check migration %s: %w", name, err)
+	}
+	return true, nil
+}
+
+func shouldBootstrapMigration(db *sql.DB, name string) bool {
+	if !strings.HasSuffix(name, "001_core.sql") {
+		return false
+	}
+	return tableExists(db, "agents")
+}
+
+func tableExists(db *sql.DB, table string) bool {
+	var name string
+	err := db.QueryRow(
+		`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`,
+		table,
+	).Scan(&name)
+	return err == nil
+}
+
+func recordMigration(db *sql.DB, name string) error {
+	_, err := db.Exec(
+		`INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)`,
+		name,
+		time.Now().Unix(),
+	)
+	if err != nil {
+		return fmt.Errorf("record migration %s: %w", name, err)
 	}
 	return nil
 }
