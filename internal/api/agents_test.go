@@ -3,6 +3,7 @@ package api_test
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -56,6 +57,36 @@ func testRouterHarness(
 		),
 	})
 	return handler, reg
+}
+
+func testRouterSharedDB(
+	t *testing.T,
+	db *sql.DB,
+	client harness.Client,
+) (http.Handler, *session.Registry, *store.SessionRepo) {
+	t.Helper()
+	agents := store.NewAgentRepo(db)
+	environments := store.NewEnvironmentRepo(db)
+	if err := environments.EnsureDefault(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	modelCards := store.NewModelCardRepo(db)
+	models := &modelresolve.Resolver{Cards: modelCards}
+	sessions := store.NewSessionRepo(db, agents, environments)
+	events := store.NewEventRepo(db)
+	hub := stream.NewHub()
+	reg := session.NewRegistry()
+	workdirs := workdir.NewManager(t.TempDir())
+
+	handler := api.NewRouter(api.Deps{
+		Agents:       agents,
+		Environments: environments,
+		ModelCards:   modelCards,
+		Sessions: api.NewSessionHandlers(
+			sessions, events, hub, reg, workdirs, client, models,
+		),
+	})
+	return handler, reg, sessions
 }
 
 func TestPostAgent(t *testing.T) {

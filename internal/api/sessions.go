@@ -156,6 +156,7 @@ func mountSessionRoutes(r chi.Router, h *sessionHandlers) {
 			writeError(w, http.StatusConflict, "session archived")
 			return
 		}
+		h.registerMachine(sess)
 
 		var body appendEventsRequest
 		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
