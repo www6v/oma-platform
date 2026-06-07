@@ -14,6 +14,15 @@ export OMA_FAKE_HARNESS="${OMA_FAKE_HARNESS:-1}"
 
 cd "${ROOT_DIR}/harness"
 
-exec uvicorn oma_adapter.main:app \
+if [[ ! -x "${ROOT_DIR}/harness/.venv/bin/uvicorn" ]]; then
+  if ! command -v uv >/dev/null 2>&1; then
+    echo "error: uv is required to install harness dependencies" >&2
+    echo "install uv, then rerun ./start-harness.sh" >&2
+    exit 1
+  fi
+  uv sync
+fi
+
+exec "${ROOT_DIR}/harness/.venv/bin/uvicorn" oma_adapter.main:app \
   --host 0.0.0.0 \
   --port 8090

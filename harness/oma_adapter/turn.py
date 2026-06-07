@@ -13,6 +13,42 @@ from oma_adapter.types import AgentSnapshot, TurnResponse
 CreateSessionFn = Callable[[Any], Awaitable[Any]]
 
 
+def _assistant_text_from_session(session: Any) -> str | None:
+    getter = getattr(session, "get_last_assistant_text", None)
+    if callable(getter):
+        text = getter()
+        if isinstance(text, str) and text.strip():
+            return text.strip()
+
+    legacy = getattr(session, "last_assistant_text", None)
+    if callable(legacy):
+        text = legacy()
+        if isinstance(text, str) and text.strip():
+            return text.strip()
+    if isinstance(legacy, str) and legacy.strip():
+        return legacy.strip()
+    return None
+
+
+def _collect_pi_event(buffer: list[dict[str, Any]], event: Any) -> None:
+    if hasattr(event, "type"):
+        from pi_coding_agent.modes.json_mode import agent_event_to_dict
+
+        buffer.append(agent_event_to_dict(event))
+        return
+    if isinstance(event, dict):
+        buffer.append(event)
+
+
+def _make_event_listener(
+    buffer: list[dict[str, Any]],
+) -> Callable[[Any], None]:
+    def listener(event: Any) -> None:
+        _collect_pi_event(buffer, event)
+
+    return listener
+
+
 async def _default_create_session(
     *,
     workdir: str,
@@ -61,32 +97,29 @@ async def run_turn(
 
     buffer: list[dict[str, Any]] = []
 
-    def _collect(event: dict[str, Any]) -> None:
-        buffer.append(event)
-
-    if hasattr(session, "on"):
-        session.on("event", _collect)
+    listener = _make_event_listener(buffer)
+    if hasattr(session, "subscribe"):
+        session.subscribe(listener)
+    elif hasattr(session, "on"):
+        session.on("event", listener)
 
     await session.prompt(prompt)
+    if hasattr(session, "wait_for_idle"):
+        await session.wait_for_idle()
 
     oma_events = emit_oma_events(buffer)
     if not oma_events:
-        text = getattr(session, "last_assistant_text", None)
-        if callable(text):
-            text = text()
+        text = _assistant_text_from_session(session)
         if text:
             oma_events = [
                 {
                     "type": "agent.message",
-                    "content": [{"type": "text", "text": str(text)}],
+                    "content": [{"type": "text", "text": text}],
                 }
             ]
-        else:
-            oma_events = [
-                {
-                    "type": "agent.message",
-                    "content": [{"type": "text", "text": "ok"}],
-                }
-            ]
+
+    if not oma_events:
+        msg = "harness turn produced no assistant output"
+        raise RuntimeError(msg)
 
     return TurnResponse(events=oma_events)

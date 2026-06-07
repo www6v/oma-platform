@@ -20,8 +20,10 @@ async def test_run_turn_fake(monkeypatch: pytest.MonkeyPatch) -> None:
         async def prompt(self, _text: str) -> None:
             return None
 
-        @property
-        def last_assistant_text(self) -> str:
+        async def wait_for_idle(self) -> None:
+            return None
+
+        def get_last_assistant_text(self) -> str:
             return "pong"
 
     class FakeResult:
