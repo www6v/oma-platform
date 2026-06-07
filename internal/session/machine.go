@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/open-ma/oma-building/internal/harness"
+	"github.com/open-ma/oma-building/internal/modelresolve"
 	"github.com/open-ma/oma-building/internal/store"
 	"github.com/open-ma/oma-building/internal/stream"
 	"github.com/open-ma/oma-building/internal/workdir"
@@ -30,6 +31,7 @@ type Machine struct {
 	Hub         Broadcaster
 	Workdirs    *workdir.Manager
 	Harness     harness.Client
+	Models      *modelresolve.Resolver
 	activeTurn  string
 	activeTurnM sync.Mutex
 }
@@ -82,9 +84,15 @@ func (m *Machine) RunTurn(ctx context.Context) error {
 		return fmt.Errorf("parse agent snapshot: %w", err)
 	}
 
+	modelCfg, err := m.resolveModel(ctx, agent.Model)
+	if err != nil {
+		return err
+	}
+
 	resp, err := m.Harness.RunTurn(ctx, harness.TurnRequest{
 		SessionID: m.SessionID,
 		Agent:     agent,
+		Model:     modelCfg,
 		Events:    eventPayloads,
 		Workdir:   workdirPath,
 	})
@@ -120,6 +128,16 @@ func (m *Machine) RunTurn(ctx context.Context) error {
 		})
 	}
 	return nil
+}
+
+func (m *Machine) resolveModel(
+	ctx context.Context,
+	agentModel string,
+) (harness.ModelConfig, error) {
+	if m.Models == nil {
+		return harness.ModelConfig{Model: agentModel}, nil
+	}
+	return m.Models.Resolve(ctx, m.TenantID, agentModel)
 }
 
 func randomTurnID() string {

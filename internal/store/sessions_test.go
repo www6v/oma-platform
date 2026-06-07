@@ -10,8 +10,12 @@ import (
 func TestRecoverRunningSessions(t *testing.T) {
 	db := openTestDB(t)
 	agents := store.NewAgentRepo(db.DB)
-	sessions := store.NewSessionRepo(db.DB, agents)
+	environments := store.NewEnvironmentRepo(db.DB)
 	ctx := context.Background()
+	if err := environments.EnsureDefault(ctx); err != nil {
+		t.Fatal(err)
+	}
+	sessions := store.NewSessionRepo(db.DB, agents, environments)
 
 	agent, err := agents.Create(ctx, store.CreateAgentInput{
 		Name:  "recover",

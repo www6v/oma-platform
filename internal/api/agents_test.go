@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/open-ma/oma-building/internal/api"
 	"github.com/open-ma/oma-building/internal/harness"
+	"github.com/open-ma/oma-building/internal/modelresolve"
 	"github.com/open-ma/oma-building/internal/session"
 	"github.com/open-ma/oma-building/internal/store"
 	"github.com/open-ma/oma-building/internal/stream"
@@ -24,16 +26,24 @@ func testRouter(t *testing.T) http.Handler {
 	t.Cleanup(func() { _ = store.Close(db) })
 
 	agents := store.NewAgentRepo(db)
-	sessions := store.NewSessionRepo(db, agents)
+	environments := store.NewEnvironmentRepo(db)
+	if err := environments.EnsureDefault(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	modelCards := store.NewModelCardRepo(db)
+	models := &modelresolve.Resolver{Cards: modelCards}
+	sessions := store.NewSessionRepo(db, agents, environments)
 	events := store.NewEventRepo(db)
 	hub := stream.NewHub()
 	reg := session.NewRegistry()
 	workdirs := workdir.NewManager(t.TempDir())
 
 	return api.NewRouter(api.Deps{
-		Agents: agents,
+		Agents:       agents,
+		Environments: environments,
+		ModelCards:   modelCards,
 		Sessions: api.NewSessionHandlers(
-			sessions, events, hub, reg, workdirs, &harness.FakeClient{},
+			sessions, events, hub, reg, workdirs, &harness.FakeClient{}, models,
 		),
 	})
 }
@@ -159,6 +169,33 @@ func TestPostSessionInterruptEventAccepted(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusAccepted {
 		t.Fatalf("events status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestPostEnvironmentAndModelCard(t *testing.T) {
+	handler := testRouter(t)
+
+	envBody := `{"name":"dev","config":{"type":"local"}}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/environments", bytes.NewBufferString(envBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("env status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	cardBody := `{"model_id":"claude-prod","provider":"ant","api_key":"sk-test-9999","is_default":true}`
+	req = httptest.NewRequest(http.MethodPost, "/v1/model_cards", bytes.NewBufferString(cardBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("card status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var card map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &card)
+	if card["api_key_preview"] != "9999" {
+		t.Fatalf("preview=%v", card["api_key_preview"])
 	}
 }
 

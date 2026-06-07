@@ -21,7 +21,11 @@ func TestTurnMarksSessionRunningThenIdle(t *testing.T) {
 	defer store.Close(db)
 
 	agents := store.NewAgentRepo(db)
-	sessions := store.NewSessionRepo(db, agents)
+	environments := store.NewEnvironmentRepo(db)
+	if err := environments.EnsureDefault(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	sessions := store.NewSessionRepo(db, agents, environments)
 	events := store.NewEventRepo(db)
 	hub := stream.NewHub()
 	workdirs := workdir.NewManager(t.TempDir())
@@ -97,7 +101,11 @@ func TestRegistryEnqueueRunsAsync(t *testing.T) {
 	defer store.Close(db)
 
 	agents := store.NewAgentRepo(db)
-	sessions := store.NewSessionRepo(db, agents)
+	environments := store.NewEnvironmentRepo(db)
+	if err := environments.EnsureDefault(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	sessions := store.NewSessionRepo(db, agents, environments)
 	events := store.NewEventRepo(db)
 	hub := stream.NewHub()
 	workdirs := workdir.NewManager(t.TempDir())

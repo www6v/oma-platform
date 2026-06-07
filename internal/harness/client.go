@@ -9,6 +9,15 @@ import (
 	"time"
 )
 
+// ModelConfig is the resolved provider credentials for a turn.
+type ModelConfig struct {
+	Model         string          `json:"model"`
+	Provider      string          `json:"provider,omitempty"`
+	APIKey        string          `json:"api_key,omitempty"`
+	BaseURL       string          `json:"base_url,omitempty"`
+	CustomHeaders json.RawMessage `json:"custom_headers,omitempty"`
+}
+
 // AgentSnapshot is the agent config sent to the harness sidecar.
 type AgentSnapshot struct {
 	ID           string          `json:"id"`
@@ -24,6 +33,7 @@ type AgentSnapshot struct {
 type TurnRequest struct {
 	SessionID string            `json:"session_id"`
 	Agent     AgentSnapshot     `json:"agent"`
+	Model     ModelConfig       `json:"model,omitempty"`
 	Events    []json.RawMessage `json:"events"`
 	Workdir   string            `json:"workdir"`
 }

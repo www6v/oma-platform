@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/open-ma/oma-building/internal/harness"
+	"github.com/open-ma/oma-building/internal/modelresolve"
 	"github.com/open-ma/oma-building/internal/session"
 	"github.com/open-ma/oma-building/internal/store"
 	"github.com/open-ma/oma-building/internal/stream"
@@ -17,32 +18,36 @@ import (
 )
 
 type sessionResponse struct {
-	ID           string              `json:"id"`
-	AgentID      string              `json:"agent_id"`
-	Agent        string              `json:"agent"`
-	AgentVersion int                 `json:"agent_version"`
-	Title        string              `json:"title"`
-	Status       store.SessionStatus `json:"status"`
-	CreatedAt    int64               `json:"created_at"`
-	UpdatedAt    *int64              `json:"updated_at,omitempty"`
+	ID            string              `json:"id"`
+	AgentID       string              `json:"agent_id"`
+	Agent         string              `json:"agent"`
+	AgentVersion  int                 `json:"agent_version"`
+	EnvironmentID string              `json:"environment_id"`
+	Title         string              `json:"title"`
+	Status        store.SessionStatus `json:"status"`
+	CreatedAt     int64               `json:"created_at"`
+	UpdatedAt     *int64              `json:"updated_at,omitempty"`
 }
 
 func formatSession(s *store.Session) sessionResponse {
 	return sessionResponse{
-		ID:           s.ID,
-		AgentID:      s.AgentID,
-		Agent:        s.AgentID,
-		AgentVersion: s.AgentVersion,
-		Title:        s.Title,
-		Status:       s.Status,
-		CreatedAt:    s.CreatedAt,
-		UpdatedAt:    s.UpdatedAt,
+		ID:            s.ID,
+		AgentID:       s.AgentID,
+		Agent:         s.AgentID,
+		AgentVersion:  s.AgentVersion,
+		EnvironmentID: s.EnvironmentID,
+		Title:         s.Title,
+		Status:        s.Status,
+		CreatedAt:     s.CreatedAt,
+		UpdatedAt:     s.UpdatedAt,
 	}
 }
 
 type createSessionRequest struct {
-	Agent string `json:"agent"`
-	Title string `json:"title"`
+	Agent         string `json:"agent"`
+	Title         string `json:"title"`
+	EnvironmentID string `json:"environment_id"`
+	Environment   string `json:"environment"`
 }
 
 type appendEventsRequest struct {
@@ -56,6 +61,7 @@ type sessionHandlers struct {
 	registry *session.Registry
 	workdirs *workdir.Manager
 	harness  harness.Client
+	models   *modelresolve.Resolver
 }
 
 func (h *sessionHandlers) registerMachine(sess *store.Session) {
@@ -67,6 +73,7 @@ func (h *sessionHandlers) registerMachine(sess *store.Session) {
 		Hub:       h.hub,
 		Workdirs:  h.workdirs,
 		Harness:   h.harness,
+		Models:    h.models,
 	})
 }
 
@@ -81,13 +88,18 @@ func mountSessionRoutes(r chi.Router, h *sessionHandlers) {
 			writeError(w, http.StatusBadRequest, "agent is required")
 			return
 		}
+		envID := body.EnvironmentID
+		if envID == "" {
+			envID = body.Environment
+		}
 		sess, err := h.sessions.Create(req.Context(), store.CreateSessionInput{
-			TenantID: defaultTenant,
-			AgentID:  body.Agent,
-			Title:    body.Title,
+			TenantID:      defaultTenant,
+			AgentID:       body.Agent,
+			Title:         body.Title,
+			EnvironmentID: envID,
 		})
 		if err == store.ErrNotFound {
-			writeError(w, http.StatusNotFound, "agent not found")
+			writeError(w, http.StatusNotFound, "not found")
 			return
 		}
 		if err == store.ErrArchived {

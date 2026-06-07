@@ -6,6 +6,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/open-ma/oma-building/internal/harness"
+	"github.com/open-ma/oma-building/internal/modelresolve"
 	"github.com/open-ma/oma-building/internal/session"
 	"github.com/open-ma/oma-building/internal/store"
 	"github.com/open-ma/oma-building/internal/stream"
@@ -14,9 +15,11 @@ import (
 
 // Deps holds shared dependencies for HTTP handlers.
 type Deps struct {
-	Agents   *store.AgentRepo
-	Sessions *sessionHandlers
-	APIKey   string
+	Agents       *store.AgentRepo
+	Environments *store.EnvironmentRepo
+	ModelCards   *store.ModelCardRepo
+	Sessions     *sessionHandlers
+	APIKey       string
 }
 
 // NewRouter returns the platform HTTP handler.
@@ -28,6 +31,18 @@ func NewRouter(deps Deps) http.Handler {
 	if deps.Agents != nil {
 		r.Route("/v1/agents", func(r chi.Router) {
 			mountAgentRoutes(r, deps.Agents)
+		})
+	}
+
+	if deps.Environments != nil {
+		r.Route("/v1/environments", func(r chi.Router) {
+			mountEnvironmentRoutes(r, deps.Environments)
+		})
+	}
+
+	if deps.ModelCards != nil {
+		r.Route("/v1/model_cards", func(r chi.Router) {
+			mountModelCardRoutes(r, deps.ModelCards)
 		})
 	}
 
@@ -48,6 +63,7 @@ func NewSessionHandlers(
 	registry *session.Registry,
 	workdirs *workdir.Manager,
 	client harness.Client,
+	models *modelresolve.Resolver,
 ) *sessionHandlers {
 	return &sessionHandlers{
 		sessions: sessions,
@@ -56,5 +72,6 @@ func NewSessionHandlers(
 		registry: registry,
 		workdirs: workdirs,
 		harness:  client,
+		models:   models,
 	}
 }

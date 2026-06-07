@@ -20,6 +20,7 @@ async def internal_turn(body: TurnRequest) -> TurnResponse:
     return await run_turn(
         session_id=body.session_id,
         agent=body.agent,
+        model=body.model,
         events=body.events,
         workdir=body.workdir,
     )

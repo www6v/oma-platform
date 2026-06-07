@@ -11,9 +11,13 @@ import (
 func TestAppendEventSeqMonotonic(t *testing.T) {
 	db := openTestDB(t)
 	agents := store.NewAgentRepo(db.DB)
-	sessions := store.NewSessionRepo(db.DB, agents)
-	events := store.NewEventRepo(db.DB)
+	environments := store.NewEnvironmentRepo(db.DB)
 	ctx := context.Background()
+	if err := environments.EnsureDefault(ctx); err != nil {
+		t.Fatal(err)
+	}
+	sessions := store.NewSessionRepo(db.DB, agents, environments)
+	events := store.NewEventRepo(db.DB)
 
 	agent, err := agents.Create(ctx, store.CreateAgentInput{
 		Name:  "evt-agent",

@@ -9,6 +9,7 @@ import (
 
 	"github.com/open-ma/oma-building/internal/api"
 	"github.com/open-ma/oma-building/internal/harness"
+	"github.com/open-ma/oma-building/internal/modelresolve"
 	"github.com/open-ma/oma-building/internal/session"
 	"github.com/open-ma/oma-building/internal/store"
 	"github.com/open-ma/oma-building/internal/stream"
@@ -36,7 +37,13 @@ func main() {
 	defer store.Close(db)
 
 	agents := store.NewAgentRepo(db)
-	sessions := store.NewSessionRepo(db, agents)
+	environments := store.NewEnvironmentRepo(db)
+	if err := environments.EnsureDefault(context.Background()); err != nil {
+		log.Fatal(err)
+	}
+	modelCards := store.NewModelCardRepo(db)
+	modelResolver := &modelresolve.Resolver{Cards: modelCards}
+	sessions := store.NewSessionRepo(db, agents, environments)
 	if n, err := sessions.RecoverRunning(context.Background()); err != nil {
 		log.Fatal(err)
 	} else if n > 0 {
@@ -54,9 +61,11 @@ func main() {
 	}
 
 	handler := api.NewRouter(api.Deps{
-		Agents: agents,
+		Agents:       agents,
+		Environments: environments,
+		ModelCards:   modelCards,
 		Sessions: api.NewSessionHandlers(
-			sessions, events, hub, registry, workdirs, harnessClient,
+			sessions, events, hub, registry, workdirs, harnessClient, modelResolver,
 		),
 		APIKey: apiKey,
 	})
