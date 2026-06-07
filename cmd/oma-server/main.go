@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
+	"time"
 
 	"github.com/open-ma/oma-building/internal/api"
 	"github.com/open-ma/oma-building/internal/harness"
@@ -55,7 +57,16 @@ func main() {
 	registry := session.NewRegistry()
 	workdirs := workdir.NewManager(workdirBase)
 
-	var harnessClient harness.Client = &harness.HTTPClient{BaseURL: harnessURL}
+	harnessTimeout := 10 * time.Minute
+	if raw := os.Getenv("HARNESS_HTTP_TIMEOUT_SEC"); raw != "" {
+		if sec, err := strconv.Atoi(raw); err == nil && sec > 0 {
+			harnessTimeout = time.Duration(sec) * time.Second
+		}
+	}
+	var harnessClient harness.Client = &harness.HTTPClient{
+		BaseURL: harnessURL,
+		HTTP:    &http.Client{Timeout: harnessTimeout},
+	}
 	if os.Getenv("OMA_FAKE_HARNESS") == "1" {
 		harnessClient = &harness.FakeClient{}
 	}

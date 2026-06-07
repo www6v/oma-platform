@@ -8,6 +8,8 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+const expectedMigrationCount = 2
+
 func TestOpenAppliesMigrationsOnce(t *testing.T) {
 	t.Parallel()
 
@@ -32,8 +34,12 @@ func TestOpenAppliesMigrationsOnce(t *testing.T) {
 	if err := db2.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil {
 		t.Fatalf("count migrations: %v", err)
 	}
-	if count != 1 {
-		t.Fatalf("expected 1 applied migration, got %d", count)
+	if count != expectedMigrationCount {
+		t.Fatalf(
+			"expected %d applied migrations, got %d",
+			expectedMigrationCount,
+			count,
+		)
 	}
 }
 
@@ -47,8 +53,12 @@ func TestOpenBootstrapsExistingDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed open: %v", err)
 	}
-	if _, err := seed.Exec(`CREATE TABLE agents (id TEXT PRIMARY KEY)`); err != nil {
-		t.Fatalf("seed agents table: %v", err)
+	coreSQL, err := migrationFiles.ReadFile("migrations/001_core.sql")
+	if err != nil {
+		t.Fatalf("read core migration: %v", err)
+	}
+	if _, err := seed.Exec(string(coreSQL)); err != nil {
+		t.Fatalf("seed core schema: %v", err)
 	}
 	if err := seed.Close(); err != nil {
 		t.Fatalf("close seed db: %v", err)
@@ -64,7 +74,26 @@ func TestOpenBootstrapsExistingDatabase(t *testing.T) {
 	if err := db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil {
 		t.Fatalf("count migrations: %v", err)
 	}
-	if count != 1 {
-		t.Fatalf("expected bootstrapped migration, got %d", count)
+	if count != expectedMigrationCount {
+		t.Fatalf(
+			"expected %d bootstrapped migrations, got %d",
+			expectedMigrationCount,
+			count,
+		)
+	}
+
+	if !tableExists(db, "environments") {
+		t.Fatal("expected environments table after P1 migration")
+	}
+	var hasEnvCol int
+	err = db.QueryRow(`
+		SELECT COUNT(*) FROM pragma_table_info('sessions')
+		WHERE name = 'environment_id'
+	`).Scan(&hasEnvCol)
+	if err != nil {
+		t.Fatalf("check sessions.environment_id: %v", err)
+	}
+	if hasEnvCol != 1 {
+		t.Fatal("expected sessions.environment_id column")
 	}
 }

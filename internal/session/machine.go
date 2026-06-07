@@ -86,6 +86,18 @@ func (m *Machine) RunTurn(ctx context.Context) error {
 
 	modelCfg, err := m.resolveModel(ctx, agent.Model)
 	if err != nil {
+		return m.failTurn(ctx, turnID, err)
+	}
+
+	lifecycleStart, err := json.Marshal(map[string]any{
+		"type":    "session.lifecycle",
+		"phase":   "turn_start",
+		"turn_id": turnID,
+	})
+	if err != nil {
+		return err
+	}
+	if err := m.publishEvents(ctx, []json.RawMessage{lifecycleStart}); err != nil {
 		return err
 	}
 
@@ -97,27 +109,58 @@ func (m *Machine) RunTurn(ctx context.Context) error {
 		Workdir:   workdirPath,
 	})
 	if err != nil {
-		return err
+		return m.failTurn(ctx, turnID, err)
 	}
 
-	lifecycleStart, _ := json.Marshal(map[string]any{
-		"type":    "session.lifecycle",
-		"phase":   "turn_start",
-		"turn_id": turnID,
-	})
-	lifecycleEnd, _ := json.Marshal(map[string]any{
+	lifecycleEnd, err := json.Marshal(map[string]any{
 		"type":    "session.lifecycle",
 		"phase":   "turn_end",
 		"turn_id": turnID,
 	})
+	if err != nil {
+		return err
+	}
 
-	outEvents := append(
-		[]json.RawMessage{lifecycleStart},
-		resp.Events...,
-	)
-	outEvents = append(outEvents, lifecycleEnd)
+	outEvents := append(resp.Events, lifecycleEnd)
+	return m.publishEvents(ctx, outEvents)
+}
 
-	stored, err := m.Events.AppendEvents(ctx, m.SessionID, outEvents)
+func (m *Machine) failTurn(
+	ctx context.Context,
+	turnID string,
+	cause error,
+) error {
+	errEvent, err := json.Marshal(map[string]any{
+		"type":    "session.error",
+		"error":   "harness_turn_failed",
+		"message": cause.Error(),
+		"turn_id": turnID,
+	})
+	if err != nil {
+		return cause
+	}
+	lifecycleEnd, err := json.Marshal(map[string]any{
+		"type":    "session.lifecycle",
+		"phase":   "turn_end",
+		"turn_id": turnID,
+	})
+	if err != nil {
+		return cause
+	}
+	if pubErr := m.publishEvents(ctx, []json.RawMessage{errEvent, lifecycleEnd}); pubErr != nil {
+		return cause
+	}
+	return nil
+}
+
+func (m *Machine) publishEvents(
+	ctx context.Context,
+	events []json.RawMessage,
+) error {
+	if len(events) == 0 {
+		return nil
+	}
+	stored, err := m.Events.AppendEvents(ctx, m.SessionID, events)
 	if err != nil {
 		return err
 	}

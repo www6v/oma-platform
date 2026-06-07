@@ -19,6 +19,15 @@ import (
 
 func testRouter(t *testing.T) http.Handler {
 	t.Helper()
+	handler, _ := testRouterHarness(t, &harness.FakeClient{})
+	return handler
+}
+
+func testRouterHarness(
+	t *testing.T,
+	client harness.Client,
+) (http.Handler, *session.Registry) {
+	t.Helper()
 	db, err := store.Open(":memory:")
 	if err != nil {
 		t.Fatal(err)
@@ -38,14 +47,15 @@ func testRouter(t *testing.T) http.Handler {
 	reg := session.NewRegistry()
 	workdirs := workdir.NewManager(t.TempDir())
 
-	return api.NewRouter(api.Deps{
+	handler := api.NewRouter(api.Deps{
 		Agents:       agents,
 		Environments: environments,
 		ModelCards:   modelCards,
 		Sessions: api.NewSessionHandlers(
-			sessions, events, hub, reg, workdirs, &harness.FakeClient{}, models,
+			sessions, events, hub, reg, workdirs, client, models,
 		),
 	})
+	return handler, reg
 }
 
 func TestPostAgent(t *testing.T) {

@@ -17,6 +17,7 @@ export SMOKE_MODEL_CARD_ID="${SMOKE_MODEL_CARD_ID:-smoke-claude}"
 export SMOKE_TIMEOUT_SEC="${SMOKE_TIMEOUT_SEC:-120}"
 export SMOKE_POLL_SEC="${SMOKE_POLL_SEC:-2}"
 export SMOKE_SKIP_LLM="${SMOKE_SKIP_LLM:-0}"
+export HARNESS_URL="${HARNESS_URL:-http://127.0.0.1:8090}"
 
 DEFAULT_ENV_ID="env-local-default"
 
@@ -61,15 +62,21 @@ wait_for_agent_reply() {
   local deadline=$((SECONDS + SMOKE_TIMEOUT_SEC))
   local events=""
   local status=0
+  local polls=0
 
   while (( SECONDS < deadline )); do
     events="$(
       api_get "/v1/sessions/${sid}/events?order=asc"
     )"
     status=0
-    python3 -c 'import json,sys
+    TURN_ERR="$(
+      python3 -c 'import json,sys
 events=json.load(sys.stdin)["data"]
 for evt in events:
+    if evt.get("type") == "session.error":
+        msg=evt.get("message") or evt.get("error") or "session.error"
+        print(msg)
+        sys.exit(3)
     if evt.get("type") != "agent.message":
         continue
     if evt.get("id") == "evt_fake":
@@ -78,7 +85,8 @@ for evt in events:
     for block in content:
         if block.get("type") == "text" and block.get("text", "").strip():
             sys.exit(0)
-sys.exit(2)' <<<"${events}" || status=$?
+sys.exit(2)' <<<"${events}"
+    )" || status=$?
 
     if [[ "${status}" -eq 0 ]]; then
       echo "${events}"
@@ -90,10 +98,21 @@ sys.exit(2)' <<<"${events}" || status=$?
       echo "${events}" >&2
       return 1
     fi
+    if [[ "${status}" -eq 3 ]]; then
+      echo "error: harness turn failed: ${TURN_ERR}" >&2
+      echo "check start-harness.sh logs; refresh model card api_key if using smoke-claude" >&2
+      echo "${events}" >&2
+      return 1
+    fi
+    polls=$((polls + 1))
+    if (( polls % 5 == 0 )); then
+      echo "   ... still waiting (${polls} polls, $((deadline - SECONDS))s left)" >&2
+    fi
     sleep "${SMOKE_POLL_SEC}"
   done
 
   echo "error: timed out after ${SMOKE_TIMEOUT_SEC}s waiting for real agent.message" >&2
+  echo "hint: ensure start-platform.sh and start-harness.sh are running with OMA_FAKE_HARNESS=0" >&2
   echo "${events}" >&2
   return 1
 }
@@ -113,7 +132,13 @@ trap cleanup EXIT
 
 echo "==> health ${PLATFORM_URL}/health"
 api_get "/health" >/dev/null
-echo "ok"
+echo "platform ok"
+
+if [[ "${SMOKE_SKIP_LLM}" != "1" ]]; then
+  echo "==> health ${HARNESS_URL}/health"
+  curl -sf "${HARNESS_URL}/health" >/dev/null
+  echo "harness ok"
+fi
 
 echo "==> list environments (expect ${DEFAULT_ENV_ID})"
 ENV_LIST="$(api_get "/v1/environments")"
@@ -184,7 +209,14 @@ for row in json.load(sys.stdin)["data"]:
 raise SystemExit(f"model_id {target!r} conflict but not in list")' \
         "${SMOKE_MODEL_CARD_ID}" <<<"${CARD_LIST}"
     )"
-    echo "MODEL_CARD_ROW_ID=${MODEL_CARD_ROW_ID} (existing)"
+    echo "MODEL_CARD_ROW_ID=${MODEL_CARD_ROW_ID} (existing, refreshing api_key)"
+    api_post_json "/v1/model_cards/${MODEL_CARD_ROW_ID}" \
+      "$(python3 -c 'import json,os,sys; print(json.dumps({
+          "model": sys.argv[1],
+          "provider": "ant",
+          "api_key": os.environ["ANTHROPIC_API_KEY"],
+          "is_default": True,
+      }))' "${SMOKE_MODEL}")" >/dev/null
   else
     echo "error: model card POST status=${CARD_HTTP}" >&2
     cat /tmp/oma-smoke-card.json >&2 || true
@@ -202,7 +234,18 @@ print("set" if k else "empty", f"len={len(k)}")'
 
   AGENT_MODEL="${SMOKE_MODEL_CARD_ID}"
 else
-  echo "==> skip model card (ANTHROPIC_API_KEY unset; agent.model=${SMOKE_MODEL})"
+  echo "==> no ANTHROPIC_API_KEY — piPy local auth (agent.model=${SMOKE_MODEL})"
+  echo "==> remove stale model cards (they inject test api keys and hang LLM)"
+  while IFS= read -r card_id; do
+    [[ -z "${card_id}" ]] && continue
+    echo "    delete model card ${card_id}"
+    curl -sf -X DELETE "${PLATFORM_URL}/v1/model_cards/${card_id}" \
+      "${API_HEADERS[@]}" >/dev/null
+  done < <(
+    python3 -c 'import json,sys
+for row in json.load(sys.stdin).get("data", []):
+    print(row["id"])' <<<"${CARD_LIST}"
+  )
 fi
 
 echo "==> create agent (model=${AGENT_MODEL})"
@@ -213,7 +256,7 @@ AID="$(
         "model": sys.argv[1],
         "system_prompt": "You are helpful.",
         "description": "smoke test agent",
-        "tools": "agent_toolset_20260401",
+        "tools": [{"type": "agent_toolset_20260401"}],
     }))' "${AGENT_MODEL}")" \
     | json_field id
 )"

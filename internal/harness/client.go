@@ -5,7 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
+	"sync"
 	"time"
 )
 
@@ -82,7 +85,19 @@ func (c *HTTPClient) RunTurn(
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
-		return TurnResponse{}, fmt.Errorf("harness status=%d", resp.StatusCode)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		msg := strings.TrimSpace(string(body))
+		if msg == "" {
+			return TurnResponse{}, fmt.Errorf(
+				"harness status=%d",
+				resp.StatusCode,
+			)
+		}
+		return TurnResponse{}, fmt.Errorf(
+			"harness status=%d: %s",
+			resp.StatusCode,
+			msg,
+		)
 	}
 	var out TurnResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
@@ -113,4 +128,40 @@ func (f *FakeClient) RunTurn(
 		},
 	})
 	return TurnResponse{Events: []json.RawMessage{payload}}, nil
+}
+
+// RecordingClient captures turn requests for integration tests.
+type RecordingClient struct {
+	FakeClient FakeClient
+
+	mu       sync.Mutex
+	requests []TurnRequest
+}
+
+// RunTurn records the request then delegates to FakeClient.
+func (r *RecordingClient) RunTurn(
+	ctx context.Context,
+	req TurnRequest,
+) (TurnResponse, error) {
+	r.mu.Lock()
+	r.requests = append(r.requests, req)
+	r.mu.Unlock()
+	return r.FakeClient.RunTurn(ctx, req)
+}
+
+// LastRequest returns the most recent turn request, if any.
+func (r *RecordingClient) LastRequest() (TurnRequest, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(r.requests) == 0 {
+		return TurnRequest{}, false
+	}
+	return r.requests[len(r.requests)-1], true
+}
+
+// RequestCount returns how many turns were recorded.
+func (r *RecordingClient) RequestCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.requests)
 }
