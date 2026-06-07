@@ -34,6 +34,26 @@ curl -s -X POST localhost:8787/v1/sessions/$SID/events \
   -d '{"events":[{"type":"user.message","content":[{"type":"text","text":"hi"}]}]}'
 ```
 
+## Console UI
+
+The OMA Console SPA from `open-managed-agents/apps/console` is served on the same port as the API (main-node `CONSOLE_DIR` pattern). Use the workspace Go toolchain at `.tools/go`:
+
+```bash
+# Terminal 1 — harness
+./start-harness.sh
+
+# Terminal 2 — platform + console (builds dist if missing)
+./start-console.sh
+```
+
+Open http://localhost:8787 — `OMA_CONSOLE_DEV=1` stubs `/auth-info` and `/auth/get-session` so the login gate passes without better-auth.
+
+**Docker:** `docker compose up` mounts `../open-managed-agents/apps/console/dist` at `/app/console` when present. Build the console first, or set `CONSOLE_DIST` to another path.
+
+**Scope:** Agents, sessions, environments, and model cards work against oma-platform APIs. Vault, skills, billing, and other main-node-only routes will 404 until implemented.
+
+**Production:** `OMA_CONSOLE_DEV=1` disables API-key checks — dev only. Production console needs better-auth or another browser auth path; until then use API clients with `x-api-key`.
+
 ## Docker
 
 ```bash

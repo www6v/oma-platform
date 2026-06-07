@@ -29,6 +29,18 @@ func main() {
 	workdirBase = absWorkdir
 	harnessURL := envOrDefault("HARNESS_URL", "http://127.0.0.1:8090")
 	apiKey := os.Getenv("OMA_API_KEY")
+	consoleDir := os.Getenv("CONSOLE_DIR")
+	consoleDev := os.Getenv("OMA_CONSOLE_DEV") == "1"
+	if consoleDir != "" {
+		absConsole, err := filepath.Abs(consoleDir)
+		if err != nil {
+			log.Fatal(err)
+		}
+		consoleDir = absConsole
+	}
+	if consoleDev && consoleDir == "" {
+		log.Print("warning: OMA_CONSOLE_DEV=1 without CONSOLE_DIR — auth stubs only")
+	}
 
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
 		log.Fatal(err)
@@ -83,10 +95,15 @@ func main() {
 		Sessions: api.NewSessionHandlers(
 			sessions, events, hub, registry, workdirs, harnessClient, modelResolver,
 		),
-		APIKey: apiKey,
+		APIKey:     apiKey,
+		ConsoleDir: consoleDir,
+		ConsoleDev: consoleDev,
 	})
 
 	log.Printf("oma-server listening on %s", addr)
+	if consoleDir != "" {
+		log.Printf("console UI mounted from %s (dev=%v)", consoleDir, consoleDev)
+	}
 	if err := http.ListenAndServe(addr, handler); err != nil {
 		log.Fatal(err)
 	}

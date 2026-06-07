@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKSPACE_ROOT="$(cd "${ROOT_DIR}/.." && pwd)"
 
 # shellcheck disable=SC1091
 source "${ROOT_DIR}/scripts/go-env.sh"
@@ -13,15 +14,28 @@ if [[ -f "${ROOT_DIR}/.env" ]]; then
   set +a
 fi
 
+CONSOLE_DIST="${CONSOLE_DIR:-${WORKSPACE_ROOT}/open-managed-agents/apps/console/dist}"
+
+if [[ ! -f "${CONSOLE_DIST}/index.html" ]]; then
+  echo "Console dist missing at ${CONSOLE_DIST}; building..."
+  "${ROOT_DIR}/scripts/build-console.sh"
+fi
+
+CONSOLE_DIST="$(cd "$(dirname "${CONSOLE_DIST}")" && pwd)/$(basename "${CONSOLE_DIST}")"
+
 export OMA_FAKE_HARNESS="${OMA_FAKE_HARNESS:-1}"
 export HARNESS_URL="${HARNESS_URL:-http://127.0.0.1:8090}"
 export OMA_API_KEY="${OMA_API_KEY:-dev-key}"
 export DATABASE_PATH="${DATABASE_PATH:-${ROOT_DIR}/data/oma.db}"
 export SANDBOX_WORKDIR="${SANDBOX_WORKDIR:-${ROOT_DIR}/data/sandboxes}"
 export OMA_LISTEN_ADDR="${OMA_LISTEN_ADDR:-:8787}"
+export CONSOLE_DIR="${CONSOLE_DIST}"
+export OMA_CONSOLE_DEV="${OMA_CONSOLE_DEV:-1}"
 
 mkdir -p "$(dirname "${DATABASE_PATH}")" "${SANDBOX_WORKDIR}"
 
-cd "${ROOT_DIR}"
+echo "Console UI: http://127.0.0.1${OMA_LISTEN_ADDR#:}/"
+echo "API + static mount via ${GO_BIN} run ./cmd/oma-server/"
 
+cd "${ROOT_DIR}"
 exec "${GO_BIN}" run ./cmd/oma-server/
