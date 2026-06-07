@@ -1,0 +1,1 @@
+"""OMA harness adapter package."""

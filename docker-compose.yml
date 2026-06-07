@@ -1,0 +1,27 @@
+services:
+  oma-platform:
+    build:
+      context: .
+      dockerfile: Dockerfile.platform
+    ports:
+      - "8787:8787"
+    environment:
+      DATABASE_PATH: /data/oma.db
+      SANDBOX_WORKDIR: /data/sandboxes
+      HARNESS_URL: http://oma-harness:8090
+      OMA_API_KEY: ${OMA_API_KEY:-dev-key}
+    volumes:
+      - ./data:/data
+    depends_on:
+      - oma-harness
+
+  oma-harness:
+    build:
+      context: ..
+      dockerfile: oma-building/Dockerfile.harness
+    ports:
+      - "8090:8090"
+    environment:
+      OMA_FAKE_HARNESS: ${OMA_FAKE_HARNESS:-1}
+    volumes:
+      - ${HOME}/.pi/agent:/root/.pi/agent:ro
