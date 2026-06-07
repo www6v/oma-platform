@@ -12,6 +12,8 @@ class AgentSnapshot(BaseModel):
     name: str
     model: str
     system_prompt: str | None = None
+    description: str | None = None
+    tools: list[dict[str, Any]] | None = None
     version: int = 1
 
 

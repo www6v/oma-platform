@@ -57,6 +57,111 @@ func TestPostAgent(t *testing.T) {
 	}
 }
 
+func TestPostAgentWithTools(t *testing.T) {
+	handler := testRouter(t)
+	body := `{"name":"demo","model":"claude-sonnet-4-20250514","description":"hi","tools":[{"type":"agent_toolset_20260401"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/agents", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp["description"] != "hi" {
+		t.Fatalf("description=%v", resp["description"])
+	}
+	tools, ok := resp["tools"].([]any)
+	if !ok || len(tools) != 1 {
+		t.Fatalf("tools=%v", resp["tools"])
+	}
+}
+
+func TestAgentVersionsAPI(t *testing.T) {
+	handler := testRouter(t)
+
+	createBody := `{"name":"v1","model":"claude-sonnet-4-20250514"}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/agents", bytes.NewBufferString(createBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create status=%d", rec.Code)
+	}
+	var agent map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &agent)
+	id := agent["id"].(string)
+
+	patchBody := `{"name":"v2"}`
+	req = httptest.NewRequest(http.MethodPatch, "/v1/agents/"+id, bytes.NewBufferString(patchBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("patch status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/v1/agents/"+id+"/versions", nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list versions status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var listResp map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &listResp)
+	data := listResp["data"].([]any)
+	if len(data) != 1 {
+		t.Fatalf("versions=%v", data)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/v1/agents/"+id+"/versions/1", nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get version status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/v1/agents/"+id+"/versions/2", nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("current version should 404, status=%d", rec.Code)
+	}
+}
+
+func TestPostSessionInterruptEventAccepted(t *testing.T) {
+	handler := testRouter(t)
+
+	agentBody := `{"name":"s","model":"claude-sonnet-4-20250514"}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/agents", bytes.NewBufferString(agentBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	var agent map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &agent)
+
+	sessBody := `{"agent":"` + agent["id"].(string) + `"}`
+	req = httptest.NewRequest(http.MethodPost, "/v1/sessions", bytes.NewBufferString(sessBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	var sess map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &sess)
+
+	evBody := `{"events":[{"type":"user.interrupt"}]}`
+	path := "/v1/sessions/" + sess["id"].(string) + "/events"
+	req = httptest.NewRequest(http.MethodPost, path, bytes.NewBufferString(evBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("events status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestPostSessionAndEvents(t *testing.T) {
 	handler := testRouter(t)
 

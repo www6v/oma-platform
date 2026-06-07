@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
 
@@ -23,9 +24,16 @@ def emit_oma_events(raw_events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     seen_agent_text.add(text)
                     out.append(_agent_message(text))
         elif kind in {"tool_use", "agent.tool_use", "tool_execution_start"}:
+            tool_id = (
+                item.get("id")
+                or item.get("toolCallId")
+                or item.get("tool_use_id")
+                or f"tool_{uuid.uuid4().hex[:12]}"
+            )
             out.append(
                 {
                     "type": "agent.tool_use",
+                    "id": tool_id,
                     "name": item.get("toolName") or item.get("name", "tool"),
                     "input": item.get("args") or item.get("input") or {},
                 }

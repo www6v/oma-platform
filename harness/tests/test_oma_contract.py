@@ -16,6 +16,21 @@ def test_agent_message_roundtrip() -> None:
     assert out[0]["content"][0]["type"] == "text"
 
 
+def test_tool_use_includes_id() -> None:
+    raw = [
+        {
+            "type": "tool_use",
+            "id": "call_abc",
+            "name": "bash",
+            "input": {"command": "uname -a"},
+        }
+    ]
+    out = emit_oma_events(raw)
+    assert out[0]["type"] == "agent.tool_use"
+    assert out[0]["id"] == "call_abc"
+    assert out[0]["name"] == "bash"
+
+
 def test_turn_end_message_roundtrip() -> None:
     raw = [
         {

@@ -11,11 +11,13 @@ import (
 
 // AgentSnapshot is the agent config sent to the harness sidecar.
 type AgentSnapshot struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	Model        string `json:"model"`
-	SystemPrompt string `json:"system_prompt,omitempty"`
-	Version      int    `json:"version"`
+	ID           string          `json:"id"`
+	Name         string          `json:"name"`
+	Model        string          `json:"model"`
+	SystemPrompt string          `json:"system_prompt,omitempty"`
+	Description  string          `json:"description,omitempty"`
+	Tools        json.RawMessage `json:"tools,omitempty"`
+	Version      int             `json:"version"`
 }
 
 // TurnRequest is the harness turn payload.

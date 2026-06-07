@@ -8,6 +8,7 @@ from typing import Any, Awaitable, Callable
 
 from oma_adapter.emit import emit_oma_events
 from oma_adapter.project import project_oma_events
+from oma_adapter.tools import pypi_tools_from_agent
 from oma_adapter.types import AgentSnapshot, TurnResponse
 
 CreateSessionFn = Callable[[Any], Awaitable[Any]]
@@ -54,6 +55,7 @@ async def _default_create_session(
     workdir: str,
     model: str,
     system_prompt: str | None,
+    tools: list[str],
 ) -> Any:
     from pi_coding_agent.sdk import CreateAgentSessionOptions, create_agent_session
 
@@ -61,7 +63,7 @@ async def _default_create_session(
         cwd=Path(workdir),
         model=model,
         system_prompt=system_prompt,
-        tools=["read", "bash", "write"],
+        tools=tools,
         in_memory=True,
     )
     return await create_agent_session(opts)
@@ -92,6 +94,7 @@ async def run_turn(
             workdir=workdir,
             model=model,
             system_prompt=agent.system_prompt,
+            tools=pypi_tools_from_agent(agent),
         )
     session = result.session
 

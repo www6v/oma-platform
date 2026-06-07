@@ -33,6 +33,17 @@ func (r *Registry) EnqueueUserMessage(
 	userEvent json.RawMessage,
 	onDone func(error),
 ) error {
+	return r.EnqueueEvents(ctx, sessionID, []json.RawMessage{userEvent}, true, onDone)
+}
+
+// EnqueueEvents appends client events and optionally runs a harness turn.
+func (r *Registry) EnqueueEvents(
+	ctx context.Context,
+	sessionID string,
+	events []json.RawMessage,
+	runTurn bool,
+	onDone func(error),
+) error {
 	r.mu.Lock()
 	machine, ok := r.machines[sessionID]
 	r.mu.Unlock()
@@ -40,7 +51,7 @@ func (r *Registry) EnqueueUserMessage(
 		return ErrNotRegistered
 	}
 
-	stored, err := machine.Events.AppendEvents(ctx, sessionID, []json.RawMessage{userEvent})
+	stored, err := machine.Events.AppendEvents(ctx, sessionID, events)
 	if err != nil {
 		return err
 	}
@@ -49,6 +60,10 @@ func (r *Registry) EnqueueUserMessage(
 			Seq:     ev.Seq,
 			Payload: ev.Payload,
 		})
+	}
+
+	if !runTurn {
+		return nil
 	}
 
 	go func() {

@@ -114,6 +114,84 @@ func TestUpdateBumpsVersion(t *testing.T) {
 	}
 }
 
+func TestCreateAgentStoresToolsAndDescription(t *testing.T) {
+	db := openTestDB(t)
+	repo := store.NewAgentRepo(db.DB)
+	ctx := context.Background()
+
+	created, err := repo.Create(ctx, store.CreateAgentInput{
+		Name:        "tools",
+		Model:       "claude-sonnet-4-20250514",
+		Description: "demo agent",
+		Tools:       []byte(`[{"type":"agent_toolset_20260401"}]`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Description != "demo agent" {
+		t.Fatalf("description=%q", created.Description)
+	}
+	if string(created.Tools) != `[{"type":"agent_toolset_20260401"}]` {
+		t.Fatalf("tools=%s", created.Tools)
+	}
+}
+
+func TestListVersionsHistoricalOnly(t *testing.T) {
+	db := openTestDB(t)
+	repo := store.NewAgentRepo(db.DB)
+	ctx := context.Background()
+
+	created, err := repo.Create(ctx, store.CreateAgentInput{
+		Name:  "v1",
+		Model: "claude-sonnet-4-20250514",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	versions, err := repo.ListVersions(ctx, "default", created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(versions) != 0 {
+		t.Fatalf("expected no historical versions, got %d", len(versions))
+	}
+
+	newName := "v2"
+	if _, err := repo.Update(ctx, "default", created.ID, store.UpdateAgentInput{
+		Name: &newName,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	versions, err = repo.ListVersions(ctx, "default", created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(versions) != 1 || versions[0].Version != 1 {
+		t.Fatalf("versions=%+v", versions)
+	}
+	if versions[0].Snapshot.Name != "v1" {
+		t.Fatalf("snapshot name=%q", versions[0].Snapshot.Name)
+	}
+
+	got, err := repo.GetVersion(ctx, "default", created.ID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil || got.Snapshot.Name != "v1" {
+		t.Fatalf("got=%+v", got)
+	}
+
+	missing, err := repo.GetVersion(ctx, "default", created.ID, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if missing != nil {
+		t.Fatalf("expected nil for current version row, got %+v", missing)
+	}
+}
+
 func TestArchiveSetsArchivedAt(t *testing.T) {
 	db := openTestDB(t)
 	repo := store.NewAgentRepo(db.DB)

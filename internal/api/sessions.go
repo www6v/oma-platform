@@ -154,6 +154,7 @@ func mountSessionRoutes(r chi.Router, h *sessionHandlers) {
 			writeError(w, http.StatusBadRequest, "events array is required")
 			return
 		}
+		runTurn := false
 		for _, ev := range body.Events {
 			var meta struct {
 				Type string `json:"type"`
@@ -162,14 +163,17 @@ func mountSessionRoutes(r chi.Router, h *sessionHandlers) {
 				writeError(w, http.StatusBadRequest, "invalid event")
 				return
 			}
-			if meta.Type != "user.message" {
-				writeError(w, http.StatusBadRequest, "only user.message supported in MVP")
+			if !isAllowedClientEventType(meta.Type) {
+				writeError(w, http.StatusBadRequest, "invalid event type")
 				return
+			}
+			if isTurnTriggerEventType(meta.Type) {
+				runTurn = true
 			}
 		}
 
-		if err := h.registry.EnqueueUserMessage(
-			req.Context(), id, body.Events[0], nil,
+		if err := h.registry.EnqueueEvents(
+			req.Context(), id, body.Events, runTurn, nil,
 		); err != nil {
 			writeError(w, http.StatusConflict, err.Error())
 			return

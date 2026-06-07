@@ -19,11 +19,22 @@ const (
 
 // AgentConfig is the JSON blob stored in agents.config.
 type AgentConfig struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	Model        string `json:"model"`
-	SystemPrompt string `json:"system_prompt,omitempty"`
-	Version      int    `json:"version"`
+	ID           string          `json:"id"`
+	Name         string          `json:"name"`
+	Model        string          `json:"model"`
+	SystemPrompt string          `json:"system_prompt,omitempty"`
+	Description  string          `json:"description,omitempty"`
+	Tools        json.RawMessage `json:"tools,omitempty"`
+	Version      int             `json:"version"`
+}
+
+// AgentVersion is a historical agent snapshot row.
+type AgentVersion struct {
+	AgentID   string
+	TenantID  string
+	Version   int
+	Snapshot  AgentConfig
+	CreatedAt int64
 }
 
 // Agent is a persisted agent row.
@@ -41,6 +52,8 @@ type CreateAgentInput struct {
 	Name         string
 	Model        string
 	SystemPrompt string
+	Description  string
+	Tools        json.RawMessage
 }
 
 // UpdateAgentInput holds patch fields for Update.
@@ -48,6 +61,9 @@ type UpdateAgentInput struct {
 	Name         *string
 	Model        *string
 	SystemPrompt *string
+	Description  *string
+	Tools        json.RawMessage
+	ToolsSet     bool
 }
 
 // AgentRepo persists agents in SQLite.
@@ -80,6 +96,8 @@ func (r *AgentRepo) Create(
 		Name:         input.Name,
 		Model:        input.Model,
 		SystemPrompt: input.SystemPrompt,
+		Description:  input.Description,
+		Tools:        input.Tools,
 		Version:      1,
 	}
 	configJSON, err := json.Marshal(cfg)
@@ -176,8 +194,14 @@ func (r *AgentRepo) Update(
 	if input.SystemPrompt != nil {
 		next.SystemPrompt = *input.SystemPrompt
 	}
+	if input.Description != nil {
+		next.Description = *input.Description
+	}
+	if input.ToolsSet {
+		next.Tools = input.Tools
+	}
 
-	if next == current.AgentConfig {
+	if agentConfigEqual(next, current.AgentConfig) {
 		return current, nil
 	}
 
@@ -253,6 +277,108 @@ func (r *AgentRepo) Archive(
 		return nil, fmt.Errorf("archive agent: %w", err)
 	}
 	return r.Get(ctx, tenantID, id)
+}
+
+// ListVersions returns historical agent snapshots (not the current row).
+func (r *AgentRepo) ListVersions(
+	ctx context.Context,
+	tenantID, agentID string,
+) ([]AgentVersion, error) {
+	tenantID = tenantOrDefault(tenantID)
+	current, err := r.Get(ctx, tenantID, agentID)
+	if err != nil {
+		return nil, err
+	}
+	if current == nil {
+		return nil, ErrNotFound
+	}
+
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT version, snapshot, created_at
+		FROM agent_versions
+		WHERE agent_id = ? AND tenant_id = ?
+		ORDER BY version ASC`,
+		agentID, tenantID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list agent versions: %w", err)
+	}
+	defer rows.Close()
+
+	var out []AgentVersion
+	for rows.Next() {
+		var (
+			version   int
+			snapshot  string
+			createdAt int64
+		)
+		if err := rows.Scan(&version, &snapshot, &createdAt); err != nil {
+			return nil, fmt.Errorf("scan agent version: %w", err)
+		}
+		var cfg AgentConfig
+		if err := json.Unmarshal([]byte(snapshot), &cfg); err != nil {
+			return nil, fmt.Errorf("unmarshal version snapshot: %w", err)
+		}
+		out = append(out, AgentVersion{
+			AgentID:   agentID,
+			TenantID:  tenantID,
+			Version:   version,
+			Snapshot:  cfg,
+			CreatedAt: createdAt,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list agent versions rows: %w", err)
+	}
+	return out, nil
+}
+
+// GetVersion loads one historical snapshot from agent_versions.
+func (r *AgentRepo) GetVersion(
+	ctx context.Context,
+	tenantID, agentID string,
+	version int,
+) (*AgentVersion, error) {
+	tenantID = tenantOrDefault(tenantID)
+	row := r.db.QueryRowContext(ctx, `
+		SELECT version, snapshot, created_at
+		FROM agent_versions
+		WHERE agent_id = ? AND tenant_id = ? AND version = ?`,
+		agentID, tenantID, version,
+	)
+	var (
+		snapshot  string
+		createdAt int64
+	)
+	if err := row.Scan(&version, &snapshot, &createdAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get agent version: %w", err)
+	}
+	var cfg AgentConfig
+	if err := json.Unmarshal([]byte(snapshot), &cfg); err != nil {
+		return nil, fmt.Errorf("unmarshal version snapshot: %w", err)
+	}
+	return &AgentVersion{
+		AgentID:   agentID,
+		TenantID:  tenantID,
+		Version:   version,
+		Snapshot:  cfg,
+		CreatedAt: createdAt,
+	}, nil
+}
+
+func agentConfigEqual(a, b AgentConfig) bool {
+	aJSON, err := json.Marshal(a)
+	if err != nil {
+		return false
+	}
+	bJSON, err := json.Marshal(b)
+	if err != nil {
+		return false
+	}
+	return string(aJSON) == string(bJSON)
 }
 
 func scanAgent(row interface {

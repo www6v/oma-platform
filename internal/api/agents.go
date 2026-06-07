@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 
@@ -10,15 +11,24 @@ import (
 )
 
 type agentResponse struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	Model        string `json:"model"`
-	SystemPrompt string `json:"system_prompt,omitempty"`
-	System       string `json:"system,omitempty"`
+	ID           string          `json:"id"`
+	Name         string          `json:"name"`
+	Model        string          `json:"model"`
+	SystemPrompt string          `json:"system_prompt,omitempty"`
+	System       string          `json:"system,omitempty"`
+	Description  string          `json:"description,omitempty"`
+	Tools        json.RawMessage `json:"tools,omitempty"`
 	Version      int    `json:"version"`
 	CreatedAt    int64  `json:"created_at"`
 	UpdatedAt    *int64 `json:"updated_at,omitempty"`
 	ArchivedAt   *int64 `json:"archived_at,omitempty"`
+}
+
+type agentVersionResponse struct {
+	AgentID   string          `json:"agent_id"`
+	Version   int             `json:"version"`
+	Snapshot  agentResponse   `json:"snapshot"`
+	CreatedAt int64           `json:"created_at"`
 }
 
 func formatAgent(a *store.Agent) agentResponse {
@@ -29,6 +39,8 @@ func formatAgent(a *store.Agent) agentResponse {
 		Model:        a.Model,
 		SystemPrompt: sys,
 		System:       sys,
+		Description:  a.Description,
+		Tools:        a.Tools,
 		Version:      a.Version,
 		CreatedAt:    a.CreatedAt,
 		UpdatedAt:    a.UpdatedAt,
@@ -36,18 +48,40 @@ func formatAgent(a *store.Agent) agentResponse {
 	}
 }
 
+func formatAgentVersion(v store.AgentVersion) agentVersionResponse {
+	return agentVersionResponse{
+		AgentID: v.AgentID,
+		Version: v.Version,
+		Snapshot: agentResponse{
+			ID:           v.Snapshot.ID,
+			Name:         v.Snapshot.Name,
+			Model:        v.Snapshot.Model,
+			SystemPrompt: v.Snapshot.SystemPrompt,
+			System:       v.Snapshot.SystemPrompt,
+			Description:  v.Snapshot.Description,
+			Tools:        v.Snapshot.Tools,
+			Version:      v.Snapshot.Version,
+		},
+		CreatedAt: v.CreatedAt,
+	}
+}
+
 type createAgentRequest struct {
-	Name         string `json:"name"`
-	Model        string `json:"model"`
-	System       string `json:"system"`
-	SystemPrompt string `json:"system_prompt"`
+	Name         string          `json:"name"`
+	Model        string          `json:"model"`
+	System       string          `json:"system"`
+	SystemPrompt string          `json:"system_prompt"`
+	Description  string          `json:"description"`
+	Tools        json.RawMessage `json:"tools"`
 }
 
 type patchAgentRequest struct {
-	Name         *string `json:"name"`
-	Model        *string `json:"model"`
-	System       *string `json:"system"`
-	SystemPrompt *string `json:"system_prompt"`
+	Name         *string          `json:"name"`
+	Model        *string          `json:"model"`
+	System       *string          `json:"system"`
+	SystemPrompt *string          `json:"system_prompt"`
+	Description  *string          `json:"description"`
+	Tools        *json.RawMessage `json:"tools"`
 }
 
 func mountAgentRoutes(r chi.Router, agents *store.AgentRepo) {
@@ -66,6 +100,8 @@ func mountAgentRoutes(r chi.Router, agents *store.AgentRepo) {
 			Name:         body.Name,
 			Model:        body.Model,
 			SystemPrompt: sys,
+			Description:  body.Description,
+			Tools:        body.Tools,
 		})
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
@@ -86,6 +122,44 @@ func mountAgentRoutes(r chi.Router, agents *store.AgentRepo) {
 			out = append(out, formatAgent(a))
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"data": out})
+	})
+
+	r.Get("/{id}/versions", func(w http.ResponseWriter, req *http.Request) {
+		id := chi.URLParam(req, "id")
+		versions, err := agents.ListVersions(req.Context(), defaultTenant, id)
+		if err == store.ErrNotFound {
+			writeError(w, http.StatusNotFound, "not found")
+			return
+		}
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		out := make([]agentVersionResponse, 0, len(versions))
+		for _, v := range versions {
+			out = append(out, formatAgentVersion(v))
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"data": out})
+	})
+
+	r.Get("/{id}/versions/{version}", func(w http.ResponseWriter, req *http.Request) {
+		id := chi.URLParam(req, "id")
+		rawVersion := chi.URLParam(req, "version")
+		version, err := strconv.Atoi(rawVersion)
+		if err != nil || version < 1 {
+			writeError(w, http.StatusBadRequest, "invalid version")
+			return
+		}
+		snap, err := agents.GetVersion(req.Context(), defaultTenant, id, version)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if snap == nil {
+			writeError(w, http.StatusNotFound, "not found")
+			return
+		}
+		writeJSON(w, http.StatusOK, formatAgentVersion(*snap))
 	})
 
 	r.Get("/{id}", func(w http.ResponseWriter, req *http.Request) {
@@ -117,6 +191,13 @@ func mountAgentRoutes(r chi.Router, agents *store.AgentRepo) {
 			patch.SystemPrompt = body.SystemPrompt
 		} else if body.System != nil {
 			patch.SystemPrompt = body.System
+		}
+		if body.Description != nil {
+			patch.Description = body.Description
+		}
+		if body.Tools != nil {
+			patch.Tools = *body.Tools
+			patch.ToolsSet = true
 		}
 		agent, err := agents.Update(req.Context(), defaultTenant, id, patch)
 		if err == store.ErrNotFound {
