@@ -188,7 +188,7 @@ Open http://localhost:8787 — `OMA_CONSOLE_DEV=1` stubs `/auth-info` and `/auth
 
 **Docker:** `docker compose up` mounts `../open-managed-agents/apps/console/dist` at `/app/console` when present. Build the console first, or set `CONSOLE_DIST` to another path.
 
-**Scope:** Agents, sessions, environments, and model cards work against oma-platform APIs. Vault, skills, billing, and other main-node-only routes will 404 until implemented.
+**Scope:** Agents, sessions, environments, and model cards work against oma-platform APIs. Vault, skills, runtimes, integrations, evals, and other main-node-only routes return empty-list stubs (P2) so Console pages degrade gracefully; full implementations are deferred.
 
 **Production:** `OMA_CONSOLE_DEV=1` disables API-key checks — dev only. Production console needs better-auth or another browser auth path; until then use API clients with `x-api-key`.
 

@@ -47,6 +47,22 @@ json_field() {
   python3 -c 'import json,sys; print(json.load(sys.stdin)[sys.argv[1]])' "$field"
 }
 
+# PR-07 events list returns { data: [{ seq, type, ts, data }] }; unwrap inner payloads.
+normalize_events_response() {
+  python3 -c 'import json,sys
+raw=json.load(sys.stdin)
+out=[]
+for item in raw.get("data", []):
+    inner=item.get("data")
+    if isinstance(inner, dict):
+        out.append(inner)
+    elif isinstance(inner, str):
+        out.append(json.loads(inner))
+    else:
+        out.append(item)
+print(json.dumps({"data": out}))'
+}
+
 api_get() {
   curl -sf "${PLATFORM_URL}$1" "${API_HEADERS[@]}"
 }
@@ -69,7 +85,7 @@ wait_for_agent_reply() {
 
   while (( SECONDS < deadline )); do
     events="$(
-      api_get "/v1/sessions/${sid}/events?order=asc"
+      api_get "/v1/sessions/${sid}/events?order=asc" | normalize_events_response
     )"
     status=0
     TURN_ERR="$(
@@ -132,7 +148,7 @@ wait_for_bash_uname_chain() {
 
   while (( SECONDS < deadline )); do
     events="$(
-      api_get "/v1/sessions/${sid}/events?order=asc"
+      api_get "/v1/sessions/${sid}/events?order=asc" | normalize_events_response
     )"
     status=0
     chain_err="$(

@@ -90,6 +90,8 @@ func NewRouter(deps Deps) http.Handler {
 		})
 	}
 
+	mountConsoleStubRoutes(r)
+
 	if deps.ConsoleDir != "" {
 		static := console.NewStaticHandler(deps.ConsoleDir)
 		r.NotFound(static.ServeHTTP)

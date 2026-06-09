@@ -188,7 +188,7 @@ curl -s -X POST localhost:8787/v1/sessions/$SID/events \
 
 **Docker：** `docker compose up` 在存在构建产物时，将 `../open-managed-agents/apps/console/dist` 挂载到 `/app/console`。需先构建 Console，或通过 `CONSOLE_DIST` 指定路径。
 
-**范围：** Agents、sessions、environments、model cards 已对接 oma-platform API。Vault、skills、billing 等仅 main-node 支持的路由暂未实现，会返回 404。
+**范围：** Agents、sessions、environments、model cards 已对接 oma-platform API。Vault、skills、runtimes、integrations、evals 等 main-node 专属能力在 P2 阶段返回空列表桩（Console 可正常显示空态）；完整实现延后。
 
 **生产环境：** `OMA_CONSOLE_DEV=1` 会关闭 API Key 校验，仅限开发。生产 Console 需 better-auth 或其他浏览器认证方案；在此之前请使用带 `x-api-key` 的 API 客户端。
 

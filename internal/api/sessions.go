@@ -307,6 +307,8 @@ func mountSessionRoutes(r chi.Router, h *sessionHandlers) {
 		writeJSON(w, http.StatusOK, resp)
 	})
 
+	h.mountSessionAuxRoutes(r)
+
 	r.Get("/{id}/events/stream", func(w http.ResponseWriter, req *http.Request) {
 		id := chi.URLParam(req, "id")
 		sess, err := h.sessions.Get(req.Context(), defaultTenant, id)
