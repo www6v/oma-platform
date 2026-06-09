@@ -30,7 +30,8 @@ func (s *slowHarness) RunTurn(
 		return harness.TurnResponse{}, ctx.Err()
 	case <-time.After(s.delay):
 	}
-	return harness.FakeClient{Text: "done"}.RunTurn(ctx, req)
+	fc := &harness.FakeClient{Text: "done"}
+	return fc.RunTurn(ctx, req)
 }
 
 func TestInterruptCancelsActiveTurn(t *testing.T) {

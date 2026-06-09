@@ -115,16 +115,21 @@ func mountSessionRoutes(r chi.Router, h *sessionHandlers) {
 	})
 
 	r.Get("/", func(w http.ResponseWriter, req *http.Request) {
-		list, err := h.sessions.List(req.Context(), defaultTenant)
+		params := parseSessionListParams(req)
+		if params.Err != "" {
+			writeError(w, http.StatusBadRequest, params.Err)
+			return
+		}
+		page, err := h.sessions.ListPage(req.Context(), params.Query)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		out := make([]sessionResponse, 0, len(list))
-		for _, s := range list {
+		out := make([]sessionResponse, 0, len(page.Items))
+		for _, s := range page.Items {
 			out = append(out, formatSession(s))
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"data": out})
+		writeListPage(w, out, page.NextCursor)
 	})
 
 	r.Get("/{id}", func(w http.ResponseWriter, req *http.Request) {

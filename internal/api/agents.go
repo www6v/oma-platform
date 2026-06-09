@@ -115,17 +115,21 @@ func mountAgentRoutes(r chi.Router, agents *store.AgentRepo) {
 	})
 
 	r.Get("/", func(w http.ResponseWriter, req *http.Request) {
-		includeArchived := req.URL.Query().Get("include_archived") == "true"
-		list, err := agents.List(req.Context(), defaultTenant, includeArchived)
+		params := parseAgentListParams(req)
+		if params.Err != "" {
+			writeError(w, http.StatusBadRequest, params.Err)
+			return
+		}
+		page, err := agents.ListPage(req.Context(), params.Query)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		out := make([]agentResponse, 0, len(list))
-		for _, a := range list {
+		out := make([]agentResponse, 0, len(page.Items))
+		for _, a := range page.Items {
 			out = append(out, formatAgent(a))
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"data": out})
+		writeListPage(w, out, page.NextCursor)
 	})
 
 	r.Get("/{id}/versions", func(w http.ResponseWriter, req *http.Request) {

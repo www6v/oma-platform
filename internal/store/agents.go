@@ -421,6 +421,47 @@ func scanAgent(row interface {
 	return agent, nil
 }
 
+func scanAgentWithID(row interface {
+	Scan(dest ...any) error
+}) (*Agent, string, error) {
+	var (
+		rowID      string
+		configJSON string
+		tenantID   string
+		createdAt  int64
+		updatedAt  sql.NullInt64
+		archivedAt sql.NullInt64
+	)
+	if err := row.Scan(
+		&rowID, &configJSON, &tenantID, &createdAt, &updatedAt, &archivedAt,
+	); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, "", nil
+		}
+		return nil, "", fmt.Errorf("scan agent: %w", err)
+	}
+
+	var cfg AgentConfig
+	if err := json.Unmarshal([]byte(configJSON), &cfg); err != nil {
+		return nil, "", fmt.Errorf("unmarshal config: %w", err)
+	}
+
+	agent := &Agent{
+		AgentConfig: cfg,
+		TenantID:    tenantID,
+		CreatedAt:   createdAt,
+	}
+	if updatedAt.Valid {
+		v := updatedAt.Int64
+		agent.UpdatedAt = &v
+	}
+	if archivedAt.Valid {
+		v := archivedAt.Int64
+		agent.ArchivedAt = &v
+	}
+	return agent, rowID, nil
+}
+
 func tenantOrDefault(tenantID string) string {
 	if tenantID == "" {
 		return defaultTenantID

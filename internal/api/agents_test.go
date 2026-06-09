@@ -287,3 +287,67 @@ func TestPostSessionAndEvents(t *testing.T) {
 		t.Fatalf("events status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestAgentsListPagination(t *testing.T) {
+	handler := testRouter(t)
+	names := []string{"alpha", "beta", "gamma"}
+	for _, name := range names {
+		body := `{"name":"` + name + `","model":"claude-sonnet-4-20250514"}`
+		req := httptest.NewRequest(
+			http.MethodPost,
+			"/v1/agents",
+			bytes.NewBufferString(body),
+		)
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create status=%d body=%s", rec.Code, rec.Body.String())
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/agents?limit=2", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("page1 status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var page1 struct {
+		Data       []map[string]any `json:"data"`
+		NextCursor string           `json:"next_cursor"`
+		HasMore    bool             `json:"has_more"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &page1); err != nil {
+		t.Fatal(err)
+	}
+	if len(page1.Data) != 2 {
+		t.Fatalf("page1 len=%d", len(page1.Data))
+	}
+	if page1.NextCursor == "" || !page1.HasMore {
+		t.Fatalf("page1 cursor=%q has_more=%v", page1.NextCursor, page1.HasMore)
+	}
+
+	req = httptest.NewRequest(
+		http.MethodGet,
+		"/v1/agents?limit=2&cursor="+page1.NextCursor,
+		nil,
+	)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("page2 status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var page2 struct {
+		Data       []map[string]any `json:"data"`
+		NextCursor string           `json:"next_cursor"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &page2); err != nil {
+		t.Fatal(err)
+	}
+	if len(page2.Data) != 1 {
+		t.Fatalf("page2 len=%d", len(page2.Data))
+	}
+	if page2.NextCursor != "" {
+		t.Fatalf("expected no next cursor, got %q", page2.NextCursor)
+	}
+}

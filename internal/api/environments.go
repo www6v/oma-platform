@@ -40,13 +40,17 @@ func mountEnvironmentRoutes(r chi.Router, envs *store.EnvironmentRepo) {
 	})
 
 	r.Get("/", func(w http.ResponseWriter, req *http.Request) {
-		includeArchived := req.URL.Query().Get("include_archived") == "true"
-		list, err := envs.List(req.Context(), defaultTenant, includeArchived)
+		params := parseEnvironmentListParams(req)
+		if params.Err != "" {
+			writeError(w, http.StatusBadRequest, params.Err)
+			return
+		}
+		page, err := envs.ListPage(req.Context(), params.Query)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"data": list})
+		writeListPage(w, page.Items, page.NextCursor)
 	})
 
 	r.Get("/{id}", func(w http.ResponseWriter, req *http.Request) {
