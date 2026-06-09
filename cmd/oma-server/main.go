@@ -61,6 +61,7 @@ func main() {
 		log.Fatal(err)
 	}
 	modelCards := store.NewModelCardRepo(db)
+	apiKeys := store.NewApiKeyRepo(db)
 	modelResolver := &modelresolve.Resolver{Cards: modelCards}
 	sessions := store.NewSessionRepo(db, agents, environments)
 	if n, err := sessions.RecoverRunning(context.Background()); err != nil {
@@ -92,6 +93,7 @@ func main() {
 		Agents:       agents,
 		Environments: environments,
 		ModelCards:   modelCards,
+		ApiKeys:      apiKeys,
 		Sessions: api.NewSessionHandlers(
 			sessions, events, hub, registry, workdirs, harnessClient, modelResolver,
 		),

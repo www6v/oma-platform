@@ -19,6 +19,7 @@ type Deps struct {
 	Agents       *store.AgentRepo
 	Environments *store.EnvironmentRepo
 	ModelCards   *store.ModelCardRepo
+	ApiKeys      *store.ApiKeyRepo
 	Sessions     *sessionHandlers
 	APIKey       string
 	ConsoleDir   string
@@ -30,6 +31,7 @@ func NewRouter(deps Deps) http.Handler {
 	r := chi.NewRouter()
 	r.Use(AuthMiddleware(AuthConfig{
 		APIKey:         deps.APIKey,
+		ApiKeys:        deps.ApiKeys,
 		ConsoleMounted: deps.ConsoleDir != "",
 		ConsoleDev:     deps.ConsoleDev,
 	}))
@@ -60,6 +62,31 @@ func NewRouter(deps Deps) http.Handler {
 	if deps.Sessions != nil {
 		r.Route("/v1/sessions", func(r chi.Router) {
 			mountSessionRoutes(r, deps.Sessions)
+		})
+	}
+
+	if deps.Agents != nil && deps.Sessions != nil && deps.Environments != nil {
+		r.Route("/v1/stats", func(r chi.Router) {
+			mountStatsRoutes(r, statsDeps{
+				Agents:       deps.Agents,
+				Sessions:     deps.Sessions.sessions,
+				Environments: deps.Environments,
+				ModelCards:   deps.ModelCards,
+				ApiKeys:      deps.ApiKeys,
+			})
+		})
+	}
+
+	r.Route("/v1/me", func(r chi.Router) {
+		mountMeRoutes(r, meDeps{
+			ConsoleDev: deps.ConsoleDev,
+			ApiKeys:    deps.ApiKeys,
+		})
+	})
+
+	if deps.ApiKeys != nil {
+		r.Route("/v1/api_keys", func(r chi.Router) {
+			mountApiKeyRoutes(r, deps.ApiKeys)
 		})
 	}
 

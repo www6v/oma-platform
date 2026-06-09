@@ -27,6 +27,7 @@ type sessionResponse struct {
 	Status        store.SessionStatus `json:"status"`
 	CreatedAt     int64               `json:"created_at"`
 	UpdatedAt     *int64              `json:"updated_at,omitempty"`
+	ArchivedAt    *int64              `json:"archived_at,omitempty"`
 }
 
 func formatSession(s *store.Session) sessionResponse {
@@ -40,7 +41,15 @@ func formatSession(s *store.Session) sessionResponse {
 		Status:        s.Status,
 		CreatedAt:     s.CreatedAt,
 		UpdatedAt:     s.UpdatedAt,
+		ArchivedAt:    s.ArchivedAt,
 	}
+}
+
+type eventListItem struct {
+	Seq  int             `json:"seq"`
+	Type string          `json:"type"`
+	Ts   string          `json:"ts"`
+	Data json.RawMessage `json:"data"`
 }
 
 type createSessionRequest struct {
@@ -206,6 +215,47 @@ func mountSessionRoutes(r chi.Router, h *sessionHandlers) {
 		writeJSON(w, http.StatusAccepted, map[string]string{"status": "queued"})
 	})
 
+	r.Post("/{id}/archive", func(w http.ResponseWriter, req *http.Request) {
+		id := chi.URLParam(req, "id")
+		sess, err := h.sessions.Archive(req.Context(), defaultTenant, id)
+		if err == store.ErrNotFound {
+			writeError(w, http.StatusNotFound, "not found")
+			return
+		}
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		h.registry.Remove(id)
+		writeJSON(w, http.StatusOK, formatSession(sess))
+	})
+
+	r.Delete("/{id}", func(w http.ResponseWriter, req *http.Request) {
+		id := chi.URLParam(req, "id")
+		sess, err := h.sessions.Get(req.Context(), defaultTenant, id)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if sess == nil {
+			writeError(w, http.StatusNotFound, "not found")
+			return
+		}
+		h.registry.Remove(id)
+		if err := h.sessions.Delete(req.Context(), defaultTenant, id); err != nil {
+			if err == store.ErrNotFound {
+				writeError(w, http.StatusNotFound, "not found")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"type": "session_deleted",
+			"id":   id,
+		})
+	})
+
 	r.Get("/{id}/events", func(w http.ResponseWriter, req *http.Request) {
 		id := chi.URLParam(req, "id")
 		sess, err := h.sessions.Get(req.Context(), defaultTenant, id)
@@ -220,27 +270,41 @@ func mountSessionRoutes(r chi.Router, h *sessionHandlers) {
 
 		limit := 100
 		if raw := req.URL.Query().Get("limit"); raw != "" {
-			if n, err := strconv.Atoi(raw); err == nil {
+			if n, err := strconv.Atoi(raw); err == nil && n > 0 {
 				limit = n
 			}
 		}
-		afterSeq := 0
-		if raw := req.URL.Query().Get("after_seq"); raw != "" {
-			if n, err := strconv.Atoi(raw); err == nil {
-				afterSeq = n
+		afterSeq := parseAfterSeq(req)
+		if req.URL.Query().Get("order") == "desc" {
+			list, err := h.events.ListEvents(
+				req.Context(), id, afterSeq, limit+1, false,
+			)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
 			}
+			writeEventsPage(w, list, limit)
+			return
 		}
-		orderAsc := req.URL.Query().Get("order") != "desc"
-		list, err := h.events.ListEvents(req.Context(), id, afterSeq, limit, orderAsc)
+		page, err := h.events.ListEventsPage(req.Context(), id, afterSeq, limit)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		data := make([]json.RawMessage, 0, len(list))
-		for _, ev := range list {
-			data = append(data, ev.Payload)
+		data := make([]eventListItem, 0, len(page.Items))
+		for _, ev := range page.Items {
+			data = append(data, formatEventListItem(ev))
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"data": data})
+		resp := map[string]any{
+			"data":     data,
+			"has_more": page.HasMore,
+		}
+		if page.HasMore && page.LastSeq > 0 {
+			resp["next_page"] = fmt.Sprintf("seq_%d", page.LastSeq)
+		} else {
+			resp["next_page"] = nil
+		}
+		writeJSON(w, http.StatusOK, resp)
 	})
 
 	r.Get("/{id}/events/stream", func(w http.ResponseWriter, req *http.Request) {
@@ -304,4 +368,53 @@ func mountSessionRoutes(r chi.Router, h *sessionHandlers) {
 func writeSSE(w http.ResponseWriter, seq int, payload json.RawMessage) {
 	fmt.Fprintf(w, "id: %d\n", seq)
 	fmt.Fprintf(w, "data: %s\n\n", payload)
+}
+
+func parseAfterSeq(req *http.Request) int {
+	if raw := req.URL.Query().Get("after_seq"); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n >= 0 {
+			return n
+		}
+	}
+	if raw := req.URL.Query().Get("next_page"); raw != "" {
+		var seq int
+		if _, err := fmt.Sscanf(raw, "seq_%d", &seq); err == nil && seq >= 0 {
+			return seq
+		}
+	}
+	return 0
+}
+
+func formatEventListItem(ev store.StoredEvent) eventListItem {
+	return eventListItem{
+		Seq:  ev.Seq,
+		Type: ev.Type,
+		Ts:   formatISO(ev.CreatedAt),
+		Data: ev.Payload,
+	}
+}
+
+func writeEventsPage(
+	w http.ResponseWriter,
+	list []store.StoredEvent,
+	limit int,
+) {
+	hasMore := len(list) > limit
+	if hasMore {
+		list = list[:limit]
+	}
+	data := make([]eventListItem, 0, len(list))
+	for _, ev := range list {
+		data = append(data, formatEventListItem(ev))
+	}
+	resp := map[string]any{
+		"data":     data,
+		"has_more": hasMore,
+	}
+	if hasMore && len(list) > 0 {
+		resp["next_page"] = fmt.Sprintf("seq_%d", list[len(list)-1].Seq)
+	} else {
+		resp["next_page"] = nil
+	}
+	writeJSON(w, http.StatusOK, resp)
 }

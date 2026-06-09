@@ -240,4 +240,42 @@ func mountAgentRoutes(r chi.Router, agents *store.AgentRepo) {
 		}
 		writeJSON(w, http.StatusOK, formatAgent(agent))
 	})
+
+	r.Delete("/{id}", func(w http.ResponseWriter, req *http.Request) {
+		id := chi.URLParam(req, "id")
+		agent, err := agents.Get(req.Context(), defaultTenant, id)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if agent == nil {
+			writeError(w, http.StatusNotFound, "not found")
+			return
+		}
+		has, err := agents.HasActiveSessions(req.Context(), defaultTenant, id)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if has {
+			writeError(
+				w, http.StatusConflict,
+				"Cannot delete agent with active sessions. "+
+					"Archive or delete sessions first.",
+			)
+			return
+		}
+		if err := agents.Delete(req.Context(), defaultTenant, id); err != nil {
+			if err == store.ErrNotFound {
+				writeError(w, http.StatusNotFound, "not found")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"type": "agent_deleted",
+			"id":   id,
+		})
+	})
 }

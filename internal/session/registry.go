@@ -19,6 +19,20 @@ func NewRegistry() *Registry {
 	return &Registry{lanes: make(map[string]*sessionLane)}
 }
 
+// Remove tears down the in-memory session lane (best-effort).
+func (r *Registry) Remove(sessionID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	lane, ok := r.lanes[sessionID]
+	if !ok {
+		return
+	}
+	if lane.machine != nil {
+		lane.machine.CancelActiveTurn()
+	}
+	delete(r.lanes, sessionID)
+}
+
 // Register stores a machine for a session id and starts its turn worker.
 func (r *Registry) Register(sessionID string, machine *Machine) {
 	r.mu.Lock()

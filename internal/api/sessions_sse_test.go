@@ -193,12 +193,18 @@ func getSessionEventPayloads(
 		t.Fatalf("list events status=%d", resp.StatusCode)
 	}
 	var body struct {
-		Data []json.RawMessage `json:"data"`
+		Data []struct {
+			Data json.RawMessage `json:"data"`
+		} `json:"data"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatal(err)
 	}
-	return body.Data
+	out := make([]json.RawMessage, 0, len(body.Data))
+	for _, item := range body.Data {
+		out = append(out, item.Data)
+	}
+	return out
 }
 
 func readSSEUntil(

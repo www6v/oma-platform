@@ -33,6 +33,7 @@ type Session struct {
 	TurnID              *string
 	CreatedAt           int64
 	UpdatedAt           *int64
+	ArchivedAt          *int64
 }
 
 // CreateSessionInput holds fields for session creation.
@@ -130,7 +131,7 @@ func (r *SessionRepo) Get(
 	row := r.db.QueryRowContext(ctx, `
 		SELECT id, tenant_id, agent_id, agent_version, agent_snapshot,
 			environment_id, environment_snapshot,
-			title, status, turn_id, created_at, updated_at
+			title, status, turn_id, created_at, updated_at, archived_at
 		FROM sessions
 		WHERE id = ? AND tenant_id = ?`,
 		id, tenantOrDefault(tenantID),
@@ -146,7 +147,7 @@ func (r *SessionRepo) List(
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, tenant_id, agent_id, agent_version, agent_snapshot,
 			environment_id, environment_snapshot,
-			title, status, turn_id, created_at, updated_at
+			title, status, turn_id, created_at, updated_at, archived_at
 		FROM sessions
 		WHERE tenant_id = ?
 		ORDER BY created_at ASC`,
@@ -235,11 +236,12 @@ func scanSession(row interface {
 		envSnapshot  string
 		turnID       sql.NullString
 		updatedAt    sql.NullInt64
+		archivedAt   sql.NullInt64
 	)
 	if err := row.Scan(
 		&s.ID, &s.TenantID, &s.AgentID, &s.AgentVersion, &snapshot,
 		&s.EnvironmentID, &envSnapshot,
-		&s.Title, &s.Status, &turnID, &s.CreatedAt, &updatedAt,
+		&s.Title, &s.Status, &turnID, &s.CreatedAt, &updatedAt, &archivedAt,
 	); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -255,6 +257,10 @@ func scanSession(row interface {
 	if updatedAt.Valid {
 		v := updatedAt.Int64
 		s.UpdatedAt = &v
+	}
+	if archivedAt.Valid {
+		v := archivedAt.Int64
+		s.ArchivedAt = &v
 	}
 	return &s, nil
 }

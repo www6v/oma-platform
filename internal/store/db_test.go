@@ -8,7 +8,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const expectedMigrationCount = 2
+const expectedMigrationCount = 3
 
 func TestOpenAppliesMigrationsOnce(t *testing.T) {
 	t.Parallel()
