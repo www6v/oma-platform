@@ -33,22 +33,22 @@ func TestConsoleStaticBypassesAuth(t *testing.T) {
 	}
 }
 
-func TestConsoleDevBypassesAPIKey(t *testing.T) {
+func TestAuthDisabledBypassesAPIKey(t *testing.T) {
 	handler := api.NewRouter(api.Deps{
-		APIKey:     "secret",
-		ConsoleDev: true,
+		APIKey:       "secret",
+		AuthDisabled: true,
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/agents", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	if rec.Code == http.StatusUnauthorized {
-		t.Fatalf("console dev should bypass API key")
+		t.Fatalf("auth disabled should bypass API key")
 	}
 }
 
-func TestConsoleDevAuthInfo(t *testing.T) {
-	handler := api.NewRouter(api.Deps{ConsoleDev: true})
+func TestAuthDisabledAuthInfo(t *testing.T) {
+	handler := api.NewRouter(api.Deps{AuthDisabled: true})
 
 	req := httptest.NewRequest(http.MethodGet, "/auth-info", nil)
 	rec := httptest.NewRecorder()
@@ -58,8 +58,8 @@ func TestConsoleDevAuthInfo(t *testing.T) {
 	}
 }
 
-func TestConsoleDevSession(t *testing.T) {
-	handler := api.NewRouter(api.Deps{ConsoleDev: true})
+func TestAuthDisabledSession(t *testing.T) {
+	handler := api.NewRouter(api.Deps{AuthDisabled: true})
 
 	req := httptest.NewRequest(http.MethodGet, "/auth/get-session", nil)
 	rec := httptest.NewRecorder()

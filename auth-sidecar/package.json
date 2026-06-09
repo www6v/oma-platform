@@ -1,0 +1,9 @@
+{
+  "name": "oma-auth-sidecar",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "better-auth": "^1.6.3",
+    "better-sqlite3": "^12.0.0"
+  }
+}

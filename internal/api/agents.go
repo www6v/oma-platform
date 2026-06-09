@@ -100,7 +100,7 @@ func mountAgentRoutes(r chi.Router, agents *store.AgentRepo) {
 			return
 		}
 		agent, err := agents.Create(req.Context(), store.CreateAgentInput{
-			TenantID:     defaultTenant,
+			TenantID:     tenantID(req),
 			Name:         body.Name,
 			Model:        body.Model,
 			SystemPrompt: sys,
@@ -134,7 +134,7 @@ func mountAgentRoutes(r chi.Router, agents *store.AgentRepo) {
 
 	r.Get("/{id}/versions", func(w http.ResponseWriter, req *http.Request) {
 		id := chi.URLParam(req, "id")
-		versions, err := agents.ListVersions(req.Context(), defaultTenant, id)
+		versions, err := agents.ListVersions(req.Context(), tenantID(req), id)
 		if err == store.ErrNotFound {
 			writeError(w, http.StatusNotFound, "not found")
 			return
@@ -158,7 +158,7 @@ func mountAgentRoutes(r chi.Router, agents *store.AgentRepo) {
 			writeError(w, http.StatusBadRequest, "invalid version")
 			return
 		}
-		snap, err := agents.GetVersion(req.Context(), defaultTenant, id, version)
+		snap, err := agents.GetVersion(req.Context(), tenantID(req), id, version)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -172,7 +172,7 @@ func mountAgentRoutes(r chi.Router, agents *store.AgentRepo) {
 
 	r.Get("/{id}", func(w http.ResponseWriter, req *http.Request) {
 		id := chi.URLParam(req, "id")
-		agent, err := agents.Get(req.Context(), defaultTenant, id)
+		agent, err := agents.Get(req.Context(), tenantID(req), id)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -211,7 +211,7 @@ func mountAgentRoutes(r chi.Router, agents *store.AgentRepo) {
 			patch.Tools = *body.Tools
 			patch.ToolsSet = true
 		}
-		agent, err := agents.Update(req.Context(), defaultTenant, id, patch)
+		agent, err := agents.Update(req.Context(), tenantID(req), id, patch)
 		if err == store.ErrNotFound {
 			writeError(w, http.StatusNotFound, "not found")
 			return
@@ -229,7 +229,7 @@ func mountAgentRoutes(r chi.Router, agents *store.AgentRepo) {
 
 	r.Post("/{id}/archive", func(w http.ResponseWriter, req *http.Request) {
 		id := chi.URLParam(req, "id")
-		agent, err := agents.Archive(req.Context(), defaultTenant, id)
+		agent, err := agents.Archive(req.Context(), tenantID(req), id)
 		if err == store.ErrNotFound {
 			writeError(w, http.StatusNotFound, "not found")
 			return
@@ -243,7 +243,7 @@ func mountAgentRoutes(r chi.Router, agents *store.AgentRepo) {
 
 	r.Delete("/{id}", func(w http.ResponseWriter, req *http.Request) {
 		id := chi.URLParam(req, "id")
-		agent, err := agents.Get(req.Context(), defaultTenant, id)
+		agent, err := agents.Get(req.Context(), tenantID(req), id)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -252,7 +252,7 @@ func mountAgentRoutes(r chi.Router, agents *store.AgentRepo) {
 			writeError(w, http.StatusNotFound, "not found")
 			return
 		}
-		has, err := agents.HasActiveSessions(req.Context(), defaultTenant, id)
+		has, err := agents.HasActiveSessions(req.Context(), tenantID(req), id)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -265,7 +265,7 @@ func mountAgentRoutes(r chi.Router, agents *store.AgentRepo) {
 			)
 			return
 		}
-		if err := agents.Delete(req.Context(), defaultTenant, id); err != nil {
+		if err := agents.Delete(req.Context(), tenantID(req), id); err != nil {
 			if err == store.ErrNotFound {
 				writeError(w, http.StatusNotFound, "not found")
 				return

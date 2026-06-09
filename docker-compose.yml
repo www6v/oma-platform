@@ -12,9 +12,12 @@ services:
       OMA_API_KEY: ${OMA_API_KEY:-dev-key}
       OMA_FAKE_HARNESS: ${OMA_FAKE_HARNESS:-1}
       # Optional console: build ../open-managed-agents/apps/console/dist, then set:
-      # CONSOLE_DIR=/app/console OMA_CONSOLE_DEV=1 and uncomment the volume below.
+      # CONSOLE_DIR=/app/console and uncomment the volume below.
       CONSOLE_DIR: ${CONSOLE_DIR:-}
-      OMA_CONSOLE_DEV: ${OMA_CONSOLE_DEV:-0}
+      AUTH_DISABLED: ${AUTH_DISABLED:-0}
+      AUTH_UPSTREAM_URL: ${AUTH_UPSTREAM_URL:-http://host.docker.internal:8788}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8787}
     volumes:
       - ./data:/data
       # - ${CONSOLE_DIST:-../open-managed-agents/apps/console/dist}:/app/console:ro

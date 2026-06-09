@@ -59,7 +59,7 @@ func mountModelCardRoutes(r chi.Router, cards *store.ModelCardRepo) {
 			return
 		}
 		card, err := cards.Create(req.Context(), store.CreateModelCardInput{
-			TenantID:      defaultTenant,
+			TenantID:      tenantID(req),
 			ModelID:       body.ModelID,
 			Model:         body.Model,
 			Provider:      body.Provider,
@@ -80,7 +80,7 @@ func mountModelCardRoutes(r chi.Router, cards *store.ModelCardRepo) {
 	})
 
 	r.Get("/", func(w http.ResponseWriter, req *http.Request) {
-		list, err := cards.List(req.Context(), defaultTenant, false)
+		list, err := cards.List(req.Context(), tenantID(req), false)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -94,7 +94,7 @@ func mountModelCardRoutes(r chi.Router, cards *store.ModelCardRepo) {
 
 	r.Get("/{id}/key", func(w http.ResponseWriter, req *http.Request) {
 		id := chi.URLParam(req, "id")
-		key, err := cards.GetAPIKey(req.Context(), defaultTenant, id)
+		key, err := cards.GetAPIKey(req.Context(), tenantID(req), id)
 		if err == store.ErrNotFound {
 			writeError(w, http.StatusNotFound, "not found")
 			return
@@ -108,7 +108,7 @@ func mountModelCardRoutes(r chi.Router, cards *store.ModelCardRepo) {
 
 	r.Get("/{id}", func(w http.ResponseWriter, req *http.Request) {
 		id := chi.URLParam(req, "id")
-		card, err := cards.Get(req.Context(), defaultTenant, id)
+		card, err := cards.Get(req.Context(), tenantID(req), id)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -150,7 +150,7 @@ func mountModelCardRoutes(r chi.Router, cards *store.ModelCardRepo) {
 			patch.CustomHeaders = *body.CustomHeaders
 			patch.CustomSet = true
 		}
-		card, err := cards.Update(req.Context(), defaultTenant, id, patch)
+		card, err := cards.Update(req.Context(), tenantID(req), id, patch)
 		if err == store.ErrNotFound {
 			writeError(w, http.StatusNotFound, "not found")
 			return
@@ -168,7 +168,7 @@ func mountModelCardRoutes(r chi.Router, cards *store.ModelCardRepo) {
 
 	r.Delete("/{id}", func(w http.ResponseWriter, req *http.Request) {
 		id := chi.URLParam(req, "id")
-		if err := cards.Delete(req.Context(), defaultTenant, id); err == store.ErrNotFound {
+		if err := cards.Delete(req.Context(), tenantID(req), id); err == store.ErrNotFound {
 			writeError(w, http.StatusNotFound, "not found")
 			return
 		} else if err != nil {

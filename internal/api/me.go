@@ -1,62 +1,31 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/open-ma/oma-building/internal/auth"
 	"github.com/open-ma/oma-building/internal/store"
 )
 
 type meDeps struct {
-	ConsoleDev bool
-	ApiKeys    *store.ApiKeyRepo
+	AuthDisabled bool
+	ApiKeys      *store.ApiKeyRepo
+	Tenants      *store.TenantRepo
 }
 
 func mountMeRoutes(r chi.Router, deps meDeps) {
-	r.Get("/", func(w http.ResponseWriter, _ *http.Request) {
-		if deps.ConsoleDev {
-			writeJSON(w, http.StatusOK, map[string]any{
-				"user": map[string]any{
-					"id":    "default",
-					"email": "default@local",
-					"name":  "Default User",
-					"role":  "owner",
-				},
-				"tenant": map[string]any{
-					"id":   defaultTenant,
-					"name": "Default",
-				},
-				"tenants": []map[string]any{
-					{"id": defaultTenant, "name": "Default", "role": "owner"},
-				},
-			})
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{
-			"user": map[string]any{
-				"id":    "default",
-				"email": "",
-				"name":  "",
-			},
-			"tenant": map[string]any{
-				"id":   defaultTenant,
-				"name": "",
-			},
-			"tenants": []map[string]any{
-				{"id": defaultTenant, "name": "", "role": "member"},
-			},
-		})
+	r.Get("/", func(w http.ResponseWriter, req *http.Request) {
+		writeJSON(w, http.StatusOK, buildMePayload(req.Context(), req, deps))
 	})
 
-	r.Get("/tenants", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{
-			"data": []map[string]any{
-				{"id": defaultTenant, "name": "Default", "role": "owner"},
-			},
-		})
+	r.Get("/tenants", func(w http.ResponseWriter, req *http.Request) {
+		data := listTenantPayload(req.Context(), req, deps)
+		writeJSON(w, http.StatusOK, map[string]any{"data": data})
 	})
 
 	r.Post("/cli-tokens", func(w http.ResponseWriter, req *http.Request) {
@@ -69,17 +38,19 @@ func mountMeRoutes(r chi.Router, deps meDeps) {
 			Name     string `json:"name"`
 		}
 		_ = json.NewDecoder(req.Body).Decode(&body)
-		tenantID := body.TenantID
-		if tenantID == "" {
-			tenantID = defaultTenant
+		tenant := body.TenantID
+		if tenant == "" {
+			tenant = tenantID(req)
 		}
 		name := body.Name
 		if name == "" {
 			name = "CLI token"
 		}
-		minted, err := deps.ApiKeys.Mint(
-			req.Context(), tenantID, "user_console_dev", name, "cli",
-		)
+		uid := userID(req)
+		if uid == "" {
+			uid = "user_cli"
+		}
+		minted, err := deps.ApiKeys.Mint(req.Context(), tenant, uid, name, "cli")
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -94,13 +65,117 @@ func mountMeRoutes(r chi.Router, deps meDeps) {
 	})
 }
 
+func buildMePayload(
+	ctx context.Context,
+	req *http.Request,
+	deps meDeps,
+) map[string]any {
+	tenant := tenantID(req)
+	tenantName := "Default"
+	role := "owner"
+	tenants := listTenantPayload(ctx, req, deps)
+
+	if deps.AuthDisabled {
+		return map[string]any{
+			"user": map[string]any{
+				"id":    "default",
+				"email": "default@local",
+				"name":  "Default User",
+				"role":  "owner",
+			},
+			"tenant": map[string]any{
+				"id":   tenant,
+				"name": tenantName,
+			},
+			"tenants": tenants,
+		}
+	}
+
+	user, ok := auth.UserFromContext(ctx)
+	if !ok {
+		return map[string]any{
+			"user": map[string]any{
+				"id":    "default",
+				"email": "",
+				"name":  "",
+			},
+			"tenant": map[string]any{
+				"id":   tenant,
+				"name": "",
+			},
+			"tenants": tenants,
+		}
+	}
+
+	if deps.Tenants != nil {
+		if name, err := deps.Tenants.GetTenantName(ctx, tenant); err == nil && name != "" {
+			tenantName = name
+		}
+		for _, item := range tenants {
+			if item["id"] == tenant {
+				if r, ok := item["role"].(string); ok && r != "" {
+					role = r
+				}
+				break
+			}
+		}
+	}
+
+	return map[string]any{
+		"user": map[string]any{
+			"id":    user.ID,
+			"email": user.Email,
+			"name":  user.Name,
+			"role":  role,
+		},
+		"tenant": map[string]any{
+			"id":   tenant,
+			"name": tenantName,
+		},
+		"tenants": tenants,
+	}
+}
+
+func listTenantPayload(
+	ctx context.Context,
+	req *http.Request,
+	deps meDeps,
+) []map[string]any {
+	if deps.Tenants == nil {
+		return []map[string]any{
+			{"id": defaultTenant, "name": "Default", "role": "owner"},
+		}
+	}
+	uid := userID(req)
+	if uid == "" {
+		return []map[string]any{
+			{"id": tenantID(req), "name": "Default", "role": "owner"},
+		}
+	}
+	items, err := deps.Tenants.ListForUser(ctx, uid)
+	if err != nil || len(items) == 0 {
+		return []map[string]any{
+			{"id": tenantID(req), "name": "Default", "role": "owner"},
+		}
+	}
+	out := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		out = append(out, map[string]any{
+			"id":   item.TenantID,
+			"name": item.Name,
+			"role": item.Role,
+		})
+	}
+	return out
+}
+
 func mountApiKeyRoutes(r chi.Router, keys *store.ApiKeyRepo) {
 	r.Post("/", func(w http.ResponseWriter, req *http.Request) {
 		var body struct {
 			Name string `json:"name"`
 		}
 		_ = json.NewDecoder(req.Body).Decode(&body)
-		minted, err := keys.Mint(req.Context(), defaultTenant, "", body.Name, "")
+		minted, err := keys.Mint(req.Context(), tenantID(req), userID(req), body.Name, "")
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -115,7 +190,7 @@ func mountApiKeyRoutes(r chi.Router, keys *store.ApiKeyRepo) {
 	})
 
 	r.Get("/", func(w http.ResponseWriter, req *http.Request) {
-		list, err := keys.List(req.Context(), defaultTenant)
+		list, err := keys.List(req.Context(), tenantID(req))
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -138,7 +213,7 @@ func mountApiKeyRoutes(r chi.Router, keys *store.ApiKeyRepo) {
 
 	r.Delete("/{id}", func(w http.ResponseWriter, req *http.Request) {
 		id := chi.URLParam(req, "id")
-		ok, err := keys.Delete(req.Context(), defaultTenant, id)
+		ok, err := keys.Delete(req.Context(), tenantID(req), id)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return

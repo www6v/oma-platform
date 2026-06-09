@@ -30,7 +30,9 @@ func main() {
 	harnessURL := envOrDefault("HARNESS_URL", "http://127.0.0.1:8090")
 	apiKey := os.Getenv("OMA_API_KEY")
 	consoleDir := os.Getenv("CONSOLE_DIR")
-	consoleDev := os.Getenv("OMA_CONSOLE_DEV") == "1"
+	authDisabled := os.Getenv("AUTH_DISABLED") == "1"
+	authUpstream := envOrDefault("AUTH_UPSTREAM_URL", "http://127.0.0.1:8788")
+
 	if consoleDir != "" {
 		absConsole, err := filepath.Abs(consoleDir)
 		if err != nil {
@@ -38,8 +40,11 @@ func main() {
 		}
 		consoleDir = absConsole
 	}
-	if consoleDev && consoleDir == "" {
-		log.Print("warning: OMA_CONSOLE_DEV=1 without CONSOLE_DIR — auth stubs only")
+	if authDisabled && consoleDir != "" {
+		log.Print("warning: AUTH_DISABLED=1 — using auth stubs; not for production")
+	}
+	if !authDisabled && consoleDir != "" && authUpstream == "" {
+		log.Print("warning: console mounted without AUTH_UPSTREAM_URL — cookie auth disabled")
 	}
 
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
@@ -62,6 +67,7 @@ func main() {
 	}
 	modelCards := store.NewModelCardRepo(db)
 	apiKeys := store.NewApiKeyRepo(db)
+	tenants := store.NewTenantRepo(db)
 	modelResolver := &modelresolve.Resolver{Cards: modelCards}
 	sessions := store.NewSessionRepo(db, agents, environments)
 	if n, err := sessions.RecoverRunning(context.Background()); err != nil {
@@ -94,17 +100,24 @@ func main() {
 		Environments: environments,
 		ModelCards:   modelCards,
 		ApiKeys:      apiKeys,
+		Tenants:      tenants,
 		Sessions: api.NewSessionHandlers(
 			sessions, events, hub, registry, workdirs, harnessClient, modelResolver,
 		),
-		APIKey:     apiKey,
-		ConsoleDir: consoleDir,
-		ConsoleDev: consoleDev,
+		APIKey:       apiKey,
+		ConsoleDir:   consoleDir,
+		AuthDisabled: authDisabled,
+		AuthUpstream: authUpstream,
 	})
 
 	log.Printf("oma-server listening on %s", addr)
 	if consoleDir != "" {
-		log.Printf("console UI mounted from %s (dev=%v)", consoleDir, consoleDev)
+		log.Printf(
+			"console UI mounted from %s (auth_disabled=%v upstream=%s)",
+			consoleDir,
+			authDisabled,
+			authUpstream,
+		)
 	}
 	if err := http.ListenAndServe(addr, handler); err != nil {
 		log.Fatal(err)

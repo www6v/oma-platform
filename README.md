@@ -129,7 +129,7 @@ Turns are **stateless** on the harness side: every call carries the full event h
 | `POST` | `/v1/model_cards` | Create model card |
 | `GET` | `/v1/model_cards` | List model cards |
 
-Authenticated routes expect `x-api-key: $OMA_API_KEY` unless `OMA_CONSOLE_DEV=1` (dev only).
+Authenticated routes accept `x-api-key: $OMA_API_KEY` or a better-auth cookie session. Set `AUTH_DISABLED=1` only for API-key-free local dev (not production).
 
 ## Quick start (local)
 
@@ -184,13 +184,13 @@ The OMA Console SPA from `open-managed-agents/apps/console` is served on the sam
 ./start-console.sh
 ```
 
-Open http://localhost:8787 — `OMA_CONSOLE_DEV=1` stubs `/auth-info` and `/auth/get-session` so the login gate passes without better-auth.
+Open http://localhost:8787 — `./start-console.sh` starts the better-auth sidecar and proxies `/auth/*` so you can sign up / sign in with email and password.
 
 **Docker:** `docker compose up` mounts `../open-managed-agents/apps/console/dist` at `/app/console` when present. Build the console first, or set `CONSOLE_DIST` to another path.
 
 **Scope:** Agents, sessions, environments, and model cards work against oma-platform APIs. Vault, skills, runtimes, integrations, evals, and other main-node-only routes return empty-list stubs (P2) so Console pages degrade gracefully; full implementations are deferred.
 
-**Production:** `OMA_CONSOLE_DEV=1` disables API-key checks — dev only. Production console needs better-auth or another browser auth path; until then use API clients with `x-api-key`.
+**Production:** set a stable `BETTER_AUTH_SECRET`, run the auth sidecar (or equivalent upstream), and keep `AUTH_DISABLED=0`. API clients can still use `x-api-key`.
 
 ## Docker
 
@@ -212,7 +212,11 @@ Copy `.env.example` to `.env`. For real model calls set `OMA_FAKE_HARNESS=0` and
 | `OMA_FAKE_HARNESS` | — | `1` = in-process fake harness (no Python) |
 | `HARNESS_HTTP_TIMEOUT_SEC` | `600` | Platform → harness HTTP timeout |
 | `CONSOLE_DIR` | — | Path to built Console `dist/` |
-| `OMA_CONSOLE_DEV` | — | `1` = dev auth stubs + relaxed API-key rules |
+| `AUTH_DISABLED` | `0` | `1` = skip auth + stub `/auth/get-session` (dev only) |
+| `AUTH_UPSTREAM_URL` | `http://127.0.0.1:8788` | better-auth sidecar base URL |
+| `AUTH_DATABASE_PATH` | `./data/auth.db` | better-auth SQLite database |
+| `BETTER_AUTH_SECRET` | — | Cookie signing secret (required in prod) |
+| `PUBLIC_BASE_URL` | `http://127.0.0.1:8787` | Public origin for auth cookies |
 
 ## Tech stack
 

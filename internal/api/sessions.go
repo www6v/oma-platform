@@ -75,7 +75,7 @@ type sessionHandlers struct {
 
 func (h *sessionHandlers) registerMachine(sess *store.Session) {
 	h.registry.Register(sess.ID, &session.Machine{
-		TenantID:  defaultTenant,
+		TenantID:  sess.TenantID,
 		SessionID: sess.ID,
 		Sessions:  h.sessions,
 		Events:    h.events,
@@ -102,7 +102,7 @@ func mountSessionRoutes(r chi.Router, h *sessionHandlers) {
 			envID = body.Environment
 		}
 		sess, err := h.sessions.Create(req.Context(), store.CreateSessionInput{
-			TenantID:      defaultTenant,
+			TenantID:      tenantID(req),
 			AgentID:       body.Agent,
 			Title:         body.Title,
 			EnvironmentID: envID,
@@ -143,7 +143,7 @@ func mountSessionRoutes(r chi.Router, h *sessionHandlers) {
 
 	r.Get("/{id}", func(w http.ResponseWriter, req *http.Request) {
 		id := chi.URLParam(req, "id")
-		sess, err := h.sessions.Get(req.Context(), defaultTenant, id)
+		sess, err := h.sessions.Get(req.Context(), tenantID(req), id)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -157,7 +157,7 @@ func mountSessionRoutes(r chi.Router, h *sessionHandlers) {
 
 	r.Post("/{id}/events", func(w http.ResponseWriter, req *http.Request) {
 		id := chi.URLParam(req, "id")
-		sess, err := h.sessions.Get(req.Context(), defaultTenant, id)
+		sess, err := h.sessions.Get(req.Context(), tenantID(req), id)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -217,7 +217,7 @@ func mountSessionRoutes(r chi.Router, h *sessionHandlers) {
 
 	r.Post("/{id}/archive", func(w http.ResponseWriter, req *http.Request) {
 		id := chi.URLParam(req, "id")
-		sess, err := h.sessions.Archive(req.Context(), defaultTenant, id)
+		sess, err := h.sessions.Archive(req.Context(), tenantID(req), id)
 		if err == store.ErrNotFound {
 			writeError(w, http.StatusNotFound, "not found")
 			return
@@ -232,7 +232,7 @@ func mountSessionRoutes(r chi.Router, h *sessionHandlers) {
 
 	r.Delete("/{id}", func(w http.ResponseWriter, req *http.Request) {
 		id := chi.URLParam(req, "id")
-		sess, err := h.sessions.Get(req.Context(), defaultTenant, id)
+		sess, err := h.sessions.Get(req.Context(), tenantID(req), id)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -242,7 +242,7 @@ func mountSessionRoutes(r chi.Router, h *sessionHandlers) {
 			return
 		}
 		h.registry.Remove(id)
-		if err := h.sessions.Delete(req.Context(), defaultTenant, id); err != nil {
+		if err := h.sessions.Delete(req.Context(), tenantID(req), id); err != nil {
 			if err == store.ErrNotFound {
 				writeError(w, http.StatusNotFound, "not found")
 				return
@@ -258,7 +258,7 @@ func mountSessionRoutes(r chi.Router, h *sessionHandlers) {
 
 	r.Get("/{id}/events", func(w http.ResponseWriter, req *http.Request) {
 		id := chi.URLParam(req, "id")
-		sess, err := h.sessions.Get(req.Context(), defaultTenant, id)
+		sess, err := h.sessions.Get(req.Context(), tenantID(req), id)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -311,7 +311,7 @@ func mountSessionRoutes(r chi.Router, h *sessionHandlers) {
 
 	r.Get("/{id}/events/stream", func(w http.ResponseWriter, req *http.Request) {
 		id := chi.URLParam(req, "id")
-		sess, err := h.sessions.Get(req.Context(), defaultTenant, id)
+		sess, err := h.sessions.Get(req.Context(), tenantID(req), id)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return

@@ -29,7 +29,7 @@ type statsResponse struct {
 func mountStatsRoutes(r chi.Router, deps statsDeps) {
 	r.Get("/", func(w http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
-		tenant := defaultTenant
+		tenant := tenantID(req)
 
 		agents, err := deps.Agents.CountActive(ctx, tenant)
 		if err != nil {

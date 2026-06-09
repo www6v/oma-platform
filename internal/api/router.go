@@ -1,10 +1,12 @@
 package api
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/open-ma/oma-building/internal/auth"
 	"github.com/open-ma/oma-building/internal/console"
 	"github.com/open-ma/oma-building/internal/harness"
 	"github.com/open-ma/oma-building/internal/modelresolve"
@@ -20,25 +22,36 @@ type Deps struct {
 	Environments *store.EnvironmentRepo
 	ModelCards   *store.ModelCardRepo
 	ApiKeys      *store.ApiKeyRepo
+	Tenants      *store.TenantRepo
 	Sessions     *sessionHandlers
 	APIKey       string
 	ConsoleDir   string
-	ConsoleDev   bool
+	AuthDisabled bool
+	AuthUpstream string
 }
 
 // NewRouter returns the platform HTTP handler.
 func NewRouter(deps Deps) http.Handler {
 	r := chi.NewRouter()
-	r.Use(AuthMiddleware(AuthConfig{
+
+	authCfg := auth.Config{
+		Disabled:       deps.AuthDisabled,
 		APIKey:         deps.APIKey,
 		ApiKeys:        deps.ApiKeys,
+		Tenants:        deps.Tenants,
 		ConsoleMounted: deps.ConsoleDir != "",
-		ConsoleDev:     deps.ConsoleDev,
-	}))
+	}
+	if !deps.AuthDisabled && deps.AuthUpstream != "" {
+		authCfg.Session = &auth.SessionResolver{Upstream: deps.AuthUpstream}
+	}
+	r.Use(auth.Middleware(authCfg))
+
 	r.Get("/health", handleHealth)
 
-	if deps.ConsoleDev {
-		mountConsoleDevRoutes(r)
+	routeDeps := auth.RouteDepsFromEnv(deps.AuthDisabled)
+	routeDeps.AuthUpstream = deps.AuthUpstream
+	if err := auth.Mount(r, routeDeps); err != nil {
+		log.Printf("warning: auth routes: %v", err)
 	}
 
 	if deps.Agents != nil {
@@ -79,8 +92,9 @@ func NewRouter(deps Deps) http.Handler {
 
 	r.Route("/v1/me", func(r chi.Router) {
 		mountMeRoutes(r, meDeps{
-			ConsoleDev: deps.ConsoleDev,
-			ApiKeys:    deps.ApiKeys,
+			AuthDisabled: deps.AuthDisabled,
+			ApiKeys:      deps.ApiKeys,
+			Tenants:      deps.Tenants,
 		})
 	})
 

@@ -129,7 +129,7 @@ func parseAgentListParams(r *http.Request) agentListParams {
 	}
 	return agentListParams{
 		Query: store.AgentListQuery{
-			TenantID:        defaultTenant,
+			TenantID:        tenantID(r),
 			Limit:           parseListLimit(q),
 			Cursor:          cursor,
 			Status:          status,
@@ -174,7 +174,7 @@ func parseEnvironmentListParams(r *http.Request) environmentListParams {
 	}
 	return environmentListParams{
 		Query: store.EnvironmentListQuery{
-			TenantID:        defaultTenant,
+			TenantID:        tenantID(r),
 			Limit:           parseListLimit(q),
 			Cursor:          cursor,
 			Status:          status,
@@ -219,7 +219,7 @@ func parseSessionListParams(r *http.Request) sessionListParams {
 	}
 	return sessionListParams{
 		Query: store.SessionListQuery{
-			TenantID:        defaultTenant,
+			TenantID:        tenantID(r),
 			Limit:           parseListLimit(q),
 			Cursor:          cursor,
 			Status:          status,

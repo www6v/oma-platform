@@ -26,7 +26,7 @@ func mountEnvironmentRoutes(r chi.Router, envs *store.EnvironmentRepo) {
 			return
 		}
 		env, err := envs.Create(req.Context(), store.CreateEnvironmentInput{
-			TenantID:    defaultTenant,
+			TenantID:    tenantID(req),
 			Name:        body.Name,
 			Description: body.Description,
 			Config:      body.Config,
@@ -55,7 +55,7 @@ func mountEnvironmentRoutes(r chi.Router, envs *store.EnvironmentRepo) {
 
 	r.Get("/{id}", func(w http.ResponseWriter, req *http.Request) {
 		id := chi.URLParam(req, "id")
-		env, err := envs.Get(req.Context(), defaultTenant, id)
+		env, err := envs.Get(req.Context(), tenantID(req), id)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -77,7 +77,7 @@ func mountEnvironmentRoutes(r chi.Router, envs *store.EnvironmentRepo) {
 
 	r.Post("/{id}/archive", func(w http.ResponseWriter, req *http.Request) {
 		id := chi.URLParam(req, "id")
-		env, err := envs.Archive(req.Context(), defaultTenant, id)
+		env, err := envs.Archive(req.Context(), tenantID(req), id)
 		if err == store.ErrNotFound {
 			writeError(w, http.StatusNotFound, "not found")
 			return
@@ -118,7 +118,7 @@ func updateEnvironment(
 		patch.Metadata = *body.Metadata
 		patch.MetadataSet = true
 	}
-	env, err := envs.Update(req.Context(), defaultTenant, id, patch)
+	env, err := envs.Update(req.Context(), tenantID(req), id, patch)
 	if err == store.ErrNotFound {
 		writeError(w, http.StatusNotFound, "not found")
 		return

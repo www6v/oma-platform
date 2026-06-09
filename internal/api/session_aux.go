@@ -22,7 +22,7 @@ func (h *sessionHandlers) requireSession(
 	req *http.Request,
 ) (*store.Session, bool) {
 	id := chi.URLParam(req, "id")
-	sess, err := h.sessions.Get(req.Context(), defaultTenant, id)
+	sess, err := h.sessions.Get(req.Context(), tenantID(req), id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return nil, false
