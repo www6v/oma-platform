@@ -15,28 +15,7 @@ func mountConsoleStubRoutes(r chi.Router) {
 	r.Post("/v1/runtimes/connect-runtime", handleStubNotImplemented)
 	r.Delete("/v1/runtimes/{id}", handleStubNotImplemented)
 
-	r.Get("/v1/skills", writeEmptyDataList)
-	r.Post("/v1/skills/upload", handleStubNotImplemented)
-	r.Route("/v1/skills/{id}", func(r chi.Router) {
-		r.Get("/", handleStubNotFound)
-		r.Delete("/", handleStubNotImplemented)
-		r.Get("/versions", writeEmptyDataList)
-		r.Get("/versions/{version}", handleStubNotFound)
-		r.Post("/versions/upload", handleStubNotImplemented)
-	})
-
 	r.Get("/v1/models/list", handleModelsListStub)
-
-	r.Get("/v1/vaults", writeEmptyDataList)
-	r.Post("/v1/vaults", handleStubNotImplemented)
-	r.Route("/v1/vaults/{id}", func(r chi.Router) {
-		r.Get("/", handleStubNotFound)
-		r.Delete("/", handleStubNotImplemented)
-		r.Post("/archive", handleStubNotImplemented)
-		r.Get("/credentials", writeEmptyDataList)
-		r.Delete("/credentials/{credId}", handleStubNotImplemented)
-		r.Post("/credentials", handleStubNotImplemented)
-	})
 
 	r.Get("/v1/files", writeEmptyDataList)
 	r.Route("/v1/files/{id}", func(r chi.Router) {

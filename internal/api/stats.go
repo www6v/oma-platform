@@ -13,6 +13,8 @@ type statsDeps struct {
 	Sessions     *store.SessionRepo
 	Environments *store.EnvironmentRepo
 	ModelCards   *store.ModelCardRepo
+	Vaults       *store.VaultRepo
+	Skills       *store.SkillRepo
 	ApiKeys      *store.ApiKeyRepo
 }
 
@@ -59,13 +61,30 @@ func mountStatsRoutes(r chi.Router, deps statsDeps) {
 				return
 			}
 		}
+		vaults := 0
+		if deps.Vaults != nil {
+			vaults, err = deps.Vaults.CountActive(ctx, tenant)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+		}
+		skills := store.BuiltinSkillCount()
+		if deps.Skills != nil {
+			custom, err := deps.Skills.CountCustom(ctx, tenant)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			skills += custom
+		}
 
 		writeJSON(w, http.StatusOK, statsResponse{
 			Agents:       agents,
 			Sessions:     sessions,
 			Environments: environments,
-			Vaults:       0,
-			Skills:       0,
+			Vaults:       vaults,
+			Skills:       skills,
 			ModelCards:   modelCards,
 			APIKeys:      apiKeys,
 		})

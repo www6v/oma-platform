@@ -16,9 +16,7 @@ func TestP2ConsoleStubs(t *testing.T) {
 		key  string
 	}{
 		{"/v1/runtimes", "runtimes"},
-		{"/v1/skills", "data"},
 		{"/v1/models/list", "data"},
-		{"/v1/vaults", "data"},
 		{"/v1/files", "data"},
 		{"/v1/memory_stores", "data"},
 		{"/v1/evals/runs", "data"},

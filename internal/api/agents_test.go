@@ -41,6 +41,10 @@ func testRouterHarness(
 		t.Fatal(err)
 	}
 	modelCards := store.NewModelCardRepo(db)
+	vaults := store.NewVaultRepo(db)
+	credentials := store.NewCredentialRepo(db)
+	skillFiles := store.NewSkillFileStore(t.TempDir())
+	skills := store.NewSkillRepo(db, skillFiles)
 	models := &modelresolve.Resolver{Cards: modelCards}
 	sessions := store.NewSessionRepo(db, agents, environments)
 	events := store.NewEventRepo(db)
@@ -52,6 +56,10 @@ func testRouterHarness(
 		Agents:       agents,
 		Environments: environments,
 		ModelCards:   modelCards,
+		Vaults:       vaults,
+		Credentials:  credentials,
+		Skills:       skills,
+		SkillFiles:   skillFiles,
 		Sessions: api.NewSessionHandlers(
 			sessions, events, hub, reg, workdirs, client, models,
 		),
@@ -71,6 +79,10 @@ func testRouterSharedDB(
 		t.Fatal(err)
 	}
 	modelCards := store.NewModelCardRepo(db)
+	vaults := store.NewVaultRepo(db)
+	credentials := store.NewCredentialRepo(db)
+	skillFiles := store.NewSkillFileStore(t.TempDir())
+	skills := store.NewSkillRepo(db, skillFiles)
 	models := &modelresolve.Resolver{Cards: modelCards}
 	sessions := store.NewSessionRepo(db, agents, environments)
 	events := store.NewEventRepo(db)
@@ -82,6 +94,10 @@ func testRouterSharedDB(
 		Agents:       agents,
 		Environments: environments,
 		ModelCards:   modelCards,
+		Vaults:       vaults,
+		Credentials:  credentials,
+		Skills:       skills,
+		SkillFiles:   skillFiles,
 		Sessions: api.NewSessionHandlers(
 			sessions, events, hub, reg, workdirs, client, models,
 		),

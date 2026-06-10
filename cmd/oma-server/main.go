@@ -22,6 +22,7 @@ func main() {
 	addr := envOrDefault("OMA_LISTEN_ADDR", ":8787")
 	dbPath := envOrDefault("DATABASE_PATH", "./data/oma.db")
 	workdirBase := envOrDefault("SANDBOX_WORKDIR", "./data/sandboxes")
+	skillsDataDir := envOrDefault("SKILLS_DATA_DIR", "./data/skills")
 	absWorkdir, err := filepath.Abs(workdirBase)
 	if err != nil {
 		log.Fatal(err)
@@ -53,6 +54,9 @@ func main() {
 	if err := os.MkdirAll(workdirBase, 0o755); err != nil {
 		log.Fatal(err)
 	}
+	if err := os.MkdirAll(skillsDataDir, 0o755); err != nil {
+		log.Fatal(err)
+	}
 
 	db, err := store.Open(dbPath)
 	if err != nil {
@@ -66,6 +70,10 @@ func main() {
 		log.Fatal(err)
 	}
 	modelCards := store.NewModelCardRepo(db)
+	vaults := store.NewVaultRepo(db)
+	credentials := store.NewCredentialRepo(db)
+	skillFiles := store.NewSkillFileStore(skillsDataDir)
+	skills := store.NewSkillRepo(db, skillFiles)
 	apiKeys := store.NewApiKeyRepo(db)
 	tenants := store.NewTenantRepo(db)
 	modelResolver := &modelresolve.Resolver{Cards: modelCards}
@@ -99,6 +107,10 @@ func main() {
 		Agents:       agents,
 		Environments: environments,
 		ModelCards:   modelCards,
+		Vaults:       vaults,
+		Credentials:  credentials,
+		Skills:       skills,
+		SkillFiles:   skillFiles,
 		ApiKeys:      apiKeys,
 		Tenants:      tenants,
 		Sessions: api.NewSessionHandlers(

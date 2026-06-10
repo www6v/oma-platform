@@ -21,6 +21,10 @@ type Deps struct {
 	Agents       *store.AgentRepo
 	Environments *store.EnvironmentRepo
 	ModelCards   *store.ModelCardRepo
+	Vaults       *store.VaultRepo
+	Credentials  *store.CredentialRepo
+	Skills       *store.SkillRepo
+	SkillFiles   *store.SkillFileStore
 	ApiKeys      *store.ApiKeyRepo
 	Tenants      *store.TenantRepo
 	Sessions     *sessionHandlers
@@ -85,7 +89,27 @@ func NewRouter(deps Deps) http.Handler {
 				Sessions:     deps.Sessions.sessions,
 				Environments: deps.Environments,
 				ModelCards:   deps.ModelCards,
+				Vaults:       deps.Vaults,
+				Skills:       deps.Skills,
 				ApiKeys:      deps.ApiKeys,
+			})
+		})
+	}
+
+	if deps.Vaults != nil && deps.Credentials != nil {
+		r.Route("/v1/vaults", func(r chi.Router) {
+			mountVaultRoutes(r, vaultDeps{
+				Vaults:      deps.Vaults,
+				Credentials: deps.Credentials,
+			})
+		})
+	}
+
+	if deps.Skills != nil && deps.SkillFiles != nil {
+		r.Route("/v1/skills", func(r chi.Router) {
+			mountSkillRoutes(r, skillsDeps{
+				Skills: deps.Skills,
+				Files:  deps.SkillFiles,
 			})
 		})
 	}
