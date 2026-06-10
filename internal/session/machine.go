@@ -31,12 +31,18 @@ type Machine struct {
 	Events      *store.EventRepo
 	Hub         Broadcaster
 	Workdirs    *workdir.Manager
-	Harness     harness.Client
-	Models      *modelresolve.Resolver
-	activeTurn  string
-	activeTurnM sync.Mutex
-	cancelTurn  context.CancelFunc
-	cancelTurnM sync.Mutex
+	Harness      harness.Client
+	Models       *modelresolve.Resolver
+	appendLocker sync.Locker
+	activeTurn   string
+	activeTurnM  sync.Mutex
+	cancelTurn   context.CancelFunc
+	cancelTurnM  sync.Mutex
+}
+
+// SetAppendLocker serializes event appends with EnqueueEvents (per-session).
+func (m *Machine) SetAppendLocker(locker sync.Locker) {
+	m.appendLocker = locker
 }
 
 // RunTurn executes a harness turn using persisted session history.
@@ -109,18 +115,25 @@ func (m *Machine) RunTurn(ctx context.Context) error {
 		return err
 	}
 
-	resp, err := m.Harness.RunTurn(turnCtx, harness.TurnRequest{
-		SessionID: m.SessionID,
-		Agent:     agent,
-		Model:     modelCfg,
-		Events:    eventPayloads,
-		Workdir:   workdirPath,
-	})
-	if err != nil {
-		if errors.Is(err, context.Canceled) {
+	streamErr := harness.RunTurnStreaming(
+		turnCtx,
+		m.Harness,
+		harness.TurnRequest{
+			SessionID: m.SessionID,
+			Agent:     agent,
+			Model:     modelCfg,
+			Events:    eventPayloads,
+			Workdir:   workdirPath,
+		},
+		func(ev json.RawMessage) error {
+			return m.publishEvents(ctx, []json.RawMessage{ev})
+		},
+	)
+	if streamErr != nil {
+		if errors.Is(streamErr, context.Canceled) {
 			return m.finishInterruptedTurn(ctx, turnID)
 		}
-		return m.failTurn(ctx, turnID, err)
+		return m.failTurn(ctx, turnID, streamErr)
 	}
 
 	lifecycleEnd, err := json.Marshal(map[string]any{
@@ -131,9 +144,7 @@ func (m *Machine) RunTurn(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-
-	outEvents := append(resp.Events, lifecycleEnd)
-	return m.publishEvents(ctx, outEvents)
+	return m.publishEvents(ctx, []json.RawMessage{lifecycleEnd})
 }
 
 // CancelActiveTurn aborts the in-flight harness turn, if any.
@@ -221,6 +232,10 @@ func (m *Machine) publishEvents(
 ) error {
 	if len(events) == 0 {
 		return nil
+	}
+	if m.appendLocker != nil {
+		m.appendLocker.Lock()
+		defer m.appendLocker.Unlock()
 	}
 	stored, err := m.Events.AppendEvents(ctx, m.SessionID, events)
 	if err != nil {

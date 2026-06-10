@@ -39,6 +39,7 @@ func (r *Registry) Register(sessionID string, machine *Machine) {
 	defer r.mu.Unlock()
 	if lane, ok := r.lanes[sessionID]; ok {
 		lane.machine = machine
+		machine.SetAppendLocker(&lane.appendMu)
 		return
 	}
 	r.lanes[sessionID] = newSessionLane(machine)
@@ -124,6 +125,7 @@ func newSessionLane(machine *Machine) *sessionLane {
 		machine: machine,
 		turnCh:  make(chan turnJob, 32),
 	}
+	machine.SetAppendLocker(&lane.appendMu)
 	go lane.runTurnWorker()
 	return lane
 }

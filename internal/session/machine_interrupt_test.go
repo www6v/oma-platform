@@ -34,6 +34,21 @@ func (s *slowHarness) RunTurn(
 	return fc.RunTurn(ctx, req)
 }
 
+func (s *slowHarness) RunTurnStream(
+	ctx context.Context,
+	req harness.TurnRequest,
+	onEvent harness.EventHandler,
+) error {
+	s.started.Add(1)
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(s.delay):
+	}
+	fc := &harness.FakeClient{Text: "done"}
+	return fc.RunTurnStream(ctx, req, onEvent)
+}
+
 func TestInterruptCancelsActiveTurn(t *testing.T) {
 	db, err := store.Open(":memory:")
 	if err != nil {

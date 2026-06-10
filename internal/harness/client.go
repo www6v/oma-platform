@@ -1,6 +1,7 @@
 package harness
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -46,9 +47,44 @@ type TurnResponse struct {
 	Events []json.RawMessage `json:"events"`
 }
 
+// EventHandler receives one harness event as it is produced.
+type EventHandler func(event json.RawMessage) error
+
+// StreamingClient streams harness events during a turn.
+type StreamingClient interface {
+	RunTurnStream(
+		ctx context.Context,
+		req TurnRequest,
+		onEvent EventHandler,
+	) error
+}
+
 // Client runs harness turns over HTTP.
 type Client interface {
 	RunTurn(ctx context.Context, req TurnRequest) (TurnResponse, error)
+}
+
+// RunTurnStreaming invokes RunTurnStream when supported, otherwise batches
+// events from RunTurn.
+func RunTurnStreaming(
+	ctx context.Context,
+	client Client,
+	req TurnRequest,
+	onEvent EventHandler,
+) error {
+	if sc, ok := client.(StreamingClient); ok {
+		return sc.RunTurnStream(ctx, req, onEvent)
+	}
+	resp, err := client.RunTurn(ctx, req)
+	if err != nil {
+		return err
+	}
+	for _, ev := range resp.Events {
+		if err := onEvent(ev); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // HTTPClient calls a FastAPI harness sidecar.
@@ -106,6 +142,58 @@ func (c *HTTPClient) RunTurn(
 	return out, nil
 }
 
+// RunTurnStream reads NDJSON lines from POST /internal/turn/stream.
+func (c *HTTPClient) RunTurnStream(
+	ctx context.Context,
+	req TurnRequest,
+	onEvent EventHandler,
+) error {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return err
+	}
+	url := c.BaseURL + "/internal/turn/stream"
+	httpReq, err := http.NewRequestWithContext(
+		ctx, http.MethodPost, url, bytes.NewReader(body),
+	)
+	if err != nil {
+		return err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "application/x-ndjson")
+
+	client := c.HTTP
+	if client == nil {
+		client = &http.Client{Timeout: 10 * time.Minute}
+	}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		msg := strings.TrimSpace(string(body))
+		if msg == "" {
+			return fmt.Errorf("harness stream status=%d", resp.StatusCode)
+		}
+		return fmt.Errorf("harness stream status=%d: %s", resp.StatusCode, msg)
+	}
+
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+	for scanner.Scan() {
+		line := bytes.TrimSpace(scanner.Bytes())
+		if len(line) == 0 {
+			continue
+		}
+		if err := onEvent(json.RawMessage(line)); err != nil {
+			return err
+		}
+	}
+	return scanner.Err()
+}
+
 // FakeClient emits a single agent.message for tests.
 type FakeClient struct {
 	Text string
@@ -130,6 +218,24 @@ func (f *FakeClient) RunTurn(
 	return TurnResponse{Events: []json.RawMessage{payload}}, nil
 }
 
+// RunTurnStream implements StreamingClient for tests.
+func (f *FakeClient) RunTurnStream(
+	ctx context.Context,
+	req TurnRequest,
+	onEvent EventHandler,
+) error {
+	resp, err := f.RunTurn(ctx, req)
+	if err != nil {
+		return err
+	}
+	for _, ev := range resp.Events {
+		if err := onEvent(ev); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // RecordingClient captures turn requests for integration tests.
 type RecordingClient struct {
 	FakeClient FakeClient
@@ -147,6 +253,18 @@ func (r *RecordingClient) RunTurn(
 	r.requests = append(r.requests, req)
 	r.mu.Unlock()
 	return r.FakeClient.RunTurn(ctx, req)
+}
+
+// RunTurnStream records the request then delegates to FakeClient.
+func (r *RecordingClient) RunTurnStream(
+	ctx context.Context,
+	req TurnRequest,
+	onEvent EventHandler,
+) error {
+	r.mu.Lock()
+	r.requests = append(r.requests, req)
+	r.mu.Unlock()
+	return r.FakeClient.RunTurnStream(ctx, req, onEvent)
 }
 
 // LastRequest returns the most recent turn request, if any.

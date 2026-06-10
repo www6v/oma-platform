@@ -41,6 +41,23 @@ func (g *gateHarness) RunTurn(
 	return g.FakeClient.RunTurn(ctx, req)
 }
 
+func (g *gateHarness) RunTurnStream(
+	ctx context.Context,
+	req harness.TurnRequest,
+	onEvent harness.EventHandler,
+) error {
+	resp, err := g.RunTurn(ctx, req)
+	if err != nil {
+		return err
+	}
+	for _, ev := range resp.Events {
+		if err := onEvent(ev); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func TestRegistrySerializesConcurrentTurns(t *testing.T) {
 	db, err := store.Open(":memory:")
 	if err != nil {

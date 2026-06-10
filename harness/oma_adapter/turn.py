@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from contextlib import contextmanager
 from pathlib import Path
@@ -13,6 +14,7 @@ from oma_adapter.tools import pypi_tools_from_agent
 from oma_adapter.types import AgentSnapshot, ModelConfig, TurnResponse
 
 CreateSessionFn = Callable[[Any], Awaitable[Any]]
+EventCallback = Callable[[dict[str, Any]], Awaitable[None]]
 
 
 def _assistant_text_from_session(session: Any) -> str | None:
@@ -91,14 +93,15 @@ def _provider_env(model: ModelConfig | None) -> Iterator[None]:
                 os.environ[key] = value
 
 
-async def run_turn(
+async def _run_turn_core(
     *,
     session_id: str,
     agent: AgentSnapshot,
-    model: ModelConfig | None = None,
+    model: ModelConfig | None,
     events: list[dict[str, Any]],
     workdir: str,
-    create_session: CreateSessionFn | None = None,
+    create_session: CreateSessionFn | None,
+    on_event: EventCallback | None,
 ) -> TurnResponse:
     del session_id  # stateless MVP
 
@@ -123,8 +126,29 @@ async def run_turn(
         session = result.session
 
         buffer: list[dict[str, Any]] = []
+        raw_cursor = 0
+        oma_events: list[dict[str, Any]] = []
+        queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
 
-        listener = _make_event_listener(buffer)
+        async def drain_events() -> None:
+            while True:
+                item = await queue.get()
+                if item is None:
+                    break
+                oma_events.append(item)
+                if on_event is not None:
+                    await on_event(item)
+
+        drainer = asyncio.create_task(drain_events())
+
+        def listener(event: Any) -> None:
+            nonlocal raw_cursor
+            _collect_pi_event(buffer, event)
+            delta = emit_oma_events(buffer[raw_cursor:])
+            raw_cursor = len(buffer)
+            for ev in delta:
+                queue.put_nowait(ev)
+
         if hasattr(session, "subscribe"):
             session.subscribe(listener)
         elif hasattr(session, "on"):
@@ -134,19 +158,66 @@ async def run_turn(
         if hasattr(session, "wait_for_idle"):
             await session.wait_for_idle()
 
-        oma_events = emit_oma_events(buffer)
         if not oma_events:
-            text = _assistant_text_from_session(session)
-            if text:
-                oma_events = [
-                    {
-                        "type": "agent.message",
-                        "content": [{"type": "text", "text": text}],
-                    }
-                ]
+            fallback = emit_oma_events(buffer)
+            if not fallback:
+                text = _assistant_text_from_session(session)
+                if text:
+                    fallback = [
+                        {
+                            "type": "agent.message",
+                            "content": [{"type": "text", "text": text}],
+                        }
+                    ]
+            for ev in fallback:
+                queue.put_nowait(ev)
+
+        queue.put_nowait(None)
+        await drainer
 
         if not oma_events:
             msg = "harness turn produced no assistant output"
             raise RuntimeError(msg)
 
         return TurnResponse(events=oma_events)
+
+
+async def run_turn(
+    *,
+    session_id: str,
+    agent: AgentSnapshot,
+    model: ModelConfig | None = None,
+    events: list[dict[str, Any]],
+    workdir: str,
+    create_session: CreateSessionFn | None = None,
+) -> TurnResponse:
+    return await _run_turn_core(
+        session_id=session_id,
+        agent=agent,
+        model=model,
+        events=events,
+        workdir=workdir,
+        create_session=create_session,
+        on_event=None,
+    )
+
+
+async def run_turn_stream(
+    *,
+    session_id: str,
+    agent: AgentSnapshot,
+    model: ModelConfig | None = None,
+    events: list[dict[str, Any]],
+    workdir: str,
+    create_session: CreateSessionFn | None = None,
+    on_event: EventCallback,
+) -> TurnResponse:
+    return await _run_turn_core(
+        session_id=session_id,
+        agent=agent,
+        model=model,
+        events=events,
+        workdir=workdir,
+        create_session=create_session,
+        on_event=on_event,
+    )

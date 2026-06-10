@@ -63,6 +63,21 @@ func (s *stallHarness) RunTurn(
 	}
 }
 
+func (s *stallHarness) RunTurnStream(
+	ctx context.Context,
+	req harness.TurnRequest,
+	onEvent harness.EventHandler,
+) error {
+	defer s.markFinished()
+	s.signalEntered()
+	select {
+	case <-s.unblock:
+		return harness.RunTurnStreaming(ctx, s.inner, req, onEvent)
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 func TestStartupRecoveryOrphanRunningSession(t *testing.T) {
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "oma.db")
