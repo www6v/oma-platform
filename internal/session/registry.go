@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"sync"
-
-	"github.com/open-ma/oma-building/internal/stream"
 )
 
 // Registry runs session turns asynchronously with per-session serialization.
@@ -57,49 +55,6 @@ func (r *Registry) EnqueueUserMessage(
 	)
 }
 
-// EnqueueEvents appends client events and optionally runs a harness turn.
-// When handleInterrupt is true, cancels any active turn, drains queued turns,
-// and emits session.status_idle when state changed (OMA user.interrupt).
-func (r *Registry) EnqueueEvents(
-	ctx context.Context,
-	sessionID string,
-	events []json.RawMessage,
-	runTurn bool,
-	handleInterrupt bool,
-	onDone func(error),
-) error {
-	lane, err := r.lane(sessionID)
-	if err != nil {
-		return err
-	}
-
-	lane.appendMu.Lock()
-	stored, err := lane.machine.Events.AppendEvents(ctx, sessionID, events)
-	if err != nil {
-		lane.appendMu.Unlock()
-		return err
-	}
-	for _, ev := range stored {
-		lane.machine.Hub.Publish(sessionID, stream.Event{
-			Seq:     ev.Seq,
-			Payload: ev.Payload,
-		})
-	}
-	lane.appendMu.Unlock()
-
-	if handleInterrupt {
-		lane.handleInterrupt(ctx)
-		runTurn = false
-	}
-
-	if !runTurn {
-		return nil
-	}
-
-	lane.scheduleTurn(onDone)
-	return nil
-}
-
 func (r *Registry) lane(sessionID string) (*sessionLane, error) {
 	r.mu.Lock()
 	lane, ok := r.lanes[sessionID]
@@ -117,7 +72,8 @@ type sessionLane struct {
 }
 
 type turnJob struct {
-	onDone func(error)
+	onDone      func(error)
+	promoteOnly bool
 }
 
 func newSessionLane(machine *Machine) *sessionLane {
@@ -134,10 +90,17 @@ func (lane *sessionLane) scheduleTurn(onDone func(error)) {
 	lane.turnCh <- turnJob{onDone: onDone}
 }
 
-func (lane *sessionLane) handleInterrupt(ctx context.Context) {
+func (lane *sessionLane) schedulePromote(onDone func(error)) {
+	lane.turnCh <- turnJob{onDone: onDone, promoteOnly: true}
+}
+
+func (lane *sessionLane) handleInterrupt(
+	ctx context.Context,
+	hadCancelledPending bool,
+) {
 	hadActive := lane.machine.CancelActiveTurn()
 	drained := lane.drainPendingTurns()
-	if !hadActive && drained == 0 {
+	if !hadActive && drained == 0 && !hadCancelledPending {
 		return
 	}
 	_ = lane.machine.PublishStatusIdle(ctx)
@@ -160,10 +123,35 @@ func (lane *sessionLane) drainPendingTurns() int {
 
 func (lane *sessionLane) runTurnWorker() {
 	for job := range lane.turnCh {
-		err := lane.machine.RunTurn(context.Background())
+		var err error
+		if job.promoteOnly {
+			_, err = lane.promoteAllPending(context.Background(), defaultThreadID)
+		} else {
+			_, err = lane.promoteAllPending(context.Background(), defaultThreadID)
+			if err == nil {
+				err = lane.machine.RunTurn(context.Background())
+			}
+		}
 		if job.onDone != nil {
 			job.onDone(err)
 		}
+	}
+}
+
+func (lane *sessionLane) promoteAllPending(
+	ctx context.Context,
+	threadID string,
+) (bool, error) {
+	any := false
+	for {
+		promoted, err := lane.machine.PromoteOnePending(ctx, threadID)
+		if err != nil {
+			return any, err
+		}
+		if !promoted {
+			return any, nil
+		}
+		any = true
 	}
 }
 

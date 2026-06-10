@@ -12,6 +12,7 @@ import (
 	"github.com/open-ma/oma-building/internal/harness"
 	"github.com/open-ma/oma-building/internal/modelresolve"
 	"github.com/open-ma/oma-building/internal/session"
+	"github.com/open-ma/oma-building/internal/sessionoutputs"
 	"github.com/open-ma/oma-building/internal/store"
 	"github.com/open-ma/oma-building/internal/stream"
 	"github.com/open-ma/oma-building/internal/workdir"
@@ -196,19 +197,23 @@ func testRouterWithApiKeys(t *testing.T) http.Handler {
 	apiKeys := store.NewApiKeyRepo(db)
 	sessions := store.NewSessionRepo(db, agents, environments)
 	events := store.NewEventRepo(db)
+	pending := store.NewPendingRepo(db)
 	hub := stream.NewHub()
 	reg := session.NewRegistry()
 	workdirs := workdir.NewManager(t.TempDir())
+	outputs := sessionoutputs.NewStore(t.TempDir())
 	models := &modelresolve.Resolver{Cards: modelCards}
 
 	return api.NewRouter(api.Deps{
-		Agents:       agents,
-		Environments: environments,
-		ModelCards:   modelCards,
-		ApiKeys:      apiKeys,
-		AuthDisabled: true,
+		Agents:         agents,
+		Environments:   environments,
+		ModelCards:     modelCards,
+		ApiKeys:        apiKeys,
+		AuthDisabled:   true,
+		SessionOutputs: outputs,
 		Sessions: api.NewSessionHandlers(
-			sessions, events, hub, reg, workdirs, &harness.FakeClient{}, models,
+			sessions, events, pending, hub, reg, workdirs,
+			outputs, &harness.FakeClient{}, models,
 		),
 	})
 }

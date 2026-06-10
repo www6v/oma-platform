@@ -366,6 +366,9 @@ func assertSSETurnFlow(t *testing.T, events []sseEvent) {
 
 	prev := 0
 	for _, ev := range events {
+		if ev.Seq == 0 {
+			continue
+		}
 		if ev.Seq <= prev {
 			t.Fatalf("non-monotonic seq: prev=%d cur=%d", prev, ev.Seq)
 		}

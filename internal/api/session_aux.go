@@ -1,9 +1,11 @@
 package api
 
 import (
-	"fmt"
+	"io"
 	"net/http"
-	"time"
+	"os"
+	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -15,6 +17,7 @@ func (h *sessionHandlers) mountSessionAuxRoutes(r chi.Router) {
 	r.Get("/{id}/pending", h.handleSessionPending)
 	r.Get("/{id}/trajectory", h.handleSessionTrajectory)
 	r.Get("/{id}/outputs", h.handleSessionOutputs)
+	r.Get("/{id}/outputs/{filename}", h.handleSessionOutputDownload)
 }
 
 func (h *sessionHandlers) requireSession(
@@ -56,20 +59,94 @@ func (h *sessionHandlers) handleSessionPending(
 	w http.ResponseWriter,
 	req *http.Request,
 ) {
-	if _, ok := h.requireSession(w, req); !ok {
+	sess, ok := h.requireSession(w, req)
+	if !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"data": []any{}})
+	items, err := h.listSessionPending(req, sess.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if items == nil {
+		items = []pendingListItem{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": items})
 }
 
 func (h *sessionHandlers) handleSessionOutputs(
 	w http.ResponseWriter,
 	req *http.Request,
 ) {
-	if _, ok := h.requireSession(w, req); !ok {
+	sess, ok := h.requireSession(w, req)
+	if !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"data": []any{}})
+	if h.outputs == nil {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"data":     []any{},
+			"has_more": false,
+		})
+		return
+	}
+	files, err := h.outputs.List(tenantID(req), sess.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	items := make([]map[string]any, 0, len(files))
+	for _, file := range files {
+		items = append(items, map[string]any{
+			"filename":    file.Filename,
+			"size_bytes":  file.SizeBytes,
+			"uploaded_at": file.UploadedAt,
+			"media_type":  file.MediaType,
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data":     items,
+		"has_more": false,
+	})
+}
+
+func (h *sessionHandlers) handleSessionOutputDownload(
+	w http.ResponseWriter,
+	req *http.Request,
+) {
+	sess, ok := h.requireSession(w, req)
+	if !ok {
+		return
+	}
+	if h.outputs == nil {
+		writeError(w, http.StatusNotFound, "Output file not found")
+		return
+	}
+	filename := chi.URLParam(req, "filename")
+	if filename == "" ||
+		strings.Contains(filename, "..") ||
+		strings.ContainsAny(filename, `/\`) {
+		writeError(w, http.StatusBadRequest, "Invalid filename")
+		return
+	}
+	body, size, mediaType, err := h.outputs.Read(
+		tenantID(req), sess.ID, filename,
+	)
+	if err != nil {
+		if os.IsNotExist(err) {
+			writeError(w, http.StatusNotFound, "Output file not found")
+			return
+		}
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	defer body.Close()
+	w.Header().Set("Content-Type", mediaType)
+	w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
+	w.Header().Set(
+		"Content-Disposition",
+		`attachment; filename="`+filename+`"`,
+	)
+	_, _ = io.Copy(w, body)
 }
 
 func (h *sessionHandlers) handleSessionTrajectory(
@@ -89,56 +166,7 @@ func (h *sessionHandlers) handleSessionTrajectory(
 		return
 	}
 
-	outcome := trajectoryOutcome(sess.Status)
-	startedAt := time.UnixMilli(sess.CreatedAt).UTC().Format(time.RFC3339Nano)
-	endedAt := startedAt
-	if sess.UpdatedAt != nil {
-		endedAt = time.UnixMilli(*sess.UpdatedAt).UTC().Format(time.RFC3339Nano)
-	}
-	if sess.Status == store.SessionStatusRunning {
-		endedAt = ""
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"schema_version": "oma.trajectory.v1",
-		"trajectory_id":  fmt.Sprintf("traj_%s", sess.ID),
-		"session_id":     sess.ID,
-		"agent_config":   map[string]any{},
-		"environment_config": map[string]any{},
-		"model": map[string]any{
-			"id":       "unknown",
-			"provider": "oma-platform",
-		},
-		"started_at": startedAt,
-		"ended_at":   nullIfEmpty(endedAt),
-		"outcome":    outcome,
-		"events":     []any{},
-		"summary": map[string]any{
-			"num_events":      len(events),
-			"num_turns":       0,
-			"num_tool_calls":  0,
-			"num_tool_errors": 0,
-			"num_threads":     1,
-			"duration_ms":     0,
-			"token_usage": map[string]any{
-				"input_tokens":              0,
-				"output_tokens":             0,
-				"cache_read_input_tokens":   0,
-				"cache_creation_input_tokens": 0,
-			},
-		},
-	})
-}
-
-func trajectoryOutcome(status store.SessionStatus) string {
-	switch status {
-	case store.SessionStatusRunning:
-		return "running"
-	case store.SessionStatusInterrupted:
-		return "interrupted"
-	default:
-		return "success"
-	}
+	writeJSON(w, http.StatusOK, buildTrajectory(sess, events))
 }
 
 func nullIfEmpty(s string) any {

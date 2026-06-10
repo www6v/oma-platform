@@ -13,6 +13,7 @@ import (
 	"github.com/open-ma/oma-building/internal/harness"
 	"github.com/open-ma/oma-building/internal/modelresolve"
 	"github.com/open-ma/oma-building/internal/session"
+	"github.com/open-ma/oma-building/internal/sessionoutputs"
 	"github.com/open-ma/oma-building/internal/store"
 	"github.com/open-ma/oma-building/internal/stream"
 	"github.com/open-ma/oma-building/internal/workdir"
@@ -23,6 +24,7 @@ func main() {
 	dbPath := envOrDefault("DATABASE_PATH", "./data/oma.db")
 	workdirBase := envOrDefault("SANDBOX_WORKDIR", "./data/sandboxes")
 	skillsDataDir := envOrDefault("SKILLS_DATA_DIR", "./data/skills")
+	outputsDir := envOrDefault("SESSION_OUTPUTS_DIR", "./data/session-outputs")
 	absWorkdir, err := filepath.Abs(workdirBase)
 	if err != nil {
 		log.Fatal(err)
@@ -57,6 +59,9 @@ func main() {
 	if err := os.MkdirAll(skillsDataDir, 0o755); err != nil {
 		log.Fatal(err)
 	}
+	if err := os.MkdirAll(outputsDir, 0o755); err != nil {
+		log.Fatal(err)
+	}
 
 	db, err := store.Open(dbPath)
 	if err != nil {
@@ -74,6 +79,7 @@ func main() {
 	credentials := store.NewCredentialRepo(db)
 	skillFiles := store.NewSkillFileStore(skillsDataDir)
 	skills := store.NewSkillRepo(db, skillFiles)
+	sessionOutputs := sessionoutputs.NewStore(outputsDir)
 	apiKeys := store.NewApiKeyRepo(db)
 	tenants := store.NewTenantRepo(db)
 	modelResolver := &modelresolve.Resolver{Cards: modelCards}
@@ -85,6 +91,7 @@ func main() {
 	}
 
 	events := store.NewEventRepo(db)
+	pending := store.NewPendingRepo(db)
 	hub := stream.NewHub()
 	registry := session.NewRegistry()
 	workdirs := workdir.NewManager(workdirBase)
@@ -109,12 +116,14 @@ func main() {
 		ModelCards:   modelCards,
 		Vaults:       vaults,
 		Credentials:  credentials,
-		Skills:       skills,
-		SkillFiles:   skillFiles,
-		ApiKeys:      apiKeys,
-		Tenants:      tenants,
+		Skills:         skills,
+		SkillFiles:     skillFiles,
+		SessionOutputs: sessionOutputs,
+		ApiKeys:        apiKeys,
+		Tenants:        tenants,
 		Sessions: api.NewSessionHandlers(
-			sessions, events, hub, registry, workdirs, harnessClient, modelResolver,
+			sessions, events, pending, hub, registry, workdirs,
+			sessionOutputs, harnessClient, modelResolver,
 		),
 		APIKey:       apiKey,
 		ConsoleDir:   consoleDir,

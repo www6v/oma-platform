@@ -2,10 +2,15 @@ package api
 
 import (
 	"encoding/json"
+	"io"
+	"mime"
+	"mime/multipart"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/open-ma/oma-building/internal/skillzip"
 	"github.com/open-ma/oma-building/internal/store"
 )
 
@@ -61,9 +66,9 @@ func mountSkillRoutes(r chi.Router, deps skillsDeps) {
 			return
 		}
 		var body struct {
-			DisplayTitle string                `json:"display_title"`
-			Name         string                `json:"name"`
-			Description  string                `json:"description"`
+			DisplayTitle string                 `json:"display_title"`
+			Name         string                 `json:"name"`
+			Description  string                 `json:"description"`
 			Files        []store.SkillFileInput `json:"files"`
 		}
 		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
@@ -81,15 +86,29 @@ func mountSkillRoutes(r chi.Router, deps skillsDeps) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		files, _ := deps.Files.ReadVersionFiles(
-			tenantID(req), skill.ID, ver.Version, ver.Files,
-		)
-		resp := toAPISkill(skill)
-		resp["files"] = files
-		writeJSON(w, http.StatusCreated, resp)
+		writeSkillCreated(w, deps, req, skill, ver)
 	})
 
-	r.Post("/upload", handleSkillUploadNotImplemented)
+	r.Post("/upload", func(w http.ResponseWriter, req *http.Request) {
+		parsed, displayTitle, err := parseSkillUploadMultipart(req)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		skill, ver, err := deps.Skills.Create(req.Context(), store.CreateSkillInput{
+			TenantID:     tenantID(req),
+			DisplayTitle: displayTitle,
+			Name:         parsed.Name,
+			Description:  parsed.Description,
+			Files:        parsed.Files,
+		})
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeSkillCreated(w, deps, req, skill, ver)
+	})
+
 	r.Route("/{id}", func(r chi.Router) {
 		r.Get("/", func(w http.ResponseWriter, req *http.Request) {
 			id := chi.URLParam(req, "id")
@@ -163,8 +182,73 @@ func mountSkillRoutes(r chi.Router, deps skillsDeps) {
 			writeJSON(w, http.StatusOK, map[string]any{"data": items})
 		})
 
-		r.Post("/versions", handleSkillUploadNotImplemented)
-		r.Post("/versions/upload", handleSkillUploadNotImplemented)
+		r.Post("/versions", func(w http.ResponseWriter, req *http.Request) {
+			id := chi.URLParam(req, "id")
+			var body struct {
+				DisplayTitle string                 `json:"display_title"`
+				Description  string                 `json:"description"`
+				Files        []store.SkillFileInput `json:"files"`
+			}
+			if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid json")
+				return
+			}
+			skill, ver, err := deps.Skills.CreateVersion(
+				req.Context(),
+				store.CreateSkillVersionInput{
+					TenantID:     tenantID(req),
+					SkillID:      id,
+					DisplayTitle: body.DisplayTitle,
+					Description:  body.Description,
+					Files:        body.Files,
+				},
+			)
+			if err == store.ErrNotFound {
+				writeError(w, http.StatusNotFound, "Skill not found")
+				return
+			}
+			if err != nil {
+				status := http.StatusBadRequest
+				if strings.Contains(err.Error(), "built-in") {
+					status = http.StatusForbidden
+				}
+				writeError(w, status, err.Error())
+				return
+			}
+			writeSkillVersionCreated(w, skill, ver)
+		})
+
+		r.Post("/versions/upload", func(w http.ResponseWriter, req *http.Request) {
+			id := chi.URLParam(req, "id")
+			parsed, displayTitle, err := parseSkillUploadMultipart(req)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			skill, ver, err := deps.Skills.CreateVersion(
+				req.Context(),
+				store.CreateSkillVersionInput{
+					TenantID:     tenantID(req),
+					SkillID:      id,
+					DisplayTitle: displayTitle,
+					Description:  parsed.Description,
+					Files:        parsed.Files,
+				},
+			)
+			if err == store.ErrNotFound {
+				writeError(w, http.StatusNotFound, "Skill not found")
+				return
+			}
+			if err != nil {
+				status := http.StatusBadRequest
+				if strings.Contains(err.Error(), "built-in") {
+					status = http.StatusForbidden
+				}
+				writeError(w, status, err.Error())
+				return
+			}
+			writeSkillVersionCreated(w, skill, ver)
+		})
 
 		r.Route("/versions/{version}", func(r chi.Router) {
 			r.Get("/", func(w http.ResponseWriter, req *http.Request) {
@@ -209,13 +293,101 @@ func mountSkillRoutes(r chi.Router, deps skillsDeps) {
 	})
 }
 
-func handleSkillUploadNotImplemented(w http.ResponseWriter, _ *http.Request) {
-	writeError(
-		w,
-		http.StatusNotImplemented,
-		"not implemented in oma-platform MVP",
+func writeSkillCreated(
+	w http.ResponseWriter,
+	deps skillsDeps,
+	req *http.Request,
+	skill *store.Skill,
+	ver *store.SkillVersion,
+) {
+	files, _ := deps.Files.ReadVersionFiles(
+		tenantID(req), skill.ID, ver.Version, ver.Files,
 	)
+	resp := toAPISkill(skill)
+	resp["files"] = files
+	writeJSON(w, http.StatusCreated, resp)
 }
+
+func writeSkillVersionCreated(
+	w http.ResponseWriter,
+	skill *store.Skill,
+	ver *store.SkillVersion,
+) {
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"version":    ver.Version,
+		"files":      ver.Files,
+		"created_at": formatISO(ver.CreatedAt),
+		"skill_id":   skill.ID,
+	})
+}
+
+func parseSkillUploadMultipart(
+	req *http.Request,
+) (skillzip.ParsedSkillZip, string, error) {
+	ct := req.Header.Get("Content-Type")
+	if ct == "" || !strings.Contains(ct, "multipart/form-data") {
+		return skillzip.ParsedSkillZip{}, "", fmtError(
+			"expected multipart/form-data",
+		)
+	}
+	mediaType, params, err := mime.ParseMediaType(ct)
+	if err != nil || !strings.HasPrefix(mediaType, "multipart/") {
+		return skillzip.ParsedSkillZip{}, "", fmtError(
+			"expected multipart/form-data",
+		)
+	}
+	boundary := params["boundary"]
+	if boundary == "" {
+		return skillzip.ParsedSkillZip{}, "", fmtError(
+			"expected multipart/form-data",
+		)
+	}
+	reader := multipart.NewReader(req.Body, boundary)
+	var (
+		zipBytes     []byte
+		displayTitle string
+	)
+	for {
+		part, err := reader.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return skillzip.ParsedSkillZip{}, "", fmtError(
+				"Invalid multipart body: " + err.Error(),
+			)
+		}
+		switch part.FormName() {
+		case "file":
+			zipBytes, err = io.ReadAll(part)
+			if err != nil {
+				return skillzip.ParsedSkillZip{}, "", fmtError(
+					"Invalid multipart body: " + err.Error(),
+				)
+			}
+		case "display_title":
+			body, _ := io.ReadAll(part)
+			displayTitle = string(body)
+		}
+		_ = part.Close()
+	}
+	if len(zipBytes) == 0 {
+		return skillzip.ParsedSkillZip{}, "", fmtError(
+			"file field is required (the skill .zip)",
+		)
+	}
+	parsed, err := skillzip.ParseSkillZip(zipBytes)
+	if err != nil {
+		return skillzip.ParsedSkillZip{}, "", err
+	}
+	return parsed, displayTitle, nil
+}
+
+type simpleError string
+
+func (e simpleError) Error() string { return string(e) }
+
+func fmtError(msg string) error { return simpleError(msg) }
 
 func toAPISkill(skill *store.Skill) map[string]any {
 	source := skill.Source

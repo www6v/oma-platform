@@ -13,6 +13,7 @@ import (
 	"github.com/open-ma/oma-building/internal/harness"
 	"github.com/open-ma/oma-building/internal/modelresolve"
 	"github.com/open-ma/oma-building/internal/session"
+	"github.com/open-ma/oma-building/internal/sessionoutputs"
 	"github.com/open-ma/oma-building/internal/store"
 	"github.com/open-ma/oma-building/internal/stream"
 	"github.com/open-ma/oma-building/internal/workdir"
@@ -22,6 +23,49 @@ func testRouter(t *testing.T) http.Handler {
 	t.Helper()
 	handler, _ := testRouterHarness(t, &harness.FakeClient{})
 	return handler
+}
+
+func testRouterWithOutputs(t *testing.T, outputsDir string) http.Handler {
+	t.Helper()
+	db, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close(db) })
+
+	agents := store.NewAgentRepo(db)
+	environments := store.NewEnvironmentRepo(db)
+	if err := environments.EnsureDefault(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	modelCards := store.NewModelCardRepo(db)
+	vaults := store.NewVaultRepo(db)
+	credentials := store.NewCredentialRepo(db)
+	skillFiles := store.NewSkillFileStore(t.TempDir())
+	skills := store.NewSkillRepo(db, skillFiles)
+	models := &modelresolve.Resolver{Cards: modelCards}
+	sessions := store.NewSessionRepo(db, agents, environments)
+	events := store.NewEventRepo(db)
+	pending := store.NewPendingRepo(db)
+	hub := stream.NewHub()
+	reg := session.NewRegistry()
+	workdirs := workdir.NewManager(t.TempDir())
+	outputs := sessionoutputs.NewStore(outputsDir)
+
+	return api.NewRouter(api.Deps{
+		Agents:         agents,
+		Environments:   environments,
+		ModelCards:     modelCards,
+		Vaults:         vaults,
+		Credentials:    credentials,
+		Skills:         skills,
+		SkillFiles:     skillFiles,
+		SessionOutputs: outputs,
+		Sessions: api.NewSessionHandlers(
+			sessions, events, pending, hub, reg, workdirs,
+			outputs, &harness.FakeClient{}, models,
+		),
+	})
 }
 
 func testRouterHarness(
@@ -48,9 +92,11 @@ func testRouterHarness(
 	models := &modelresolve.Resolver{Cards: modelCards}
 	sessions := store.NewSessionRepo(db, agents, environments)
 	events := store.NewEventRepo(db)
+	pending := store.NewPendingRepo(db)
 	hub := stream.NewHub()
 	reg := session.NewRegistry()
 	workdirs := workdir.NewManager(t.TempDir())
+	outputs := sessionoutputs.NewStore(t.TempDir())
 
 	handler := api.NewRouter(api.Deps{
 		Agents:       agents,
@@ -60,8 +106,9 @@ func testRouterHarness(
 		Credentials:  credentials,
 		Skills:       skills,
 		SkillFiles:   skillFiles,
+		SessionOutputs: outputs,
 		Sessions: api.NewSessionHandlers(
-			sessions, events, hub, reg, workdirs, client, models,
+			sessions, events, pending, hub, reg, workdirs, outputs, client, models,
 		),
 	})
 	return handler, reg
@@ -86,9 +133,11 @@ func testRouterSharedDB(
 	models := &modelresolve.Resolver{Cards: modelCards}
 	sessions := store.NewSessionRepo(db, agents, environments)
 	events := store.NewEventRepo(db)
+	pending := store.NewPendingRepo(db)
 	hub := stream.NewHub()
 	reg := session.NewRegistry()
 	workdirs := workdir.NewManager(t.TempDir())
+	outputs := sessionoutputs.NewStore(t.TempDir())
 
 	handler := api.NewRouter(api.Deps{
 		Agents:       agents,
@@ -98,8 +147,9 @@ func testRouterSharedDB(
 		Credentials:  credentials,
 		Skills:       skills,
 		SkillFiles:   skillFiles,
+		SessionOutputs: outputs,
 		Sessions: api.NewSessionHandlers(
-			sessions, events, hub, reg, workdirs, client, models,
+			sessions, events, pending, hub, reg, workdirs, outputs, client, models,
 		),
 	})
 	return handler, reg, sessions

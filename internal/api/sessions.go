@@ -12,6 +12,7 @@ import (
 	"github.com/open-ma/oma-building/internal/harness"
 	"github.com/open-ma/oma-building/internal/modelresolve"
 	"github.com/open-ma/oma-building/internal/session"
+	"github.com/open-ma/oma-building/internal/sessionoutputs"
 	"github.com/open-ma/oma-building/internal/store"
 	"github.com/open-ma/oma-building/internal/stream"
 	"github.com/open-ma/oma-building/internal/workdir"
@@ -66,9 +67,11 @@ type appendEventsRequest struct {
 type sessionHandlers struct {
 	sessions *store.SessionRepo
 	events   *store.EventRepo
+	pending  *store.PendingRepo
 	hub      *stream.Hub
 	registry *session.Registry
 	workdirs *workdir.Manager
+	outputs  *sessionoutputs.Store
 	harness  harness.Client
 	models   *modelresolve.Resolver
 }
@@ -79,6 +82,7 @@ func (h *sessionHandlers) registerMachine(sess *store.Session) {
 		SessionID: sess.ID,
 		Sessions:  h.sessions,
 		Events:    h.events,
+		Pending:   h.pending,
 		Hub:       h.hub,
 		Workdirs:  h.workdirs,
 		Harness:   h.harness,

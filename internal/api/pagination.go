@@ -14,19 +14,15 @@ type listPageResponse struct {
 	Data       any    `json:"data"`
 	NextCursor string `json:"next_cursor,omitempty"`
 	NextPage   string `json:"next_page,omitempty"`
-	HasMore    bool   `json:"has_more,omitempty"`
+	HasMore    bool   `json:"has_more"`
 }
 
 func writeListPage(w http.ResponseWriter, data any, nextCursor string) {
-	if nextCursor == "" {
-		writeJSON(w, http.StatusOK, map[string]any{"data": data})
-		return
-	}
 	writeJSON(w, http.StatusOK, listPageResponse{
 		Data:       data,
 		NextCursor: nextCursor,
 		NextPage:   nextCursor,
-		HasMore:    true,
+		HasMore:    nextCursor != "",
 	})
 }
 

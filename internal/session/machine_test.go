@@ -27,6 +27,7 @@ func TestTurnMarksSessionRunningThenIdle(t *testing.T) {
 	}
 	sessions := store.NewSessionRepo(db, agents, environments)
 	events := store.NewEventRepo(db)
+	pending := store.NewPendingRepo(db)
 	hub := stream.NewHub()
 	workdirs := workdir.NewManager(t.TempDir())
 	ctx := context.Background()
@@ -48,6 +49,7 @@ func TestTurnMarksSessionRunningThenIdle(t *testing.T) {
 		SessionID: sess.ID,
 		Sessions:  sessions,
 		Events:    events,
+		Pending:   pending,
 		Hub:       hub,
 		Workdirs:  workdirs,
 		Harness:   &harness.FakeClient{Text: "hello"},
@@ -107,6 +109,7 @@ func TestRegistryEnqueueRunsAsync(t *testing.T) {
 	}
 	sessions := store.NewSessionRepo(db, agents, environments)
 	events := store.NewEventRepo(db)
+	pending := store.NewPendingRepo(db)
 	hub := stream.NewHub()
 	workdirs := workdir.NewManager(t.TempDir())
 	ctx := context.Background()
@@ -128,6 +131,7 @@ func TestRegistryEnqueueRunsAsync(t *testing.T) {
 		SessionID: sess.ID,
 		Sessions:  sessions,
 		Events:    events,
+		Pending:   pending,
 		Hub:       hub,
 		Workdirs:  workdirs,
 		Harness:   &harness.FakeClient{},

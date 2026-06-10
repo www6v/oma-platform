@@ -19,6 +19,7 @@ export SMOKE_POLL_SEC="${SMOKE_POLL_SEC:-2}"
 export SMOKE_SKIP_LLM="${SMOKE_SKIP_LLM:-0}"
 export SMOKE_SKIP_TOOLS="${SMOKE_SKIP_TOOLS:-0}"
 export SMOKE_TOOLS_ONLY="${SMOKE_TOOLS_ONLY:-0}"
+export SMOKE_SKIP_P2="${SMOKE_SKIP_P2:-0}"
 export SMOKE_TOOL_TIMEOUT_SEC="${SMOKE_TOOL_TIMEOUT_SEC:-180}"
 export HARNESS_URL="${HARNESS_URL:-http://127.0.0.1:8090}"
 
@@ -74,6 +75,48 @@ api_post_json() {
     -H "content-type: application/json" \
     "${API_HEADERS[@]}" \
     -d "${body}"
+}
+
+api_patch_json() {
+  local path="$1"
+  local body="$2"
+  curl -sf -X PATCH "${PLATFORM_URL}${path}" \
+    -H "content-type: application/json" \
+    "${API_HEADERS[@]}" \
+    -d "${body}"
+}
+
+assert_events_ama_shape() {
+  local label="$1"
+  python3 -c 'import json,sys
+label=sys.argv[1]
+raw=json.load(sys.stdin)
+items=raw.get("data")
+if not isinstance(items, list):
+    raise SystemExit(f"{label}: missing data[] list")
+for item in items:
+    for key in ("seq", "type", "ts", "data"):
+        if key not in item:
+            raise SystemExit(f"{label}: event missing {key!r}: {item!r}")
+print(f"{label}: ama_shape_ok events={len(items)}")' "${label}"
+}
+
+assert_trajectory_shape() {
+  local label="$1"
+  local min_events="${2:-0}"
+  python3 -c 'import json,sys
+label=sys.argv[1]
+min_events=int(sys.argv[2])
+traj=json.load(sys.stdin)
+schema=traj.get("schema_version")
+if schema != "oma.trajectory.v1":
+    raise SystemExit(f"{label}: bad schema_version {schema!r}")
+summary=traj.get("summary") or {}
+num_events=int(summary.get("num_events") or 0)
+if num_events < min_events:
+    raise SystemExit(f"{label}: num_events={num_events} want>={min_events}")
+print(f"{label}: trajectory_ok num_events={num_events}")' \
+    "${label}" "${min_events}"
 }
 
 wait_for_agent_reply() {
@@ -217,17 +260,29 @@ sys.exit(2)' "${uname_s}" "${uname_m}" <<<"${events}"
 }
 
 SMOKE_ENV_ID="${DEFAULT_ENV_ID}"
-SMOKE_ENV_CREATED=0
+SMOKE_VAULT_ID=""
+SMOKE_SKILL_ID=""
+SID=""
+AID=""
 AGENT_MODEL="${SMOKE_MODEL}"
 MODEL_CARD_ROW_ID=""
 
-cleanup() {
-  if [[ "${SMOKE_ENV_CREATED}" == "1" && -n "${SMOKE_ENV_ID}" ]]; then
-    echo "==> archive smoke environment ${SMOKE_ENV_ID}"
-    api_post_json "/v1/environments/${SMOKE_ENV_ID}/archive" "{}" >/dev/null || true
+print_leftover_resources() {
+  echo ""
+  echo "leftover resources (not cleaned up):"
+  echo "  SMOKE_ENV_ID=${SMOKE_ENV_ID}"
+  echo "  AID=${AID}"
+  echo "  SID=${SID}"
+  if [[ -n "${SMOKE_SKILL_ID}" ]]; then
+    echo "  SMOKE_SKILL_ID=${SMOKE_SKILL_ID}"
+  fi
+  if [[ -n "${SMOKE_VAULT_ID}" ]]; then
+    echo "  SMOKE_VAULT_ID=${SMOKE_VAULT_ID}"
+  fi
+  if [[ -n "${MODEL_CARD_ROW_ID}" ]]; then
+    echo "  MODEL_CARD_ROW_ID=${MODEL_CARD_ROW_ID}"
   fi
 }
-trap cleanup EXIT
 
 echo "==> health ${PLATFORM_URL}/health"
 api_get "/health" >/dev/null
@@ -238,6 +293,35 @@ if [[ "${SMOKE_SKIP_LLM}" != "1" ]]; then
   curl -sf "${HARNESS_URL}/health" >/dev/null
   echo "harness ok"
 fi
+
+echo "==> get /v1/me"
+ME_JSON="$(api_get "/v1/me")"
+python3 -c 'import json,sys
+me=json.load(sys.stdin)
+tenant=me.get("tenant")
+if not isinstance(tenant, dict) or not tenant.get("id"):
+    raise SystemExit(f"missing tenant: {me!r}")
+tid=tenant.get("id")
+uid=(me.get("user") or {}).get("id", "?")
+print(f"tenant={tid!r} user={uid!r}")' <<<"${ME_JSON}"
+
+echo "==> get /v1/stats"
+STATS_JSON="$(api_get "/v1/stats")"
+python3 -c 'import json,sys
+stats=json.load(sys.stdin)
+for key in ("agents","sessions","environments","skills","model_cards"):
+    if key not in stats:
+        raise SystemExit(f"missing stats.{key}")
+print(
+    "agents=%d sessions=%d environments=%d skills=%d model_cards=%d"
+    % (
+        stats["agents"],
+        stats["sessions"],
+        stats["environments"],
+        stats["skills"],
+        stats["model_cards"],
+    )
+)' <<<"${STATS_JSON}"
 
 echo "==> list environments (expect ${DEFAULT_ENV_ID})"
 ENV_LIST="$(api_get "/v1/environments")"
@@ -264,8 +348,82 @@ SMOKE_ENV_ID="$(
     '{"name":"smoke-test","description":"smoke-test.sh","config":{"type":"local"}}' \
     | json_field id
 )"
-SMOKE_ENV_CREATED=1
 echo "SMOKE_ENV_ID=${SMOKE_ENV_ID}"
+
+if [[ "${SMOKE_SKIP_P2}" != "1" ]]; then
+  echo "==> console stub endpoints (empty states for Console SPA)"
+  for stub_path in \
+    "/v1/runtimes" \
+    "/v1/models/list" \
+    "/v1/files" \
+    "/v1/memory_stores" \
+    "/v1/evals/runs" \
+    "/v1/integrations/linear/installations" \
+    "/v1/integrations/github/publications"
+  do
+    api_get "${stub_path}" >/dev/null
+    echo "   ok ${stub_path}"
+  done
+
+  echo "==> list builtin skills"
+  SKILLS_LIST="$(api_get "/v1/skills")"
+  python3 -c 'import json,sys
+data=json.load(sys.stdin).get("data", [])
+if len(data) < 4:
+    raise SystemExit(f"expected >=4 builtin skills, got {len(data)}")
+builtin=next((s for s in data if s.get("id")=="builtin_pdf"), None)
+if not builtin or builtin.get("source") != "anthropic":
+    raise SystemExit(f"builtin_pdf missing or wrong source: {builtin!r}")
+print(f"skills={len(data)} builtin_pdf_ok")' <<<"${SKILLS_LIST}"
+
+  echo "==> get builtin skill builtin_pdf"
+  api_get "/v1/skills/builtin_pdf" >/dev/null
+  echo "builtin_pdf ok"
+
+  echo "==> create custom skill"
+  SMOKE_SKILL_ID="$(
+    api_post_json "/v1/skills" \
+      "$(python3 -c 'import json,time
+print(json.dumps({
+    "name": "smoke-skill-" + str(int(time.time())),
+    "display_title": "Smoke Skill",
+    "description": "smoke-test.sh custom skill",
+    "files": [{
+        "filename": "SKILL.md",
+        "content": "---\nname: smoke-skill\ndescription: smoke\n---\n# Smoke",
+    }],
+}))')" \
+      | json_field id
+  )"
+  echo "SMOKE_SKILL_ID=${SMOKE_SKILL_ID}"
+
+  echo "==> list custom skill versions"
+  SKILL_VERSIONS="$(api_get "/v1/skills/${SMOKE_SKILL_ID}/versions")"
+  python3 -c 'import json,sys
+data=json.load(sys.stdin).get("data", [])
+if len(data) < 1:
+    raise SystemExit("expected >=1 skill version")
+print(f"skill_versions={len(data)}")' <<<"${SKILL_VERSIONS}"
+
+  echo "==> create vault + credential"
+  SMOKE_VAULT_ID="$(
+    api_post_json "/v1/vaults" '{"name":"smoke-vault"}' | json_field id
+  )"
+  echo "SMOKE_VAULT_ID=${SMOKE_VAULT_ID}"
+  CRED_JSON="$(
+    api_post_json "/v1/vaults/${SMOKE_VAULT_ID}/credentials" \
+      '{"display_name":"Smoke MCP","auth":{"type":"mcp_oauth","mcp_server_url":"https://mcp.example.com","access_token":"smoke-secret"}}'
+  )"
+  python3 -c 'import json,sys
+cred=json.load(sys.stdin)
+auth=cred.get("auth") or {}
+if auth.get("access_token") is not None:
+    raise SystemExit("access_token must be stripped from API response")
+if not cred.get("id"):
+    raise SystemExit(f"missing credential id: {cred!r}")
+cid=cred.get("id")
+print(f"credential={cid!r} redacted_ok")' <<<"${CRED_JSON}"
+fi
 
 echo "==> list model cards"
 CARD_LIST="$(api_get "/v1/model_cards")"
@@ -369,6 +527,31 @@ VERSION_COUNT="$(
 )"
 echo "agent_versions=${VERSION_COUNT}"
 
+echo "==> get agent"
+AGENT_JSON="$(api_get "/v1/agents/${AID}")"
+python3 -c 'import json,sys
+agent=json.load(sys.stdin)
+if agent.get("id") != sys.argv[1]:
+    raise SystemExit(f"agent id mismatch: {agent!r}")
+aname=agent.get("name")
+amodel=agent.get("model")
+print(f"agent_name={aname!r} model={amodel!r}")' \
+  "${AID}" <<<"${AGENT_JSON}"
+
+echo "==> list agents (search by id; default page is oldest-first)"
+AGENT_LIST="$(api_get "/v1/agents?q=${AID}")"
+python3 -c 'import json,sys
+aid=sys.argv[1]
+ids={row.get("id") for row in json.load(sys.stdin).get("data", [])}
+if aid not in ids:
+    raise SystemExit(f"agent {aid!r} missing from list q={aid!r}")
+print(f"agents_matched={len(ids)} contains_smoke_agent")' "${AID}" <<<"${AGENT_LIST}"
+
+echo "==> patch agent description"
+api_patch_json "/v1/agents/${AID}" \
+  '{"description":"smoke-test.sh patched"}' >/dev/null
+echo "agent patched"
+
 echo "==> create session (environment_id=${SMOKE_ENV_ID})"
 SESSION_JSON="$(
   api_post_json "/v1/sessions" \
@@ -390,8 +573,43 @@ print(actual)' "${SMOKE_ENV_ID}" <<<"${SESSION_JSON}"
 )"
 echo "SID=${SID} environment_id=${SESSION_ENV_ID}"
 
+echo "==> get session"
+api_get "/v1/sessions/${SID}" >/dev/null
+echo "session ok"
+
+echo "==> list sessions (search by id; default page is oldest-first)"
+SESSION_LIST="$(api_get "/v1/sessions?q=${SID}")"
+python3 -c 'import json,sys
+sid=sys.argv[1]
+ids={row.get("id") for row in json.load(sys.stdin).get("data", [])}
+if sid not in ids:
+    raise SystemExit(f"session {sid!r} missing from list q={sid!r}")
+print(f"sessions_matched={len(ids)} contains_smoke_session")' "${SID}" <<<"${SESSION_LIST}"
+
+echo "==> session aux: threads / pending / trajectory / outputs"
+api_get "/v1/sessions/${SID}/threads" >/dev/null
+api_get "/v1/sessions/${SID}/pending" >/dev/null
+TRAJ_JSON="$(api_get "/v1/sessions/${SID}/trajectory")"
+assert_trajectory_shape "trajectory(empty)" 0 <<<"${TRAJ_JSON}"
+api_get "/v1/sessions/${SID}/outputs" >/dev/null
+echo "session aux ok"
+
+echo "==> list session files (scope_id=${SID})"
+FILES_JSON="$(api_get "/v1/files?scope_id=${SID}")"
+python3 -c 'import json,sys
+resp=json.load(sys.stdin)
+if "data" not in resp:
+    raise SystemExit(f"missing files.data: {resp!r}")
+files=resp.get("data") or []
+print(f"session_files={len(files)}")' <<<"${FILES_JSON}"
+
+echo "==> list session events (AMA wire shape)"
+EVENTS_EMPTY="$(api_get "/v1/sessions/${SID}/events?order=asc")"
+assert_events_ama_shape "events(empty)" <<<"${EVENTS_EMPTY}"
+
 if [[ "${SMOKE_SKIP_LLM}" == "1" ]]; then
-  echo "smoke test passed (P1 APIs only, SMOKE_SKIP_LLM=1)"
+  echo "smoke test passed (P1+P2 APIs only, SMOKE_SKIP_LLM=1)"
+  print_leftover_resources
   exit 0
 fi
 
@@ -421,10 +639,17 @@ raise SystemExit(1)' <<<"${EVENTS}"
   )"
 
   echo "AGENT_REPLY=${REPLY_TEXT}"
+
+  echo "==> verify post-LLM events + trajectory"
+  EVENTS_RAW="$(api_get "/v1/sessions/${SID}/events?order=asc")"
+  assert_events_ama_shape "events(after_llm)" <<<"${EVENTS_RAW}"
+  TRAJ_AFTER="$(api_get "/v1/sessions/${SID}/trajectory")"
+  assert_trajectory_shape "trajectory(after_llm)" 1 <<<"${TRAJ_AFTER}"
 fi
 
 if [[ "${SMOKE_SKIP_TOOLS}" == "1" ]]; then
-  echo "smoke test passed (LLM only, SMOKE_SKIP_TOOLS=1)"
+  echo "smoke test passed (P1+P2 APIs + LLM only, SMOKE_SKIP_TOOLS=1)"
+  print_leftover_resources
   exit 0
 fi
 
@@ -464,4 +689,32 @@ print(f"tool_result={tool_text!r}")' <<<"${TOOL_EVENTS}"
 )"
 
 echo "${TOOL_SUMMARY}"
-echo "smoke test passed (P1 APIs + real LLM + bash/uname tool chain)"
+
+echo "==> verify post-tool events + trajectory"
+TOOL_EVENTS_RAW="$(api_get "/v1/sessions/${SID}/events?order=asc")"
+assert_events_ama_shape "events(after_tools)" <<<"${TOOL_EVENTS_RAW}"
+TRAJ_FINAL="$(api_get "/v1/sessions/${SID}/trajectory")"
+assert_trajectory_shape "trajectory(after_tools)" 2 <<<"${TRAJ_FINAL}"
+
+echo "==> refresh /v1/stats after turns"
+STATS_AFTER="$(api_get "/v1/stats")"
+python3 -c 'import json,sys
+stats=json.load(sys.stdin)
+if stats.get("agents", 0) < 1 or stats.get("sessions", 0) < 1:
+    raise SystemExit(f"unexpected stats after smoke: {stats!r}")
+print(
+    "stats_after agents=%d sessions=%d skills=%d vaults=%d"
+    % (
+        stats.get("agents", 0),
+        stats.get("sessions", 0),
+        stats.get("skills", 0),
+        stats.get("vaults", 0),
+    )
+)' <<<"${STATS_AFTER}"
+
+if [[ "${SMOKE_SKIP_P2}" == "1" ]]; then
+  echo "smoke test passed (P1 APIs + real LLM + bash/uname tool chain)"
+else
+  echo "smoke test passed (P1+P2 APIs + real LLM + bash/uname tool chain)"
+fi
+print_leftover_resources

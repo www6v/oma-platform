@@ -72,6 +72,7 @@ func TestRegistrySerializesConcurrentTurns(t *testing.T) {
 	}
 	sessions := store.NewSessionRepo(db, agents, environments)
 	events := store.NewEventRepo(db)
+	pending := store.NewPendingRepo(db)
 	hub := stream.NewHub()
 	workdirs := workdir.NewManager(t.TempDir())
 	ctx := context.Background()
@@ -94,6 +95,7 @@ func TestRegistrySerializesConcurrentTurns(t *testing.T) {
 		SessionID: sess.ID,
 		Sessions:  sessions,
 		Events:    events,
+		Pending:   pending,
 		Hub:       hub,
 		Workdirs:  workdirs,
 		Harness:   gate,
@@ -159,6 +161,7 @@ func TestRegistrySerializesConcurrentAppends(t *testing.T) {
 	}
 	sessions := store.NewSessionRepo(db, agents, environments)
 	events := store.NewEventRepo(db)
+	pending := store.NewPendingRepo(db)
 	hub := stream.NewHub()
 	workdirs := workdir.NewManager(t.TempDir())
 	ctx := context.Background()
@@ -180,6 +183,7 @@ func TestRegistrySerializesConcurrentAppends(t *testing.T) {
 		SessionID: sess.ID,
 		Sessions:  sessions,
 		Events:    events,
+		Pending:   pending,
 		Hub:       hub,
 		Workdirs:  workdirs,
 		Harness:   &harness.FakeClient{},

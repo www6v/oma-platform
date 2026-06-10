@@ -588,6 +588,9 @@ func TestCrashRecoverySessionUsableAfterRestart(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		if _, err := db.Exec(`PRAGMA wal_checkpoint(TRUNCATE)`); err != nil {
+			t.Fatal(err)
+		}
 	})
 	killHard(t, h)
 	time.Sleep(300 * time.Millisecond)

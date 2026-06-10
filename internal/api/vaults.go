@@ -7,11 +7,20 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/open-ma/oma-building/internal/store"
+	"github.com/open-ma/oma-building/internal/vaultoauth"
 )
 
 type vaultDeps struct {
 	Vaults      *store.VaultRepo
 	Credentials *store.CredentialRepo
+	HTTPClient  *http.Client
+}
+
+func vaultHTTPClient(deps vaultDeps) *http.Client {
+	if deps.HTTPClient != nil {
+		return deps.HTTPClient
+	}
+	return http.DefaultClient
 }
 
 func mountVaultRoutes(r chi.Router, deps vaultDeps) {
@@ -287,6 +296,10 @@ func mountCredentialRoutes(r chi.Router, deps vaultDeps) {
 			writeJSON(w, http.StatusOK, toAPICredential(cred))
 		})
 
+		r.Post("/mcp_oauth_validate", func(w http.ResponseWriter, req *http.Request) {
+			handleMcpOAuthValidate(w, req, deps)
+		})
+
 		r.Delete("/", func(w http.ResponseWriter, req *http.Request) {
 			vaultID := chi.URLParam(req, "id")
 			credID := chi.URLParam(req, "credId")
@@ -306,6 +319,74 @@ func mountCredentialRoutes(r chi.Router, deps vaultDeps) {
 				"id":   credID,
 			})
 		})
+	})
+}
+
+func handleMcpOAuthValidate(
+	w http.ResponseWriter,
+	req *http.Request,
+	deps vaultDeps,
+) {
+	vaultID := chi.URLParam(req, "id")
+	credID := chi.URLParam(req, "credId")
+	tenant := tenantID(req)
+
+	cred, err := deps.Credentials.Get(req.Context(), tenant, vaultID, credID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if cred == nil {
+		writeError(w, http.StatusNotFound, "Credential not found")
+		return
+	}
+
+	meta, err := vaultoauth.RefreshMetadataOf(cred.Auth)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if meta == nil {
+		writeError(
+			w,
+			http.StatusBadRequest,
+			"Credential is not mcp_oauth or has no refresh_token / token_endpoint",
+		)
+		return
+	}
+
+	refreshed, err := vaultoauth.RefreshMcpOAuth(
+		req.Context(),
+		*meta,
+		vaultHTTPClient(deps),
+	)
+	if err != nil {
+		writeError(
+			w,
+			http.StatusBadGateway,
+			"token_endpoint unreachable or refresh refused",
+		)
+		return
+	}
+
+	patch, err := vaultoauth.AuthPatchForRefresh(*refreshed)
+	if err == nil {
+		_, _ = deps.Credentials.Update(
+			req.Context(), tenant, vaultID, credID,
+			store.UpdateCredentialInput{Auth: patch, AuthSet: true},
+		)
+	}
+
+	var expiresIn any
+	if refreshed.ExpiresIn != nil {
+		expiresIn = *refreshed.ExpiresIn
+	} else {
+		expiresIn = nil
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"type":       "mcp_oauth_validation",
+		"validated":  true,
+		"expires_in": expiresIn,
 	})
 }
 

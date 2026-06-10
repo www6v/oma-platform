@@ -10,108 +10,216 @@ import (
 	"github.com/open-ma/oma-building/internal/store"
 )
 
-type agentResponse struct {
-	ID           string          `json:"id"`
+type agentWriteBody struct {
 	Name         string          `json:"name"`
-	Model        string          `json:"model"`
-	SystemPrompt string          `json:"system_prompt,omitempty"`
-	System       string          `json:"system,omitempty"`
-	Description  string          `json:"description,omitempty"`
-	Tools        json.RawMessage `json:"tools,omitempty"`
-	Version      int    `json:"version"`
-	CreatedAt    int64  `json:"created_at"`
-	UpdatedAt    *int64 `json:"updated_at,omitempty"`
-	ArchivedAt   *int64 `json:"archived_at,omitempty"`
-}
-
-type agentVersionResponse struct {
-	AgentID   string          `json:"agent_id"`
-	Version   int             `json:"version"`
-	Snapshot  agentResponse   `json:"snapshot"`
-	CreatedAt int64           `json:"created_at"`
-}
-
-func formatAgent(a *store.Agent) agentResponse {
-	sys := a.SystemPrompt
-	return agentResponse{
-		ID:           a.ID,
-		Name:         a.Name,
-		Model:        a.Model,
-		SystemPrompt: sys,
-		System:       sys,
-		Description:  a.Description,
-		Tools:        a.Tools,
-		Version:      a.Version,
-		CreatedAt:    a.CreatedAt,
-		UpdatedAt:    a.UpdatedAt,
-		ArchivedAt:   a.ArchivedAt,
-	}
-}
-
-func formatAgentVersion(v store.AgentVersion) agentVersionResponse {
-	return agentVersionResponse{
-		AgentID: v.AgentID,
-		Version: v.Version,
-		Snapshot: agentResponse{
-			ID:           v.Snapshot.ID,
-			Name:         v.Snapshot.Name,
-			Model:        v.Snapshot.Model,
-			SystemPrompt: v.Snapshot.SystemPrompt,
-			System:       v.Snapshot.SystemPrompt,
-			Description:  v.Snapshot.Description,
-			Tools:        v.Snapshot.Tools,
-			Version:      v.Snapshot.Version,
-		},
-		CreatedAt: v.CreatedAt,
-	}
-}
-
-type createAgentRequest struct {
-	Name         string          `json:"name"`
-	Model        string          `json:"model"`
+	Model        json.RawMessage `json:"model"`
 	System       string          `json:"system"`
 	SystemPrompt string          `json:"system_prompt"`
 	Description  string          `json:"description"`
 	Tools        json.RawMessage `json:"tools"`
+	MCPServers   json.RawMessage `json:"mcp_servers"`
+	Skills       json.RawMessage `json:"skills"`
+	CallableAgents json.RawMessage `json:"callable_agents"`
+	Multiagent   json.RawMessage `json:"multiagent"`
+	Metadata     json.RawMessage `json:"metadata"`
+	Harness      string          `json:"harness"`
+	OMA          *omaEnvelope    `json:"_oma"`
 }
 
-type patchAgentRequest struct {
-	Name         *string          `json:"name"`
-	Model        *string          `json:"model"`
-	System       *string          `json:"system"`
-	SystemPrompt *string          `json:"system_prompt"`
-	Description  *string          `json:"description"`
-	Tools        *json.RawMessage `json:"tools"`
+type agentPatchBody struct {
+	Name           *string          `json:"name"`
+	Model          json.RawMessage  `json:"model"`
+	System         *string          `json:"system"`
+	SystemPrompt   *string          `json:"system_prompt"`
+	Description    *string          `json:"description"`
+	Tools          *json.RawMessage `json:"tools"`
+	MCPServers     *json.RawMessage `json:"mcp_servers"`
+	Skills         *json.RawMessage `json:"skills"`
+	CallableAgents *json.RawMessage `json:"callable_agents"`
+	Multiagent     json.RawMessage  `json:"multiagent"`
+	Metadata       *json.RawMessage `json:"metadata"`
+	Harness        *string          `json:"harness"`
+	OMA            *omaEnvelope     `json:"_oma"`
+}
+
+func buildCreateAgentInput(
+	tenant string,
+	body agentWriteBody,
+) (store.CreateAgentInput, string) {
+	sys := body.SystemPrompt
+	if sys == "" {
+		sys = body.System
+	}
+	modelID, modelSpeed, err := parseModelField(body.Model)
+	if err != nil {
+		return store.CreateAgentInput{}, err.Error()
+	}
+	hasRuntime := body.OMA != nil &&
+		len(body.OMA.RuntimeBinding) > 0 &&
+		string(body.OMA.RuntimeBinding) != "null"
+	if modelID == "" && !hasRuntime {
+		return store.CreateAgentInput{}, "model is required"
+	}
+	if err := validateAgentTools(body.Tools); err != nil {
+		return store.CreateAgentInput{}, err.Error()
+	}
+
+	callable := body.CallableAgents
+	if len(body.Multiagent) > 0 {
+		entries, msg, set := multiagentToCallableAgents(body.Multiagent)
+		if msg != "" {
+			return store.CreateAgentInput{}, msg
+		}
+		if set {
+			callable = callableAgentsToJSON(entries)
+		}
+	}
+
+	input := store.CreateAgentInput{
+		TenantID:       tenant,
+		Name:           body.Name,
+		Model:          modelID,
+		ModelSpeed:     modelSpeed,
+		SystemPrompt:   sys,
+		Description:    body.Description,
+		Tools:          body.Tools,
+		MCPServers:     body.MCPServers,
+		Skills:         body.Skills,
+		CallableAgents: callable,
+		Metadata:       body.Metadata,
+		Harness:        body.Harness,
+	}
+	if body.OMA != nil {
+		if body.OMA.Harness != "" {
+			input.Harness = body.OMA.Harness
+		}
+		if len(body.OMA.RuntimeBinding) > 0 {
+			input.RuntimeBinding = body.OMA.RuntimeBinding
+		}
+		if len(body.OMA.AppendablePrompts) > 0 {
+			input.AppendablePrompts = body.OMA.AppendablePrompts
+		}
+		if len(body.OMA.AuxModel) > 0 && string(body.OMA.AuxModel) != "null" {
+			auxID, auxSpeed, err := parseModelField(body.OMA.AuxModel)
+			if err != nil {
+				return store.CreateAgentInput{}, err.Error()
+			}
+			input.AuxModel = auxID
+			input.AuxModelSpeed = auxSpeed
+		}
+	}
+	return input, ""
+}
+
+func buildUpdateAgentInput(body agentPatchBody) (store.UpdateAgentInput, string) {
+	patch := store.UpdateAgentInput{}
+	if body.Name != nil {
+		patch.Name = body.Name
+	}
+	if len(body.Model) > 0 {
+		modelID, modelSpeed, err := parseModelField(body.Model)
+		if err != nil {
+			return store.UpdateAgentInput{}, err.Error()
+		}
+		patch.Model = &modelID
+		patch.ModelSpeed = &modelSpeed
+	}
+	if body.SystemPrompt != nil {
+		patch.SystemPrompt = body.SystemPrompt
+	} else if body.System != nil {
+		patch.SystemPrompt = body.System
+	}
+	if body.Description != nil {
+		patch.Description = body.Description
+	}
+	if body.Tools != nil {
+		if err := validateAgentTools(*body.Tools); err != nil {
+			return store.UpdateAgentInput{}, err.Error()
+		}
+		patch.Tools = *body.Tools
+		patch.ToolsSet = true
+	}
+	if body.MCPServers != nil {
+		patch.MCPServers = *body.MCPServers
+		patch.MCPServersSet = true
+	}
+	if body.Skills != nil {
+		patch.Skills = *body.Skills
+		patch.SkillsSet = true
+	}
+	if len(body.Multiagent) > 0 {
+		entries, msg, set := multiagentToCallableAgents(body.Multiagent)
+		if msg != "" {
+			return store.UpdateAgentInput{}, msg
+		}
+		if set {
+			patch.CallableAgents = callableAgentsToJSON(entries)
+			patch.CallableAgentsSet = true
+		}
+	} else if body.CallableAgents != nil {
+		patch.CallableAgents = *body.CallableAgents
+		patch.CallableAgentsSet = true
+	}
+	if body.Metadata != nil {
+		patch.Metadata = *body.Metadata
+		patch.MetadataSet = true
+	}
+	if body.Harness != nil {
+		patch.Harness = body.Harness
+	}
+	if body.OMA != nil {
+		if body.OMA.Harness != "" {
+			h := body.OMA.Harness
+			patch.Harness = &h
+		}
+		if len(body.OMA.RuntimeBinding) > 0 {
+			patch.RuntimeBinding = body.OMA.RuntimeBinding
+			patch.RuntimeBindingSet = true
+		}
+		if len(body.OMA.AppendablePrompts) > 0 {
+			patch.AppendablePrompts = body.OMA.AppendablePrompts
+			patch.AppendablePromptsSet = true
+		}
+		if len(body.OMA.AuxModel) > 0 {
+			if string(body.OMA.AuxModel) == "null" {
+				empty := ""
+				patch.AuxModel = &empty
+				patch.AuxModelSpeed = &empty
+			} else {
+				auxID, auxSpeed, err := parseModelField(body.OMA.AuxModel)
+				if err != nil {
+					return store.UpdateAgentInput{}, err.Error()
+				}
+				patch.AuxModel = &auxID
+				patch.AuxModelSpeed = &auxSpeed
+			}
+		}
+	}
+	return patch, ""
 }
 
 func mountAgentRoutes(r chi.Router, agents *store.AgentRepo) {
 	r.Post("/", func(w http.ResponseWriter, req *http.Request) {
-		var body createAgentRequest
+		var body agentWriteBody
 		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid json")
 			return
 		}
-		sys := body.SystemPrompt
-		if sys == "" {
-			sys = body.System
-		}
-		if err := validateAgentTools(body.Tools); err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
+		if body.Name == "" {
+			writeError(w, http.StatusBadRequest, "name is required")
 			return
 		}
-		agent, err := agents.Create(req.Context(), store.CreateAgentInput{
-			TenantID:     tenantID(req),
-			Name:         body.Name,
-			Model:        body.Model,
-			SystemPrompt: sys,
-			Description:  body.Description,
-			Tools:        body.Tools,
-		})
+		input, errMsg := buildCreateAgentInput(tenantID(req), body)
+		if errMsg != "" {
+			writeError(w, http.StatusBadRequest, errMsg)
+			return
+		}
+		agent, err := agents.Create(req.Context(), input)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		writeJSON(w, http.StatusCreated, formatAgent(agent))
+		writeJSON(w, http.StatusCreated, formatAPIAgent(agent))
 	})
 
 	r.Get("/", func(w http.ResponseWriter, req *http.Request) {
@@ -125,9 +233,9 @@ func mountAgentRoutes(r chi.Router, agents *store.AgentRepo) {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		out := make([]agentResponse, 0, len(page.Items))
+		out := make([]map[string]any, 0, len(page.Items))
 		for _, a := range page.Items {
-			out = append(out, formatAgent(a))
+			out = append(out, formatAPIAgent(a))
 		}
 		writeListPage(w, out, page.NextCursor)
 	})
@@ -143,9 +251,9 @@ func mountAgentRoutes(r chi.Router, agents *store.AgentRepo) {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		out := make([]agentVersionResponse, 0, len(versions))
+		out := make([]map[string]any, 0, len(versions))
 		for _, v := range versions {
-			out = append(out, formatAgentVersion(v))
+			out = append(out, formatAPIAgentConfig(&v.Snapshot, agentRowMeta{}))
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"data": out})
 	})
@@ -167,7 +275,7 @@ func mountAgentRoutes(r chi.Router, agents *store.AgentRepo) {
 			writeError(w, http.StatusNotFound, "not found")
 			return
 		}
-		writeJSON(w, http.StatusOK, formatAgentVersion(*snap))
+		writeJSON(w, http.StatusOK, formatAPIAgentConfig(&snap.Snapshot, agentRowMeta{}))
 	})
 
 	r.Get("/{id}", func(w http.ResponseWriter, req *http.Request) {
@@ -181,35 +289,20 @@ func mountAgentRoutes(r chi.Router, agents *store.AgentRepo) {
 			writeError(w, http.StatusNotFound, "not found")
 			return
 		}
-		writeJSON(w, http.StatusOK, formatAgent(agent))
+		writeJSON(w, http.StatusOK, formatAPIAgent(agent))
 	})
 
-	r.Patch("/{id}", func(w http.ResponseWriter, req *http.Request) {
+	updateAgent := func(w http.ResponseWriter, req *http.Request) {
 		id := chi.URLParam(req, "id")
-		var body patchAgentRequest
+		var body agentPatchBody
 		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid json")
 			return
 		}
-		patch := store.UpdateAgentInput{
-			Name:  body.Name,
-			Model: body.Model,
-		}
-		if body.SystemPrompt != nil {
-			patch.SystemPrompt = body.SystemPrompt
-		} else if body.System != nil {
-			patch.SystemPrompt = body.System
-		}
-		if body.Description != nil {
-			patch.Description = body.Description
-		}
-		if body.Tools != nil {
-			if err := validateAgentTools(*body.Tools); err != nil {
-				writeError(w, http.StatusBadRequest, err.Error())
-				return
-			}
-			patch.Tools = *body.Tools
-			patch.ToolsSet = true
+		patch, errMsg := buildUpdateAgentInput(body)
+		if errMsg != "" {
+			writeError(w, http.StatusBadRequest, errMsg)
+			return
 		}
 		agent, err := agents.Update(req.Context(), tenantID(req), id, patch)
 		if err == store.ErrNotFound {
@@ -224,8 +317,11 @@ func mountAgentRoutes(r chi.Router, agents *store.AgentRepo) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, formatAgent(agent))
-	})
+		writeJSON(w, http.StatusOK, formatAPIAgent(agent))
+	}
+	r.Patch("/{id}", updateAgent)
+	r.Put("/{id}", updateAgent)
+	r.Post("/{id}", updateAgent)
 
 	r.Post("/{id}/archive", func(w http.ResponseWriter, req *http.Request) {
 		id := chi.URLParam(req, "id")
@@ -238,7 +334,7 @@ func mountAgentRoutes(r chi.Router, agents *store.AgentRepo) {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, formatAgent(agent))
+		writeJSON(w, http.StatusOK, formatAPIAgent(agent))
 	})
 
 	r.Delete("/{id}", func(w http.ResponseWriter, req *http.Request) {

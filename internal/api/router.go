@@ -11,6 +11,7 @@ import (
 	"github.com/open-ma/oma-building/internal/harness"
 	"github.com/open-ma/oma-building/internal/modelresolve"
 	"github.com/open-ma/oma-building/internal/session"
+	"github.com/open-ma/oma-building/internal/sessionoutputs"
 	"github.com/open-ma/oma-building/internal/store"
 	"github.com/open-ma/oma-building/internal/stream"
 	"github.com/open-ma/oma-building/internal/workdir"
@@ -25,6 +26,7 @@ type Deps struct {
 	Credentials  *store.CredentialRepo
 	Skills       *store.SkillRepo
 	SkillFiles   *store.SkillFileStore
+	SessionOutputs *sessionoutputs.Store
 	ApiKeys      *store.ApiKeyRepo
 	Tenants      *store.TenantRepo
 	Sessions     *sessionHandlers
@@ -128,7 +130,7 @@ func NewRouter(deps Deps) http.Handler {
 		})
 	}
 
-	mountConsoleStubRoutes(r)
+	mountConsoleStubRoutes(r, deps.SessionOutputs)
 
 	if deps.ConsoleDir != "" {
 		static := console.NewStaticHandler(deps.ConsoleDir)
@@ -142,18 +144,22 @@ func NewRouter(deps Deps) http.Handler {
 func NewSessionHandlers(
 	sessions *store.SessionRepo,
 	events *store.EventRepo,
+	pending *store.PendingRepo,
 	hub *stream.Hub,
 	registry *session.Registry,
 	workdirs *workdir.Manager,
+	outputs *sessionoutputs.Store,
 	client harness.Client,
 	models *modelresolve.Resolver,
 ) *sessionHandlers {
 	return &sessionHandlers{
 		sessions: sessions,
 		events:   events,
+		pending:  pending,
 		hub:      hub,
 		registry: registry,
 		workdirs: workdirs,
+		outputs:  outputs,
 		harness:  client,
 		models:   models,
 	}

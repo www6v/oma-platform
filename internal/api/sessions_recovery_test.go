@@ -3,6 +3,7 @@ package api_test
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -142,10 +143,51 @@ func TestStartupRecoveryOrphanRunningSession(t *testing.T) {
 	stall.release()
 	waitForHarnessTurns(t, recording, 2, 5*time.Second)
 
-	idle := getSession(t, server.Client(), server.URL+"/v1/sessions/"+sid)
+	idle := waitForSessionStatus(
+		t, server.Client(), server.URL+"/v1/sessions/"+sid, "idle", 5*time.Second,
+	)
 	if idle["status"] != "idle" {
 		t.Fatalf("after new turn status=%v", idle["status"])
 	}
+}
+
+func waitForSessionStatus(
+	t *testing.T,
+	client *http.Client,
+	url string,
+	want string,
+	timeout time.Duration,
+) map[string]any {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	var last map[string]any
+	for time.Now().Before(deadline) {
+		resp, err := client.Get(url)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.StatusCode == http.StatusOK {
+			var sess map[string]any
+			if err := json.NewDecoder(resp.Body).Decode(&sess); err != nil {
+				resp.Body.Close()
+				t.Fatal(err)
+			}
+			resp.Body.Close()
+			last = sess
+			if sess["status"] == want {
+				return sess
+			}
+		} else {
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			t.Logf("GET %s status=%d body=%s (retrying)", url, resp.StatusCode, body)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if last == nil {
+		t.Fatalf("GET %s never succeeded within %s", url, timeout)
+	}
+	return last
 }
 
 func TestStartupRecoveryNoRunningSessions(t *testing.T) {
@@ -198,7 +240,8 @@ func getSession(
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("GET %s status=%d", url, resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("GET %s status=%d body=%s", url, resp.StatusCode, string(body))
 	}
 	var sess map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&sess); err != nil {

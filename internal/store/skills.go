@@ -43,6 +43,15 @@ type CreateSkillInput struct {
 	Files        []SkillFileInput
 }
 
+// CreateSkillVersionInput holds fields for a new skill version.
+type CreateSkillVersionInput struct {
+	TenantID     string
+	SkillID      string
+	DisplayTitle string
+	Description  string
+	Files        []SkillFileInput
+}
+
 // SkillRepo persists custom skills in SQLite.
 type SkillRepo struct {
 	db    *sql.DB
@@ -134,6 +143,99 @@ func (r *SkillRepo) Create(
 	}
 	ver, err := r.GetVersion(ctx, tenantID, id, version)
 	return skill, ver, err
+}
+
+// CreateVersion inserts a new version for an existing custom skill.
+func (r *SkillRepo) CreateVersion(
+	ctx context.Context,
+	input CreateSkillVersionInput,
+) (*Skill, *SkillVersion, error) {
+	tenantID := tenantOrDefault(input.TenantID)
+	if len(input.Files) == 0 {
+		return nil, nil, fmt.Errorf("files array is required")
+	}
+	skill, err := r.Get(ctx, tenantID, input.SkillID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if skill == nil {
+		return nil, nil, ErrNotFound
+	}
+	if skill.Source != "custom" {
+		return nil, nil, fmt.Errorf(
+			"cannot create versions for built-in skills",
+		)
+	}
+
+	version := fmt.Sprintf("%d", time.Now().UnixMilli())
+	now := time.Now().UnixMilli()
+
+	manifest, err := r.files.WriteVersionFiles(
+		tenantID, input.SkillID, version, input.Files,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+	filesJSON, err := json.Marshal(manifest)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	displayTitle := input.DisplayTitle
+	description := input.Description
+	if displayTitle == "" {
+		if name := extractSkillNameFromFiles(input.Files); name != "" {
+			displayTitle = name
+		}
+	}
+	if description == "" {
+		description = extractSkillDescFromFiles(input.Files)
+	}
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	updateSQL := `
+		UPDATE skills
+		SET latest_version = ?, updated_at = ?`
+	args := []any{version, now}
+	if displayTitle != "" {
+		updateSQL += `, display_title = ?`
+		args = append(args, displayTitle)
+	}
+	if description != "" {
+		updateSQL += `, description = ?`
+		args = append(args, description)
+	}
+	updateSQL += ` WHERE id = ? AND tenant_id = ?`
+	args = append(args, input.SkillID, tenantID)
+
+	_, err = tx.ExecContext(ctx, updateSQL, args...)
+	if err != nil {
+		return nil, nil, fmt.Errorf("update skill: %w", err)
+	}
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO skill_versions (
+			skill_id, tenant_id, version, files_json, created_at
+		) VALUES (?, ?, ?, ?, ?)`,
+		input.SkillID, tenantID, version, string(filesJSON), now,
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("insert skill version: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, nil, err
+	}
+
+	updated, err := r.Get(ctx, tenantID, input.SkillID)
+	if err != nil {
+		return nil, nil, err
+	}
+	ver, err := r.GetVersion(ctx, tenantID, input.SkillID, version)
+	return updated, ver, err
 }
 
 // Get loads one custom skill by id.

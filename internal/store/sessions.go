@@ -198,7 +198,7 @@ func (r *SessionRepo) EndTurn(
 	tenantID, sessionID, turnID string,
 ) error {
 	now := time.Now().UnixMilli()
-	_, err := r.db.ExecContext(ctx, `
+	res, err := r.db.ExecContext(ctx, `
 		UPDATE sessions
 		SET status = ?, turn_id = NULL, updated_at = ?
 		WHERE id = ? AND tenant_id = ? AND turn_id = ?`,
@@ -207,6 +207,22 @@ func (r *SessionRepo) EndTurn(
 	)
 	if err != nil {
 		return fmt.Errorf("end turn: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n > 0 {
+		return nil
+	}
+	// Orphan recovery may clear turn_id while an in-memory turn still runs.
+	_, err = r.db.ExecContext(ctx, `
+		UPDATE sessions
+		SET status = ?, turn_id = NULL, updated_at = ?
+		WHERE id = ? AND tenant_id = ? AND status IN (?, ?)`,
+		string(SessionStatusIdle), now,
+		sessionID, tenantOrDefault(tenantID),
+		string(SessionStatusRunning), string(SessionStatusInterrupted),
+	)
+	if err != nil {
+		return fmt.Errorf("end turn fallback: %w", err)
 	}
 	return nil
 }

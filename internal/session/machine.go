@@ -29,6 +29,7 @@ type Machine struct {
 	SessionID   string
 	Sessions    *store.SessionRepo
 	Events      *store.EventRepo
+	Pending     *store.PendingRepo
 	Hub         Broadcaster
 	Workdirs    *workdir.Manager
 	Harness      harness.Client

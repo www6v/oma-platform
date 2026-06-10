@@ -64,6 +64,7 @@ func TestInterruptCancelsActiveTurn(t *testing.T) {
 	}
 	sessions := store.NewSessionRepo(db, agents, environments)
 	events := store.NewEventRepo(db)
+	pending := store.NewPendingRepo(db)
 	hub := stream.NewHub()
 	workdirs := workdir.NewManager(t.TempDir())
 
@@ -85,6 +86,7 @@ func TestInterruptCancelsActiveTurn(t *testing.T) {
 		SessionID: sess.ID,
 		Sessions:  sessions,
 		Events:    events,
+		Pending:   pending,
 		Hub:       hub,
 		Workdirs:  workdirs,
 		Harness:   slow,
@@ -176,6 +178,7 @@ func TestInterruptDrainsQueuedTurns(t *testing.T) {
 	}
 	sessions := store.NewSessionRepo(db, agents, environments)
 	events := store.NewEventRepo(db)
+	pending := store.NewPendingRepo(db)
 	hub := stream.NewHub()
 	workdirs := workdir.NewManager(t.TempDir())
 
@@ -197,6 +200,7 @@ func TestInterruptDrainsQueuedTurns(t *testing.T) {
 		SessionID: sess.ID,
 		Sessions:  sessions,
 		Events:    events,
+		Pending:   pending,
 		Hub:       hub,
 		Workdirs:  workdirs,
 		Harness:   slow,
@@ -214,6 +218,17 @@ func TestInterruptDrainsQueuedTurns(t *testing.T) {
 		if err := reg.EnqueueUserMessage(ctx, sess.ID, userEvent, nil); err != nil {
 			t.Fatal(err)
 		}
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if slow.started.Load() >= 1 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if slow.started.Load() < 1 {
+		t.Fatal("first turn never started before interrupt")
 	}
 
 	interruptEvent, _ := json.Marshal(map[string]any{"type": "user.interrupt"})

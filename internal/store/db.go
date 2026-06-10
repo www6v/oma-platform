@@ -33,7 +33,11 @@ func Open(path string) (*sql.DB, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("enable foreign keys: %w", err)
 	}
-	if _, err := db.Exec(`PRAGMA busy_timeout = 5000`); err != nil {
+	if _, err := db.Exec(`PRAGMA journal_mode = WAL`); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("enable wal: %w", err)
+	}
+	if _, err := db.Exec(`PRAGMA busy_timeout = 10000`); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("set busy timeout: %w", err)
 	}

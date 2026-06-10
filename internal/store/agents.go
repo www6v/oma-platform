@@ -19,13 +19,24 @@ const (
 
 // AgentConfig is the JSON blob stored in agents.config.
 type AgentConfig struct {
-	ID           string          `json:"id"`
-	Name         string          `json:"name"`
-	Model        string          `json:"model"`
-	SystemPrompt string          `json:"system_prompt,omitempty"`
-	Description  string          `json:"description,omitempty"`
-	Tools        json.RawMessage `json:"tools,omitempty"`
-	Version      int             `json:"version"`
+	ID                string          `json:"id"`
+	Name              string          `json:"name"`
+	Model             string          `json:"model"`
+	ModelSpeed        string          `json:"model_speed,omitempty"`
+	System            string          `json:"system,omitempty"`
+	SystemPrompt      string          `json:"system_prompt,omitempty"`
+	Description       string          `json:"description,omitempty"`
+	Tools             json.RawMessage `json:"tools,omitempty"`
+	MCPServers        json.RawMessage `json:"mcp_servers,omitempty"`
+	Skills            json.RawMessage `json:"skills,omitempty"`
+	CallableAgents    json.RawMessage `json:"callable_agents,omitempty"`
+	Metadata          json.RawMessage `json:"metadata,omitempty"`
+	Harness           string          `json:"harness,omitempty"`
+	AuxModel          string          `json:"aux_model,omitempty"`
+	AuxModelSpeed     string          `json:"aux_model_speed,omitempty"`
+	RuntimeBinding    json.RawMessage `json:"runtime_binding,omitempty"`
+	AppendablePrompts json.RawMessage `json:"appendable_prompts,omitempty"`
+	Version           int             `json:"version"`
 }
 
 // AgentVersion is a historical agent snapshot row.
@@ -48,22 +59,48 @@ type Agent struct {
 
 // CreateAgentInput holds fields for a new agent.
 type CreateAgentInput struct {
-	TenantID     string
-	Name         string
-	Model        string
-	SystemPrompt string
-	Description  string
-	Tools        json.RawMessage
+	TenantID          string
+	Name              string
+	Model             string
+	ModelSpeed        string
+	SystemPrompt      string
+	Description       string
+	Tools             json.RawMessage
+	MCPServers        json.RawMessage
+	Skills            json.RawMessage
+	CallableAgents    json.RawMessage
+	Metadata          json.RawMessage
+	Harness           string
+	AuxModel          string
+	AuxModelSpeed     string
+	RuntimeBinding    json.RawMessage
+	AppendablePrompts json.RawMessage
 }
 
 // UpdateAgentInput holds patch fields for Update.
 type UpdateAgentInput struct {
-	Name         *string
-	Model        *string
-	SystemPrompt *string
-	Description  *string
-	Tools        json.RawMessage
-	ToolsSet     bool
+	Name              *string
+	Model             *string
+	ModelSpeed        *string
+	SystemPrompt      *string
+	Description       *string
+	Tools             json.RawMessage
+	ToolsSet          bool
+	MCPServers        json.RawMessage
+	MCPServersSet     bool
+	Skills            json.RawMessage
+	SkillsSet         bool
+	CallableAgents    json.RawMessage
+	CallableAgentsSet bool
+	Metadata          json.RawMessage
+	MetadataSet       bool
+	Harness           *string
+	AuxModel          *string
+	AuxModelSpeed     *string
+	RuntimeBinding    json.RawMessage
+	RuntimeBindingSet bool
+	AppendablePrompts json.RawMessage
+	AppendablePromptsSet bool
 }
 
 // AgentRepo persists agents in SQLite.
@@ -85,20 +122,32 @@ func (r *AgentRepo) Create(
 	if input.Name == "" {
 		return nil, errors.New("name is required")
 	}
-	if input.Model == "" {
+	hasRuntime := len(input.RuntimeBinding) > 0 &&
+		string(input.RuntimeBinding) != "null"
+	if input.Model == "" && !hasRuntime {
 		return nil, errors.New("model is required")
 	}
 
 	id := generateAgentID()
 	now := time.Now().UnixMilli()
 	cfg := AgentConfig{
-		ID:           id,
-		Name:         input.Name,
-		Model:        input.Model,
-		SystemPrompt: input.SystemPrompt,
-		Description:  input.Description,
-		Tools:        input.Tools,
-		Version:      1,
+		ID:                id,
+		Name:              input.Name,
+		Model:             input.Model,
+		ModelSpeed:        input.ModelSpeed,
+		SystemPrompt:      input.SystemPrompt,
+		Description:       input.Description,
+		Tools:             input.Tools,
+		MCPServers:        input.MCPServers,
+		Skills:            input.Skills,
+		CallableAgents:    input.CallableAgents,
+		Metadata:          input.Metadata,
+		Harness:           input.Harness,
+		AuxModel:          input.AuxModel,
+		AuxModelSpeed:     input.AuxModelSpeed,
+		RuntimeBinding:    input.RuntimeBinding,
+		AppendablePrompts: input.AppendablePrompts,
+		Version:           1,
 	}
 	configJSON, err := json.Marshal(cfg)
 	if err != nil {
@@ -191,6 +240,9 @@ func (r *AgentRepo) Update(
 	if input.Model != nil {
 		next.Model = *input.Model
 	}
+	if input.ModelSpeed != nil {
+		next.ModelSpeed = *input.ModelSpeed
+	}
 	if input.SystemPrompt != nil {
 		next.SystemPrompt = *input.SystemPrompt
 	}
@@ -199,6 +251,33 @@ func (r *AgentRepo) Update(
 	}
 	if input.ToolsSet {
 		next.Tools = input.Tools
+	}
+	if input.MCPServersSet {
+		next.MCPServers = input.MCPServers
+	}
+	if input.SkillsSet {
+		next.Skills = input.Skills
+	}
+	if input.CallableAgentsSet {
+		next.CallableAgents = input.CallableAgents
+	}
+	if input.MetadataSet {
+		next.Metadata = input.Metadata
+	}
+	if input.Harness != nil {
+		next.Harness = *input.Harness
+	}
+	if input.AuxModel != nil {
+		next.AuxModel = *input.AuxModel
+	}
+	if input.AuxModelSpeed != nil {
+		next.AuxModelSpeed = *input.AuxModelSpeed
+	}
+	if input.RuntimeBindingSet {
+		next.RuntimeBinding = input.RuntimeBinding
+	}
+	if input.AppendablePromptsSet {
+		next.AppendablePrompts = input.AppendablePrompts
 	}
 
 	if agentConfigEqual(next, current.AgentConfig) {
