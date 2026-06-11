@@ -32,6 +32,7 @@ type Deps struct {
 	SessionOutputs *sessionoutputs.Store
 	ApiKeys      *store.ApiKeyRepo
 	Tenants      *store.TenantRepo
+	Runtimes     *store.RuntimeRepo
 	Sessions     *sessionHandlers
 	APIKey       string
 	ConsoleDir   string
@@ -130,6 +131,20 @@ func NewRouter(deps Deps) http.Handler {
 	if deps.ApiKeys != nil {
 		r.Route("/v1/api_keys", func(r chi.Router) {
 			mountApiKeyRoutes(r, deps.ApiKeys)
+		})
+	}
+
+	if deps.Runtimes != nil {
+		rtDeps := runtimesDeps{
+			Runtimes: deps.Runtimes,
+			ApiKeys:  deps.ApiKeys,
+			Tenants:  deps.Tenants,
+		}
+		r.Route("/v1/runtimes", func(r chi.Router) {
+			mountRuntimeRoutes(r, rtDeps)
+		})
+		r.Route("/agents/runtime", func(r chi.Router) {
+			mountRuntimeDaemonRoutes(r, rtDeps)
 		})
 	}
 

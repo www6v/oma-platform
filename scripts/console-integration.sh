@@ -194,6 +194,58 @@ check(
 )
 check("session_type", sess.get("type") == "session", sess.get("type"))
 
+log("connect-runtime flow (POST /v1/runtimes/connect-runtime + exchange)")
+runtime_state = "integration-runtime-state"
+_, connect = req(
+    "POST",
+    "/v1/runtimes/connect-runtime",
+    {"state": runtime_state},
+    expect=(200,),
+)
+check("connect_runtime_code", isinstance(connect.get("code"), str) and connect["code"], connect)
+check("connect_runtime_expires", isinstance(connect.get("expires_at"), int), connect)
+_, exchanged = req(
+    "POST",
+    "/agents/runtime/exchange",
+    {
+        "code": connect["code"],
+        "state": runtime_state,
+        "machine_id": "integration-machine",
+        "hostname": "integration-host",
+        "os": "darwin",
+        "version": "0.0.1-integration",
+    },
+    expect=(200,),
+)
+check(
+    "runtime_exchange_id",
+    isinstance(exchanged.get("runtime_id"), str) and exchanged["runtime_id"],
+    exchanged,
+)
+check(
+    "runtime_exchange_token",
+    isinstance(exchanged.get("token"), str)
+    and exchanged["token"].startswith("sk_machine_"),
+    exchanged,
+)
+check(
+    "runtime_exchange_agent_key",
+    isinstance(exchanged.get("agent_api_key"), str)
+    and exchanged["agent_api_key"].startswith("oma_"),
+    exchanged,
+)
+runtime_id = exchanged.get("runtime_id")
+_, runtime_list = req("GET", "/v1/runtimes")
+check(
+    "runtime_list_nonempty",
+    isinstance(runtime_list.get("runtimes"), list)
+    and len(runtime_list["runtimes"]) >= 1,
+    runtime_list,
+)
+if runtime_id:
+    req("DELETE", f"/v1/runtimes/{runtime_id}", expect=(200,))
+
+fid = None
 if sid:
     log(f"uploading file to session scope (POST /v1/files) scope_id={sid}")
     _, uploaded = req(

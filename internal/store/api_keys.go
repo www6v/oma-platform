@@ -169,6 +169,19 @@ func (r *ApiKeyRepo) Delete(
 	return n > 0, nil
 }
 
+// DeleteByID removes an API key by id across tenants (runtime revoke).
+func (r *ApiKeyRepo) DeleteByID(ctx context.Context, id string) (bool, error) {
+	if id == "" || id == "__legacy__" {
+		return false, nil
+	}
+	res, err := r.db.ExecContext(ctx, `DELETE FROM api_keys WHERE id = ?`, id)
+	if err != nil {
+		return false, fmt.Errorf("delete api key by id: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
 func sha256Hex(s string) string {
 	sum := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(sum[:])

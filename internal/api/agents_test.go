@@ -20,6 +20,60 @@ import (
 	"github.com/open-ma/oma-building/internal/workdir"
 )
 
+func testRouterDeps(
+	t *testing.T,
+	db *sql.DB,
+	client harness.Client,
+	outputsDir string,
+) (api.Deps, *session.Registry) {
+	t.Helper()
+	agents := store.NewAgentRepo(db)
+	environments := store.NewEnvironmentRepo(db)
+	if err := environments.EnsureDefault(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	modelCards := store.NewModelCardRepo(db)
+	vaults := store.NewVaultRepo(db)
+	credentials := store.NewCredentialRepo(db)
+	skillFiles := store.NewSkillFileStore(t.TempDir())
+	fileBlobs := fileblob.NewStore(t.TempDir())
+	files := store.NewFileRepo(db)
+	skills := store.NewSkillRepo(db, skillFiles)
+	models := &modelresolve.Resolver{Cards: modelCards}
+	sessions := store.NewSessionRepo(db, agents, environments)
+	events := store.NewEventRepo(db)
+	pending := store.NewPendingRepo(db)
+	hub := stream.NewHub()
+	reg := session.NewRegistry()
+	workdirs := workdir.NewManager(t.TempDir())
+	if outputsDir == "" {
+		outputsDir = t.TempDir()
+	}
+	outputs := sessionoutputs.NewStore(outputsDir)
+
+	deps := api.Deps{
+		Agents:         agents,
+		Environments:   environments,
+		ModelCards:     modelCards,
+		Vaults:         vaults,
+		Credentials:    credentials,
+		Skills:         skills,
+		SkillFiles:     skillFiles,
+		Files:          files,
+		FileBlobs:      fileBlobs,
+		SessionOutputs: outputs,
+		ApiKeys:        store.NewApiKeyRepo(db),
+		Tenants:        store.NewTenantRepo(db),
+		Runtimes:       store.NewRuntimeRepo(db),
+		AuthDisabled:   true,
+		Sessions: api.NewSessionHandlers(
+			sessions, events, pending, hub, reg, workdirs,
+			outputs, client, models,
+		),
+	}
+	return deps, reg
+}
+
 func testRouter(t *testing.T) http.Handler {
 	t.Helper()
 	handler, _ := testRouterHarness(t, &harness.FakeClient{})
@@ -34,43 +88,8 @@ func testRouterWithOutputs(t *testing.T, outputsDir string) http.Handler {
 	}
 	t.Cleanup(func() { _ = store.Close(db) })
 
-	agents := store.NewAgentRepo(db)
-	environments := store.NewEnvironmentRepo(db)
-	if err := environments.EnsureDefault(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	modelCards := store.NewModelCardRepo(db)
-	vaults := store.NewVaultRepo(db)
-	credentials := store.NewCredentialRepo(db)
-	skillFiles := store.NewSkillFileStore(t.TempDir())
-	fileBlobs := fileblob.NewStore(t.TempDir())
-	files := store.NewFileRepo(db)
-	skills := store.NewSkillRepo(db, skillFiles)
-	models := &modelresolve.Resolver{Cards: modelCards}
-	sessions := store.NewSessionRepo(db, agents, environments)
-	events := store.NewEventRepo(db)
-	pending := store.NewPendingRepo(db)
-	hub := stream.NewHub()
-	reg := session.NewRegistry()
-	workdirs := workdir.NewManager(t.TempDir())
-	outputs := sessionoutputs.NewStore(outputsDir)
-
-	return api.NewRouter(api.Deps{
-		Agents:         agents,
-		Environments:   environments,
-		ModelCards:     modelCards,
-		Vaults:         vaults,
-		Credentials:    credentials,
-		Skills:         skills,
-		SkillFiles:     skillFiles,
-		Files:          files,
-		FileBlobs:      fileBlobs,
-		SessionOutputs: outputs,
-		Sessions: api.NewSessionHandlers(
-			sessions, events, pending, hub, reg, workdirs,
-			outputs, &harness.FakeClient{}, models,
-		),
-	})
+	deps, _ := testRouterDeps(t, db, &harness.FakeClient{}, outputsDir)
+	return api.NewRouter(deps)
 }
 
 func testRouterHarness(
@@ -84,43 +103,8 @@ func testRouterHarness(
 	}
 	t.Cleanup(func() { _ = store.Close(db) })
 
-	agents := store.NewAgentRepo(db)
-	environments := store.NewEnvironmentRepo(db)
-	if err := environments.EnsureDefault(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	modelCards := store.NewModelCardRepo(db)
-	vaults := store.NewVaultRepo(db)
-	credentials := store.NewCredentialRepo(db)
-	skillFiles := store.NewSkillFileStore(t.TempDir())
-	fileBlobs := fileblob.NewStore(t.TempDir())
-	files := store.NewFileRepo(db)
-	skills := store.NewSkillRepo(db, skillFiles)
-	models := &modelresolve.Resolver{Cards: modelCards}
-	sessions := store.NewSessionRepo(db, agents, environments)
-	events := store.NewEventRepo(db)
-	pending := store.NewPendingRepo(db)
-	hub := stream.NewHub()
-	reg := session.NewRegistry()
-	workdirs := workdir.NewManager(t.TempDir())
-	outputs := sessionoutputs.NewStore(t.TempDir())
-
-	handler := api.NewRouter(api.Deps{
-		Agents:       agents,
-		Environments: environments,
-		ModelCards:   modelCards,
-		Vaults:       vaults,
-		Credentials:  credentials,
-		Skills:       skills,
-		SkillFiles:   skillFiles,
-		Files:        files,
-		FileBlobs:    fileBlobs,
-		SessionOutputs: outputs,
-		Sessions: api.NewSessionHandlers(
-			sessions, events, pending, hub, reg, workdirs, outputs, client, models,
-		),
-	})
-	return handler, reg
+	deps, reg := testRouterDeps(t, db, client, "")
+	return api.NewRouter(deps), reg
 }
 
 func testRouterSharedDB(
@@ -151,16 +135,20 @@ func testRouterSharedDB(
 	outputs := sessionoutputs.NewStore(t.TempDir())
 
 	handler := api.NewRouter(api.Deps{
-		Agents:       agents,
-		Environments: environments,
-		ModelCards:   modelCards,
-		Vaults:       vaults,
-		Credentials:  credentials,
-		Skills:       skills,
-		SkillFiles:   skillFiles,
-		Files:        files,
-		FileBlobs:    fileBlobs,
+		Agents:         agents,
+		Environments:   environments,
+		ModelCards:     modelCards,
+		Vaults:         vaults,
+		Credentials:    credentials,
+		Skills:         skills,
+		SkillFiles:     skillFiles,
+		Files:          files,
+		FileBlobs:      fileBlobs,
 		SessionOutputs: outputs,
+		ApiKeys:        store.NewApiKeyRepo(db),
+		Tenants:        store.NewTenantRepo(db),
+		Runtimes:       store.NewRuntimeRepo(db),
+		AuthDisabled:   true,
 		Sessions: api.NewSessionHandlers(
 			sessions, events, pending, hub, reg, workdirs, outputs, client, models,
 		),

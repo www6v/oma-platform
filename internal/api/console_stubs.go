@@ -24,10 +24,6 @@ func mountConsoleStubRoutes(
 	r chi.Router,
 	deps consoleStubDeps,
 ) {
-	r.Get("/v1/runtimes", handleRuntimesListStub)
-	r.Post("/v1/runtimes/connect-runtime", handleStubNotImplemented)
-	r.Delete("/v1/runtimes/{id}", handleStubNotImplemented)
-
 	r.Get("/v1/models/list", handleModelsListStub)
 
 	r.Route("/v1/files", func(r chi.Router) {

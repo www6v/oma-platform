@@ -44,6 +44,11 @@ func Middleware(cfg Config) func(http.Handler) http.Handler {
 		return func(next http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				ctx := WithTenant(r.Context(), fallbackTenant)
+				ctx = WithUser(ctx, User{
+					ID:    "default",
+					Email: "default@local",
+					Name:  "Default User",
+				})
 				next.ServeHTTP(w, r.WithContext(ctx))
 			})
 		}
@@ -158,6 +163,9 @@ func isExempt(path string, consoleMounted bool) bool {
 		return true
 	}
 	if strings.HasPrefix(path, "/auth/") {
+		return true
+	}
+	if strings.HasPrefix(path, "/agents/runtime") {
 		return true
 	}
 	if consoleMounted && !strings.HasPrefix(path, "/v1/") {

@@ -89,6 +89,7 @@ func main() {
 	sessionOutputs := sessionoutputs.NewStore(outputsDir)
 	apiKeys := store.NewApiKeyRepo(db)
 	tenants := store.NewTenantRepo(db)
+	runtimes := store.NewRuntimeRepo(db)
 	modelResolver := &modelresolve.Resolver{Cards: modelCards}
 	sessions := store.NewSessionRepo(db, agents, environments)
 	if n, err := sessions.RecoverRunning(context.Background()); err != nil {
@@ -130,6 +131,7 @@ func main() {
 		SessionOutputs: sessionOutputs,
 		ApiKeys:        apiKeys,
 		Tenants:        tenants,
+		Runtimes:       runtimes,
 		Sessions: api.NewSessionHandlers(
 			sessions, events, pending, hub, registry, workdirs,
 			sessionOutputs, harnessClient, modelResolver,
