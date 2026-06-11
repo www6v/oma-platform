@@ -32,8 +32,9 @@ type Deps struct {
 	SessionOutputs *sessionoutputs.Store
 	ApiKeys      *store.ApiKeyRepo
 	Tenants      *store.TenantRepo
-	Runtimes     *store.RuntimeRepo
-	Sessions     *sessionHandlers
+	Runtimes       *store.RuntimeRepo
+	Integrations   *store.IntegrationRepo
+	Sessions       *sessionHandlers
 	APIKey       string
 	ConsoleDir   string
 	AuthDisabled bool
@@ -147,6 +148,11 @@ func NewRouter(deps Deps) http.Handler {
 			mountRuntimeDaemonRoutes(r, rtDeps)
 		})
 	}
+
+	mountIntegrationRoutes(r, integrationsDeps{
+		Integrations:  deps.Integrations,
+		GatewayOrigin: integrationsGatewayOrigin(),
+	})
 
 	mountConsoleStubRoutes(r, consoleStubDeps{
 		SessionOutputs: deps.SessionOutputs,

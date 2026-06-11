@@ -245,6 +245,76 @@ check(
 if runtime_id:
     req("DELETE", f"/v1/runtimes/{runtime_id}", expect=(200,))
 
+log("linear publication-first flow (POST/PATCH /v1/integrations/linear/...)")
+_, linear_pub = req(
+    "POST",
+    "/v1/integrations/linear/publications",
+    {
+        "agentId": aid,
+        "environmentId": env_id,
+        "personaName": "Console Integration Bot",
+        "returnUrl": "http://localhost/console/integrations",
+    },
+    expect=(200,),
+)
+check(
+    "linear_publication_id",
+    isinstance(linear_pub.get("publication_id"), str)
+    and linear_pub["publication_id"],
+    linear_pub,
+)
+pub_id = linear_pub.get("publication_id")
+_, pending_pubs = req(
+    "GET",
+    "/v1/integrations/linear/publications?status=pending",
+    expect=(200,),
+)
+check(
+    "linear_pending_publications",
+    isinstance(pending_pubs.get("data"), list)
+    and len(pending_pubs["data"]) >= 1,
+    pending_pubs,
+)
+if pub_id:
+    _, creds = req(
+        "PATCH",
+        f"/v1/integrations/linear/publications/{pub_id}/credentials",
+        {
+            "clientId": "console-integration-client",
+            "clientSecret": "console-integration-secret",
+            "webhookSecret": "lin_wh_console_integration",
+            "returnUrl": "http://localhost/console/integrations",
+        },
+        expect=(200,),
+    )
+    check(
+        "linear_install_url",
+        isinstance(creds.get("install_url"), str) and creds["install_url"],
+        creds,
+    )
+    _, rule = req(
+        "POST",
+        f"/v1/integrations/linear/publications/{pub_id}/dispatch-rules",
+        {"filter_label": "bot-ready", "name": "Integration pickup"},
+        expect=(201,),
+    )
+    check("linear_dispatch_rule_id", isinstance(rule.get("id"), str), rule)
+    _, rules = req(
+        "GET",
+        f"/v1/integrations/linear/publications/{pub_id}/dispatch-rules",
+        expect=(200,),
+    )
+    check(
+        "linear_dispatch_rules",
+        isinstance(rules.get("rules"), list) and len(rules["rules"]) >= 1,
+        rules,
+    )
+    req(
+        "DELETE",
+        f"/v1/integrations/linear/publications/{pub_id}",
+        expect=(200,),
+    )
+
 fid = None
 if sid:
     log(f"uploading file to session scope (POST /v1/files) scope_id={sid}")

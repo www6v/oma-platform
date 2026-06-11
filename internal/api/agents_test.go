@@ -65,6 +65,7 @@ func testRouterDeps(
 		ApiKeys:        store.NewApiKeyRepo(db),
 		Tenants:        store.NewTenantRepo(db),
 		Runtimes:       store.NewRuntimeRepo(db),
+		Integrations:   store.NewIntegrationRepo(db),
 		AuthDisabled:   true,
 		Sessions: api.NewSessionHandlers(
 			sessions, events, pending, hub, reg, workdirs,
@@ -148,6 +149,7 @@ func testRouterSharedDB(
 		ApiKeys:        store.NewApiKeyRepo(db),
 		Tenants:        store.NewTenantRepo(db),
 		Runtimes:       store.NewRuntimeRepo(db),
+		Integrations:   store.NewIntegrationRepo(db),
 		AuthDisabled:   true,
 		Sessions: api.NewSessionHandlers(
 			sessions, events, pending, hub, reg, workdirs, outputs, client, models,

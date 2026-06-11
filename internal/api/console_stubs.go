@@ -59,7 +59,6 @@ func mountConsoleStubRoutes(
 		r.Delete("/", handleStubNotImplemented)
 	})
 
-	mountIntegrationStubRoutes(r)
 }
 
 func mountIntegrationStubRoutes(r chi.Router) {
@@ -82,9 +81,9 @@ func mountIntegrationStubRoutes(r chi.Router) {
 					r.Get("/", handleStubNotFound)
 					r.Patch("/", handleStubNotImplemented)
 					r.Delete("/", handleStubNotImplemented)
-					r.Get("/form-token", handleStubNotFound)
+					r.Post("/form-token", handleStubNotImplemented)
 					r.Patch("/credentials", handleStubNotImplemented)
-					r.Get("/dispatch-rules", writeEmptyDataList)
+					r.Get("/dispatch-rules", writeEmptyRulesList)
 					r.Post("/dispatch-rules", handleStubNotImplemented)
 					r.Route("/dispatch-rules/{ruleId}", func(r chi.Router) {
 						r.Patch("/", handleStubNotImplemented)
@@ -126,6 +125,10 @@ func handleModelsListStub(w http.ResponseWriter, _ *http.Request) {
 
 func writeEmptyDataList(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"data": []any{}})
+}
+
+func writeEmptyRulesList(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"rules": []any{}})
 }
 
 func handleStubNotFound(w http.ResponseWriter, _ *http.Request) {
