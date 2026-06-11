@@ -86,7 +86,25 @@ def test_unsupported_oma_tools_are_skipped() -> None:
             }
         ],
     )
-    assert pypi_tools_from_agent(agent) == ["read"]
+    assert pypi_tools_from_agent(agent) == ["read", "web_fetch"]
+
+
+def test_session_tool_config_loads_web_fetch_extension() -> None:
+    from oma_adapter.tools import (
+        WEB_FETCH_EXTENSION_PATH,
+        session_tool_config_from_agent,
+    )
+
+    agent = AgentSnapshot(
+        id="a",
+        name="n",
+        model="m",
+        tools=[{"type": "agent_toolset_20260401"}],
+    )
+    cfg = session_tool_config_from_agent(agent)
+    assert "web_fetch" in pypi_tools_from_agent(agent)
+    assert cfg.extension_paths == [str(WEB_FETCH_EXTENSION_PATH)]
+    assert "bash" in cfg.builtin_tools
 
 
 def test_legacy_name_item() -> None:

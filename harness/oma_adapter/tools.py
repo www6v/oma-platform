@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from oma_adapter.types import AgentSnapshot
 
-# OMA agent_toolset_20260401 names that piPy can satisfy today.
+# OMA agent_toolset_20260401 defaults (open-managed-agents harness/tools.ts).
 OMA_DEFAULT_TOOLS = [
     "bash",
     "read",
@@ -14,6 +16,7 @@ OMA_DEFAULT_TOOLS = [
     "edit",
     "glob",
     "grep",
+    "web_fetch",
 ]
 
 # OMA name -> piPy builtin (glob has no piPy equivalent; find covers it).
@@ -24,20 +27,48 @@ OMA_TO_PIPY: dict[str, str] = {
     "edit": "edit",
     "glob": "find",
     "grep": "grep",
+    "web_fetch": "web_fetch",
     "ls": "ls",
     "find": "find",
 }
 
-PIPY_TOOL_ORDER = ["bash", "read", "write", "edit", "grep", "find", "ls"]
+PIPY_BUILTIN_ORDER = ["bash", "read", "write", "edit", "grep", "find", "ls"]
+PIPY_EXTENSION_ORDER = ["web_fetch"]
+PIPY_TOOL_ORDER = [*PIPY_BUILTIN_ORDER, *PIPY_EXTENSION_ORDER]
+
+WEB_FETCH_EXTENSION_PATH = (
+    Path(__file__).resolve().parent / "extensions" / "web_fetch.py"
+)
+
+OMA_EXTENSION_TOOLS = frozenset({"web_fetch"})
+PIPY_BUILTIN_NAMES = frozenset(PIPY_BUILTIN_ORDER)
 
 _DEFAULT_OMA_SET = {OMA_TO_PIPY[name] for name in OMA_DEFAULT_TOOLS if name in OMA_TO_PIPY}
+_DEFAULT_OMA_SET.update(
+    name for name in OMA_DEFAULT_TOOLS if name in OMA_EXTENSION_TOOLS
+)
 DEFAULT_PIPY_TOOLS = [name for name in PIPY_TOOL_ORDER if name in _DEFAULT_OMA_SET]
 
 
+@dataclass(frozen=True)
+class SessionToolConfig:
+    """Resolved piPy session tool wiring for a turn."""
+
+    builtin_tools: list[str]
+    extension_paths: list[str]
+
+
+def _extension_paths_for_names(names: set[str]) -> list[str]:
+    paths: list[str] = []
+    if "web_fetch" in names and WEB_FETCH_EXTENSION_PATH.is_file():
+        paths.append(str(WEB_FETCH_EXTENSION_PATH))
+    return paths
+
+
 def _pipy_name(raw: str) -> str | None:
-    """Resolve an OMA or piPy tool name to a supported piPy builtin."""
+    """Resolve an OMA or piPy tool name to a supported harness tool."""
     mapped = OMA_TO_PIPY.get(raw, raw)
-    if mapped in PIPY_TOOL_ORDER:
+    if mapped in PIPY_BUILTIN_NAMES or mapped in OMA_EXTENSION_TOOLS:
         return mapped
     return None
 
@@ -86,10 +117,9 @@ def _pipy_from_toolset(toolset: dict[str, Any]) -> list[str]:
     return _ordered_pipy_names(pipy_names)
 
 
-def pypi_tools_from_agent(agent: AgentSnapshot) -> list[str]:
-    """Resolve piPy tool list from an OMA agent snapshot."""
+def _resolved_tool_names(agent: AgentSnapshot) -> set[str]:
     if not agent.tools:
-        return list(DEFAULT_PIPY_TOOLS)
+        return set(DEFAULT_PIPY_TOOLS)
 
     pipy_names: set[str] = set()
     saw_toolset = False
@@ -108,10 +138,25 @@ def pypi_tools_from_agent(agent: AgentSnapshot) -> list[str]:
             if pipy is not None:
                 pipy_names.add(pipy)
 
-    if saw_toolset:
-        return _ordered_pipy_names(pipy_names)
+    if saw_toolset or pipy_names:
+        return pipy_names
 
-    if pipy_names:
-        return _ordered_pipy_names(pipy_names)
+    return set(DEFAULT_PIPY_TOOLS)
 
-    return list(DEFAULT_PIPY_TOOLS)
+
+def pypi_tools_from_agent(agent: AgentSnapshot) -> list[str]:
+    """Resolve enabled harness tool names from an OMA agent snapshot."""
+    return _ordered_pipy_names(_resolved_tool_names(agent))
+
+
+def session_tool_config_from_agent(agent: AgentSnapshot) -> SessionToolConfig:
+    """Split enabled tools into piPy builtins vs extension module paths."""
+    enabled = _resolved_tool_names(agent)
+    builtin_tools = [
+        name for name in PIPY_BUILTIN_ORDER if name in enabled
+    ]
+    extension_paths = _extension_paths_for_names(enabled)
+    return SessionToolConfig(
+        builtin_tools=builtin_tools,
+        extension_paths=extension_paths,
+    )

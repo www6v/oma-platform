@@ -6,6 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.115.0",
   "uvicorn[standard]>=0.32.0",
+  "httpx>=0.28.0",
   "pi-coding-agent",
   "pi-ai",
 ]
@@ -16,6 +17,9 @@ pi-ai = { path = "../../../piPy-env/piPy/packages/pi_ai", editable = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[dependency-groups]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.24"]
 
 [build-system]
 requires = ["hatchling"]

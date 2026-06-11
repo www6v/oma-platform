@@ -1,391 +1,370 @@
-# OMA → oma-building MVP 迁移计划
+# open-managed-agents → oma-platform 迁移计划
 
-> Engineering review by `/plan-eng-review` — 2026-06-07  
-> 默认决策（用户跳过 D1）：**Node 自托管 MVP**，对齐 `open-managed-agents` README 冒烟测试路径。
+> Engineering review by `/plan-eng-review` — 2026-06-11  
+> 目标仓库：`oma-platform`（Go 平台 + Python piPy harness 侧车）  
+> 参考源：`../open-managed-agents`（Cloudflare Workers meta-harness）  
+> 已确认范围：**P0 + P1 + P2**（不含 CF SessionDO / Container 重写）
+
+## 文档说明
+
+本文档记录 `open-managed-agents` 与 `oma-platform` 的**功能对齐矩阵**与分阶段迁移 backlog。
+
+早期版本（2026-06-07）假设 TypeScript `main-node` 复制路径；当前实现已改为 **Go `oma-server` + Python `harness/` 侧车**，矩阵以实际代码为准。验收脚本：`scripts/console-integration.sh`。
+
+---
 
 ## 目标
 
-将 `open-managed-agents` 的**最小可运行闭环**迁入 `oma-building`：
+严格对齐 OMA 协议与 Console 契约，使自托管栈达到与 `open-managed-agents` 相当的日常可用能力：
 
 ```
-POST /v1/agents  →  POST /v1/sessions  →  POST /v1/sessions/:id/events  →  Harness 调 LLM + 沙箱执行工具
+POST /v1/agents  →  POST /v1/sessions  →  POST /v1/sessions/:id/events
+  →  Harness (piPy) 调 LLM + 沙箱工具  →  SSE 流式事件
 ```
 
-验收标准（与源仓库 README.zh-CN 一致）：
+冒烟路径（与源仓库 README 一致）：
 
 ```bash
 AID=$(curl -s -X POST localhost:8787/v1/agents -H 'content-type: application/json' \
-  -d '{"name":"hello","model":"claude-sonnet-4-6","tools":[{"type":"agent_toolset_20260401"}]}' | jq -r .id)
+  -H "Authorization: Bearer $OMA_API_KEY" \
+  -d '{"name":"hello","model":{"id":"claude-sonnet-4-6","speed":"standard"},"tools":[{"type":"agent_toolset_20260401"}]}' | jq -r .id)
 
 SID=$(curl -s -X POST localhost:8787/v1/sessions -H 'content-type: application/json' \
+  -H "Authorization: Bearer $OMA_API_KEY" \
   -d "{\"agent\":\"$AID\"}" | jq -r .id)
 
 curl -s -X POST localhost:8787/v1/sessions/$SID/events -H 'content-type: application/json' \
+  -H "Authorization: Bearer $OMA_API_KEY" \
   -d '{"events":[{"type":"user.message","content":[{"type":"text","text":"Run: uname -a"}]}]}'
 ```
 
----
-
-## Step 0 — Scope Challenge
-
-### 1. 已有代码可复用什么？
-
-| 子问题 | 源仓库已有方案 | MVP 建议 |
-|--------|----------------|----------|
-| Agent CRUD | `packages/agents-store` + `http-routes/buildAgentRoutes` | 直接复制 |
-| Session 生命周期 | `packages/sessions-store` + `session-runtime` + `event-log` | 直接复制 |
-| Harness（Brain） | `apps/agent/src/harness/*`（main-node 已 in-process 引用） | 复制 harness 子集，**不**搬 SessionDO |
-| 沙箱 | `packages/sandbox` → `LocalSubprocessSandbox` | 仅 Node 适配器 |
-| API 路由 | `packages/http-routes` | 先只挂 agents + sessions + health |
-| 自托管入口 | `apps/main-node`（~1350 行 wiring） | 裁剪后作为 `apps/api` |
-| 认证 | `AUTH_DISABLED=1` → `tenant_id=default` | MVP 默认关闭 auth |
-
-### 2. 最小变更集
-
-**In scope（MVP）**
-
-- pnpm workspace 脚手架 + TypeScript + vitest
-- ~18 个 package（见下表）
-- 1 个 app：`apps/api`（由 `main-node` 裁剪）
-- `docker-compose.yml`（单服务或 + oma-vault 可选）
-- `.env.example` + `ANTHROPIC_API_KEY`
-
-**NOT in scope（显式 defer）**
-
-| 模块 | 理由 |
-|------|------|
-| `apps/main` + `apps/agent` Worker（CF SessionDO） | Phase 2；MVP 用 in-process harness |
-| `apps/integrations`（Linear/GitHub/Slack） | 非冒烟路径 |
-| `apps/console` | MVP 用 curl；Console 可 iframe 同源 later |
-| `rl/` 强化学习子系统 | 独立产品线 |
-| `packages/dreams-*`, `evals-*` | 高级功能 |
-| 多租户 D1 路由（`tenant-db`, `tenant-dbs-store`） | 单 tenant SQLite 够用 |
-| `acp-runtime`, bridge daemon | 本地 Claude Code 委派，非核心 |
-| `cf-billing`, Analytics Engine | 运维/计费 |
-| Postgres 路径 | SQLite 先通，Postgres adapter 已有可 Phase 1.5 启用 |
-| Model Cards UI / Vault UI | API 层可后加；MVP 用 env `ANTHROPIC_API_KEY` |
-
-### 3. 复杂度 smell
-
-全量迁移 = **52 packages × 4 apps** → 触发 scope reduction。
-
-MVP 切片 = **~18 packages × 1 app** → 可接受。
-
-### 4. Search / Layer 标注
-
-| 选型 | Layer | 说明 |
-|------|-------|------|
-| 复用 `http-routes` + store 抽象 | **[Layer 1]** | 已验证的分层，勿重写 REST |
-| 复用 `DefaultHarness` + `buildTools` | **[Layer 1]** | Brain 可插拔接口已存在 |
-| LocalSubprocess 沙箱 | **[Layer 1]** | docker-compose 默认路径 |
-| 新建简化 Agent loop | **[Layer 3]** | ❌ 不推荐 — 丢 event-log/recovery 语义 |
-| 整仓 copy 再删 | **[Layer 2]** | 快但债高；仅当时间极紧 |
-
-### 5. Completeness（Boil the Lake）
-
-MVP 应包含：
-
-- Event log 持久化 + crash recovery 测试（`session-runtime` 已有）
-- `agent_toolset_20260401` 基础工具（bash/file/web_fetch）
-- 单元测试：`agents-store`, `sessions-store`, `event-log`, harness smoke
-
-MVP 可省略完整 E2E Playwright、100% 集成测试覆盖 — 但**必须有**上述 core 的 vitest。
+Console 全量 wire 验收：`scripts/console-integration.sh`
 
 ---
 
-## 架构
+## 架构对齐
 
-### 目标拓扑（oma-building MVP）
+### 当前拓扑（oma-platform）
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  apps/api (Hono + Node serve)                           │
-│    ├── /v1/agents      ← http-routes/buildAgentRoutes   │
-│    ├── /v1/sessions    ← http-routes/buildSessionRoutes │
-│    ├── /health                                         │
-│    └── in-process: DefaultHarness + NodeSessionRouter   │
+│  oma-server (Go chi)                         :8787      │
+│    /v1/agents | sessions | vaults | skills | …         │
+│    session.Registry + stream.Hub (SSE)                   │
+│    integrations | eval CRUD | runtimes | memory_stores   │
+│    CONSOLE_DIR → Console SPA 同源                        │
 ├─────────────────────────────────────────────────────────┤
-│  packages/                                             │
-│    shared, api-types, schema, sql-client               │
-│    agents-store, sessions-store, environments-store    │
-│    event-log, session-runtime, sandbox, markdown       │
-│    http-routes (trimmed exports), observability        │
-│    kv-store (api keys — optional Phase 1.1)            │
+│  harness (Python piPy sidecar)               :8090      │
+│    POST /internal/turn — 无状态 LLM 回合                  │
 ├─────────────────────────────────────────────────────────┤
-│  Storage: SQLite (oma.db) + local FS (sandboxes, blobs) │
-│  Sandbox: LocalSubprocessSandbox                       │
+│  Storage: SQLite (oma.db) + 本地 FS                      │
+│    sandboxes/ | skills/ | files/ | session-outputs/      │
 └─────────────────────────────────────────────────────────┘
 ```
 
-### 与源架构差异（ intentional ）
+### 与 open-managed-agents 差异（有意保留）
 
-| 维度 | open-managed-agents (CF) | oma-building MVP |
-|------|--------------------------|------------------|
-| Session 状态 | SessionDO + SQLite in DO | SQL event log + in-process router |
-| 沙箱 | CF Container per env | LocalSubprocess 单进程 |
-| Brain 位置 | agent Worker isolate | main-node 同进程 |
-| 多环境 Worker | `SANDBOX_*` binding | 单 sandbox workdir |
+| 维度 | open-managed-agents (CF) | oma-platform |
+|------|--------------------------|--------------|
+| API 入口 | `apps/main` (Hono Worker) | `cmd/oma-server` (Go) |
+| Session 状态 | SessionDO + DO 内 SQLite | SQLite event log + in-process Registry |
+| Brain | `apps/agent` DefaultHarness | `harness/oma_adapter` (piPy) |
+| 沙箱 | CF Container per environment | `SANDBOX_WORKDIR/<session_id>/` |
+| 集成 | 独立 `apps/integrations` Worker | 同进程 `internal/api/integrations.go` |
+| 对象存储 | R2 | 本地 `fileblob` / skill files |
+| 多租户 | D1 分片 + KV | 单库 `tenant_id` 列 |
 
-**Phase 2 迁移键：** `session-runtime` 的 ports（`SessionRouter`, `SessionLifecycle`）不变；替换 `NodeSessionRouter` → `CfSessionRouter` 即可上 CF。
-
-### Package 迁移清单（18）
-
-```
-packages/
-  shared/
-  api-types/
-  schema/
-  sql-client/
-  agents-store/
-  sessions-store/
-  environments-store/
-  event-log/
-  session-runtime/
-  sandbox/
-  markdown/
-  http-routes/          # 初期只 export agents + sessions + health helpers
-  observability/
-  kv-store/             # 若 MVP 需要 API key；否则 defer
-  blob-store/           # session outputs 可选
-  files-store/          # 若 tool 需要 promote file；可 Phase 1.1
-
-apps/
-  harness/              # 从 apps/agent 抽出 harness/ 为独立 package 或 apps/harness
-  api/                  # 从 apps/main-node 裁剪
-```
-
-**[P1] (confidence: 9/10)** — 不要把 `apps/agent` 整包复制：其中 SessionDO、CF Sandbox、outbound proxy 与 CF 强耦合。只 export harness 子路径（`default-loop`, `tools`, `provider`）。
-
-**[P1] (confidence: 8/10)** — `http-routes` 依赖链过宽（integrations, dreams, evals）。MVP 应 fork 为 `http-routes-core` 或在 `oma-building` 内新建薄路由层，只 re-export agents/sessions，避免拉入 10+ 无关 store。
-
-### 数据流（ASCII）
-
-```
-Client                    apps/api                 SQLite
-  │                          │                       │
-  │ POST /v1/agents          │                       │
-  ├─────────────────────────►│ agents-store.insert   ├──► agents
-  │                          │                       │
-  │ POST /v1/sessions        │                       │
-  ├─────────────────────────►│ sessions-store        ├──► sessions
-  │                          │ SqlEventLog.init      ├──► session_events
-  │                          │                       │
-  │ POST .../events          │                       │
-  ├─────────────────────────►│ append user.message   ├──► session_events
-  │                          │ DefaultHarness.run    │
-  │                          │   ├─ resolveModel     │
-  │                          │   ├─ buildTools       │
-  │                          │   └─ LocalSubprocess  ├──► bash in workdir
-  │                          │ append assistant/tool ├──► session_events
-  │◄─────────────────────────┤ SSE or sync response  │
-```
-
-### 安全架构（MVP）
-
-- `AUTH_DISABLED=1` 仅本地；生产必须 `BETTER_AUTH_SECRET` + API key
-- 沙箱：`SANDBOX_WORKDIR` 隔离；禁止挂载 host `/`
-- 密钥：MVP 用 `ANTHROPIC_API_KEY` env；Vault/outbound 代理 Phase 1.1
+**Phase 3（defer）：** SessionDO、CF Container、R2 FUSE memory、Analytics Engine 计费、lane 部署。
 
 ---
 
-## What already exists（源仓库可复用）
+## 功能对齐矩阵
 
-| 能力 | 位置 | MVP 是否复用 |
-|------|------|-------------|
-| Agent 版本化 CRUD | `packages/agents-store` | ✅ |
-| Session + event log | `packages/sessions-store`, `event-log` | ✅ |
-| Harness loop | `apps/agent/src/harness/` | ✅（extract） |
-| REST 路由定义 | `packages/http-routes/src/agents.ts`, `sessions.ts` | ✅ |
-| Node 自托管 wiring 参考 | `apps/main-node/src/index.ts` | ✅（裁剪模板） |
-| Docker 部署 | `docker-compose.yml`, `apps/main-node/Dockerfile` | ✅ |
-| CF SessionDO 恢复 | `apps/agent/src/session-do.ts` | ❌ Phase 2 |
-| Console UI | `apps/console` | ❌ Phase 2 |
-| SDK/CLI 发布 | `packages/sdk`, `packages/cli` | ❌ Phase 3 |
+图例：**✅ 已对齐** | **🟡 部分** | **❌ 未迁移** | **⏭ CF 专有 defer**
+
+### P0 — 核心 Agent 闭环
+
+| 功能域 | 源参考 | oma-platform 实现 | 状态 | 缺口 / 备注 |
+|--------|--------|-------------------|------|-------------|
+| Agent CRUD + 版本 | `packages/agents-store`, `buildAgentRoutes` | `internal/api/agents.go`, `store/agents.go` | ✅ | AMA wire 已测 |
+| Session + event log | SessionDO, `event-log` | `sessions.go`, `store/events.go` | ✅ | |
+| SSE 流 | SessionDO broadcast | `internal/stream/hub.go` | ✅ | |
+| user.interrupt | SessionDO | `internal/api/pending.go` | ✅ | |
+| Crash recovery | `runtime/recovery.ts` | `SessionRepo.RecoverRunning()` | ✅ | 启动时重置 orphan `running` |
+| Harness turn | `harness/default-loop.ts` | `harness/oma_adapter/turn.py` | ✅ | HTTP 侧车，无状态 |
+| agent_toolset 基础工具 | bash/read/write/edit/glob/grep | `harness/oma_adapter/tools.py` | ✅ | glob 映射为 piPy `find` |
+| web_fetch | `harness/tools.ts` | — | ❌ | P0-1 |
+| web_search | Workers AI | — | ❌ | P2-7 或 defer |
+| MCP 工具 | `mcp-spawner.ts`, `/v1/mcp-proxy` | Agent 可声明 `mcp_servers` | 🟡 | 无 proxy；turn 未挂载 MCP（P0-2） |
+| Vault 凭据注入 | outbound proxy | Vault CRUD + `mcp_oauth_validate` | 🟡 | 沙箱 HTTP 不经 vault 代理（P0-3） |
+| Model 解析 | model card + provider | `internal/modelresolve/` | ✅ | |
+| POST /v1/models/list | `apps/main/routes/models.ts` | `console_stubs.go` 静态列表 | 🟡 | P0-4 |
+| Environment | `environments-store` | `environments.go` | ✅ | 无 per-env 容器镜像 |
+| 沙箱隔离 | CF Container | `internal/workdir/` | 🟡 | 目录级，非容器 |
+| Model card internal key | `/v1/internal/.../key` | — | ❌ | harness 解析用（P0-5） |
+
+### P1 — Console 完整可用 + 集成执行
+
+| 功能域 | 源参考 | oma-platform 实现 | 状态 | 缺口 / 备注 |
+|--------|--------|-------------------|------|-------------|
+| Console 同源 SPA | main `assets` binding | `internal/console/` + `CONSOLE_DIR` | ✅ | 挂载 `open-managed-agents/apps/console/dist` |
+| Auth (API key + cookie) | better-auth | `internal/auth/` | ✅ | `AUTH_UPSTREAM_URL` 或 `AUTH_DISABLED=1` |
+| /v1/me, api_keys, tenants | main routes | `me.go`, `tenant.go` | ✅ | |
+| /v1/stats | `routes/stats.ts` | `stats.go` | ✅ | |
+| Skills CRUD + zip upload | `routes/skills.ts` | `skills.go`, `skillzip/` | ✅ | |
+| Files 上传/下载 | R2 + `files-store` | `files.go`, `fileblob/` | ✅ | 本地 blob，非 R2 |
+| Model Cards CRUD | `model-cards-store` | `model_cards.go` | ✅ | |
+| Vaults + credentials | `vaults-store` | `vaults.go`, `vaultoauth/` | ✅ | OAuth refresh 已有 |
+| Session aux | threads/pending/trajectory/outputs | `session_aux.go`, `trajectory.go` | 🟡 | `threads` 仍为 stub（P1-7） |
+| Integrations Linear/GH/Slack | `apps/integrations` | `integrations.go` | 🟡 | publication/dispatch CRUD 有；**无 webhook/OAuth 执行**（P1-1/2/3） |
+| Eval runs | cron `tickEvalRuns` | `eval_runs.go` | 🟡 | CRUD + `pending`；**无后台 worker**（P1-4） |
+| Runtimes + ACP daemon | RuntimeRoom DO | `runtimes.go`, `runtime_daemon.go` | 🟡 | connect/exchange 有；**无 WS attach**（P1-6） |
+| Memory stores | R2 + FUSE + queue | `memory_stores.go` | 🟡 | SQLite 内联 content；无 retention cron（P1-5） |
+| OAuth (/v1/oauth/*) | `routes/oauth.ts` | — | ❌ | P1-2 |
+| Internal API (/v1/internal/*) | `routes/internal.ts` | — | ❌ | P2-8 |
+
+### P2 — 平台 parity
+
+| 功能域 | 源参考 | oma-platform 实现 | 状态 | 缺口 / 备注 |
+|--------|--------|-------------------|------|-------------|
+| call_agent / 子 Agent | `harness/tools.ts` | — | ❌ | P2-1 |
+| Compaction 上下文压缩 | `harness/compaction.ts` | — | ❌ | P2-2 |
+| Resource mounter | `runtime/resource-mounter.ts` | — | ❌ | memory/files/github（P2-3） |
+| Outcome evaluator | `harness/outcome-evaluator.ts` | — | ❌ | eval 依赖（P2-4） |
+| Dreams | `/v1/dreams`, `dreams-store` | — | ❌ | P2-5 |
+| Cost report | `/v1/cost_report`, `cf-billing` | — | ❌ | 简化 token 聚合（P2-6） |
+| browser tools | `harness/browser-tools.ts` | — | ❌ | P2-7 |
+| /v1/oma/* 路由别名 | main index | — | ❌ | 低优先级兼容 |
+| Rate limiting | CF RL namespaces | — | ❌ | 可用 Go middleware |
+| Multi-tenant D1 分片 | `tenant-db` | 单 SQLite `tenant_id` | 🟡 | 够用至多 replica |
+| SDK / CLI | `packages/sdk`, `packages/cli` | — | ❌ | Phase 3 |
+| RL 子系统 | `rl/` | — | ⏭ | 独立产品线 |
+
+### ⏭ CF 专有（Phase 3+，不在 P0–P2）
+
+| 功能域 | 说明 |
+|--------|------|
+| SessionDO | Durable Object 强一致 session |
+| CF Container 多环境 Worker | `SANDBOX_sandbox_<env>` binding |
+| R2 Event → Queue → memory 索引 | FUSE 写 memory 审计 |
+| Analytics Engine / cf-billing | 用量与计费 |
+| Email OTP | `SEND_EMAIL` binding |
+| lane 部署 | PR 级并行 Worker |
 
 ---
 
-## 测试计划
+## 迁移进度摘要
 
-### 代码路径 + 用户流覆盖图
+| 类别 | 数量 | 说明 |
+|------|------|------|
+| ✅ 已对齐 | ~22 域 | 含 Agent/Session/SSE、Console 挂载、Skills/Files/Vault 等 |
+| 🟡 部分 | ~12 域 | 集成、eval、runtime、memory、models/list、MCP/vault |
+| ❌ 待迁 (P0–P2) | ~15 域 | 见下方 Implementation Tasks |
+| ⏭ CF defer | ~8 域 | SessionDO、Container、RL 等 |
+
+---
+
+## 分阶段迁移路线
+
+### Phase P0 — Harness 与凭据（优先）
+
+| ID | 任务 | 源参考 | oma 落点 | 验收 |
+|----|------|--------|----------|------|
+| P0-1 | web_fetch 工具 | `harness/tools.ts` | `harness/oma_adapter/tools.py`, `turn.py` | Agent 可抓取 URL 并写入 event |
+| P0-2 | MCP 客户端 + 可选 proxy | `mcp-spawner.ts`, `/v1/mcp-proxy` | harness + `internal/api/mcp_proxy.go` | 声明的 mcp_server 可调用 |
+| P0-3 | Vault outbound HTTP 代理 | agent outbound handler | `internal/outbound/` | 凭据不出沙箱明文 |
+| P0-4 | 真实 POST /v1/models/list | `routes/models.ts` | 替换 `handleModelsListStub` | 用 model card key 拉 provider 列表 |
+| P0-5 | model_cards internal key | internal routes | harness turn 或 Go internal 端点 | 侧车解析真实 API key |
+
+### Phase P1 — 集成执行 + Eval + Runtime
+
+| ID | 任务 | 源参考 | oma 落点 | 验收 |
+|----|------|--------|----------|------|
+| P1-1 | Linear webhook → session | `integrations/routes/linear` | webhook handlers + dispatch | issue → `user.message` |
+| P1-2 | OAuth 回调 | `/v1/oauth`, linear pub oauth | `internal/api/oauth.go` | publication install 完成 |
+| P1-3 | GitHub/Slack webhook 最小集 | integrations worker | 同进程或 sidecar | 至少一种 provider E2E |
+| P1-4 | Eval run worker | `tickEvalRuns` | `internal/eval/worker.go` | pending→running→completed |
+| P1-5 | Memory 大对象 + retention | R2 + queue | 本地 FS 或 S3；cron | 大 memory 不撑 SQLite |
+| P1-6 | Runtime WebSocket attach | `/agents/runtime/_attach` | `runtime_daemon.go` | ACP 本地 IDE smoke |
+| P1-7 | Session threads 真实数据 | SessionDO | 从 event log 派生 | Console 非 stub |
+
+### Phase P2 — 高级 Agent + 平台 API
+
+| ID | 任务 | 源参考 | oma 落点 |
+|----|------|--------|----------|
+| P2-1 | call_agent 委派 | `harness/tools.ts` | harness + session API |
+| P2-2 | Compaction | `compaction.ts` | turn 前事件摘要 |
+| P2-3 | Resource mounter | `resource-mounter.ts` | turn 前挂载 memory/files |
+| P2-4 | Outcome evaluator | `outcome-evaluator.ts` | eval worker |
+| P2-5 | Dreams API | `dreams-store` | 新 store + routes |
+| P2-6 | Cost report | `cf-billing` | session token 聚合 |
+| P2-7 | browser / web_search | browser-tools | Playwright sidecar 或 defer |
+| P2-8 | /v1/internal/* | `internal.ts` | 供 integrations 拆分 |
+
+---
+
+## 目标数据流（P1 完成后）
 
 ```
-CODE PATHS                                            USER FLOWS
-[+] POST /v1/agents                                   [+] Create agent via API
-  ├── [GAP] validation errors                           ├── [GAP] invalid model rejection
-  ├── [GAP] duplicate name                              └── [GAP] list/get/archive
-  └── [GAP] tool config variants
-
-[+] POST /v1/sessions                                 [+] Start session
-  ├── [GAP] missing agent                               ├── [GAP] default environment
-  ├── [GAP] agent version binding                       └── [GAP] session list
-
-[+] POST /v1/sessions/:id/events                     [+] Send message → get response
-  ├── [GAP] user.message append                         ├── [★★★ TESTED] uname -a smoke (e2e manual)
-  ├── [GAP] harness tool call loop                      ├── [GAP] SSE stream subscribe
-  ├── [GAP] crash recovery replay                       └── [GAP] error when API key missing
-  └── [GAP] concurrent events
-
-[+] DefaultHarness.runLoop                          
-  ├── [GAP] model resolution (env vs model card)       
-  ├── [GAP] tool execution timeout                     
-  └── [GAP] max turns limit                            
-
-[+] LocalSubprocessSandbox                           
-  ├── [GAP] command allowlist                          
-  └── [GAP] workdir isolation                          
-
-COVERAGE: 1/15 paths tested (7%)  |  MVP target: 80% on in-scope paths before ship
-GAPS: 14 (0 E2E automated — add vitest + one docker smoke script)
+Client / Console
+       │
+       ▼
+┌──────────────────────────────────────┐
+│  oma-server (Go)                      │
+│  agents · sessions · vaults           │
+│  integrations · eval-worker · oauth   │
+│  outbound-proxy · stream.Hub → SSE    │
+└──────────────┬───────────────────────┘
+               │ POST /internal/turn
+               ▼
+┌──────────────────────────────────────┐
+│  harness (Python piPy)                │
+│  bash/file + web_fetch + MCP          │
+│  (+ call_agent / compaction @ P2)     │
+└──────────────┬───────────────────────┘
+               │ tools in workdir
+               ▼
+       SANDBOX_WORKDIR/<session_id>/
+               │
+               ▼
+         SQLite session_events
 ```
 
-### MVP 必须补的测试
+---
 
-| 测试 | 文件 | 优先级 |
-|------|------|--------|
-| Agent CRUD roundtrip | `test/unit/agents.test.ts` | P1 |
-| Session create + event append | `test/unit/sessions.test.ts` | P1 |
-| Event log replay | 复用 `event-log` 现有 tests | P1 |
-| Harness mock LLM one turn | `test/unit/harness-smoke.test.ts` | P1 |
-| Docker health + smoke script | `scripts/smoke.sh` | P1 |
-| Crash recovery | 移植 `apps/main-node/test/crash-recovery.test.ts` | P2 |
+## What already exists（oma-platform，勿重写）
 
-### Test plan artifact（供 /qa）
-
-- **Affected routes:** `POST /v1/agents`, `GET /v1/agents/:id`, `POST /v1/sessions`, `POST /v1/sessions/:id/events`, `GET /health`
-- **Critical path:** create agent → create session → send "Run: uname -a" → response contains kernel string
-- **Edge cases:** missing `ANTHROPIC_API_KEY`, invalid agent id, empty message
+| 能力 | 位置 |
+|------|------|
+| AMA Agent/Session wire | `internal/api/agentwire.go`, `sessionwire.go`, `*_ama_test.go` |
+| Console 契约集成测试 | `scripts/console-integration.sh`, `p1_console_test.go` |
+| DB migrations (001–010) | `internal/store/migrations/` |
+| Fake harness CI | `OMA_FAKE_HARNESS=1`, `internal/harness/fake.go` |
+| Trajectory 导出 | `internal/api/trajectory.go` |
+| Tool confirmation / pending | `internal/api/pending.go` |
+| Crash recovery 测试 | `crash_recovery_test.go`, `sessions_recovery_test.go` |
+| Docker Compose | `docker-compose.yml`（platform + harness） |
 
 ---
 
-## 性能（MVP 级别）
+## NOT in scope（P0–P2 明确不做）
 
-| 发现 | 严重度 | 建议 |
-|------|--------|------|
-| in-process harness 阻塞 HTTP | P2 | MVP 可 sync；Phase 1.1 加 SSE + background turn |
-| SQLite 单写 | P2 | 单实例 MVP 可接受；多 replica 需 Postgres |
-| 沙箱无 pool | P3 | LocalSubprocess 冷启动可接受 |
-
----
-
-## 并行化策略
-
-| Step | Modules | Depends on |
-|------|---------|------------|
-| S1: workspace scaffold | root package.json, tsconfig | — |
-| S2: copy core packages | packages/shared … sql-client | S1 |
-| S3: copy stores + event-log | agents/sessions/environments-store, event-log | S2 |
-| S4: extract harness package | apps/harness from agent/harness | S2 |
-| S5: sandbox + session-runtime | sandbox, session-runtime | S2, S4 |
-| S6: http-routes-core | trimmed routes | S3 |
-| S7: apps/api wiring | apps/api | S3–S6 |
-| S8: docker + smoke | docker-compose, scripts | S7 |
-
-**Lanes:**
-
-- **Lane A:** S1 → S2 → S3 → S6（数据层 + API 契约）
-- **Lane B:** S4 → S5（运行时 + 沙箱）— 与 A 并行，在 S2 完成后启动
-- **Lane C:** S7 → S8 — 依赖 A+B 合并
-
-冲突：`http-routes` 与 `apps/api` 都 touch 路由挂载 — 顺序执行 S6 再 S7。
+- CF SessionDO / Durable Objects 重写  
+- 每 Environment 独立 Container Worker  
+- `rl/` 强化学习训练  
+- 完整 cf-billing + Analytics Engine  
+- `@openma/sdk` / `oma` CLI 发布（Phase 3）  
+- 整仓 TypeScript `main-node` 复制（已 supersede 为 Go 实现）
 
 ---
 
 ## Implementation Tasks
 
-- [ ] **T1 (P1, human: ~2h / CC: ~20min)** — 初始化 `oma-building` pnpm workspace + tsconfig 基线
-  - Surfaced by: Architecture — 空目录需要 monorepo 脚手架
-  - Files: `package.json`, `pnpm-workspace.yaml`, `tsconfig.json`
-  - Verify: `pnpm install` 成功
-
-- [ ] **T2 (P1, human: ~4h / CC: ~45min)** — 复制 Tier-0 packages（shared, api-types, schema, sql-client）
-  - Surfaced by: Architecture — 所有 store 的公共依赖
-  - Files: `packages/shared`, `packages/api-types`, `packages/schema`, `packages/sql-client`
-  - Verify: `pnpm exec tsc --noEmit` 在 packages 层通过
-
-- [ ] **T3 (P1, human: ~4h / CC: ~45min)** — 复制 store 层 + event-log + environments-store
-  - Surfaced by: Architecture — Agent/Session CRUD
-  - Files: `packages/agents-store`, `sessions-store`, `environments-store`, `event-log`
-  - Verify: 移植对应 `test/unit/*-store*.test.ts`
-
-- [ ] **T4 (P1, human: ~3h / CC: ~30min)** — 抽出 `apps/harness`（从 `apps/agent/src/harness`）
-  - Surfaced by: Architecture — 避免 CF SessionDO 耦合
-  - Files: `apps/harness/` 或 `packages/harness/`
-  - Verify: harness unit tests pass with mocked model
-
-- [ ] **T5 (P1, human: ~3h / CC: ~30min)** — 复制 sandbox + session-runtime
-  - Files: `packages/sandbox`, `packages/session-runtime`, `packages/markdown`
-  - Verify: `session-runtime` vitest green
-
-- [ ] **T6 (P1, human: ~4h / CC: ~40min)** — 创建 `packages/http-routes-core`（agents + sessions only）
-  - Surfaced by: Code quality — 避免 http-routes 全量依赖
-  - Files: 从 `http-routes/src/agents.ts`, `sessions.ts` 提取
-  - Verify: route handler 单测
-
-- [ ] **T7 (P1, human: ~6h / CC: ~60min)** — 实现 `apps/api`（裁剪 main-node）
-  - Files: `apps/api/src/index.ts`, `lib/node-session-router.ts`, `lib/node-session-lifecycle.ts`
-  - Verify: `pnpm --filter api dev` + curl 冒烟
-
-- [ ] **T8 (P1, human: ~2h / CC: ~20min)** — docker-compose + `.env.example` + `scripts/smoke.sh`
-  - Verify: `docker compose up` + smoke script exit 0
-
-- [ ] **T9 (P2, human: ~3h / CC: ~30min)** — 移植 crash-recovery 测试
-  - Files: `apps/api/test/crash-recovery.test.ts`
-  - Verify: vitest pass
-
-- [ ] **T10 (P3, human: ~1d / CC: ~2h)** — Phase 2 占位：文档说明 CF 迁移路径
-  - Files: `docs/phase2-cloudflare.md`
-
-_No new tasks from Performance — MVP defer._
+- [ ] **T1 (P0)** — harness `web_fetch` — `harness/oma_adapter/tools.py`, `turn.py` — Verify: turn 返回 fetch 结果 event
+- [ ] **T2 (P0)** — MCP 挂载 + 可选 `/v1/mcp-proxy` — harness + `internal/api/mcp_proxy.go`
+- [ ] **T3 (P0)** — Vault outbound HTTP 代理 — `internal/outbound/`
+- [ ] **T4 (P0)** — 真实 `POST /v1/models/list` — 替换 `internal/api/console_stubs.go`
+- [ ] **T5 (P0)** — model card internal key 供 harness — internal 端点或 turn payload
+- [ ] **T6 (P1)** — Linear webhook + OAuth — `integrations.go` + `oauth.go` — Verify: `console-integration.sh` publication 全流程
+- [ ] **T7 (P1)** — GitHub/Slack webhook 最小 E2E — integrations 扩展
+- [ ] **T8 (P1)** — Eval run background worker — `internal/eval/worker.go` — Verify: run pending→completed
+- [ ] **T9 (P1)** — Memory blob + retention — store + cron
+- [ ] **T10 (P1)** — Runtime WebSocket attach — `runtime_daemon.go`
+- [ ] **T11 (P1)** — Session threads 从 event log 派生 — `session_aux.go`
+- [ ] **T12 (P2)** — call_agent + compaction — harness
+- [ ] **T13 (P2)** — resource mounter + outcome evaluator — harness + eval worker
+- [ ] **T14 (P2)** — Dreams + cost_report API — 新 store + routes
+- [ ] **T15 (P2)** — `/v1/internal/*` — 供未来 integrations 拆分
 
 ---
 
-## 命名与仓库策略
+## 测试计划
 
-**推荐（issue 2A）：** package 名暂保留 `@open-managed-agents/*`，减少 import  churn；`oma-building` README 声明 fork 关系。Phase 1 稳定后再批量 rename → `@oma/*`。
+### 已有覆盖
 
-**备选（2B）：** 复制时立即 rename → 一次性 diff 大，但边界清晰。
+- Go API 单测/集成：`internal/api/*_test.go`
+- Console wire：`scripts/console-integration.sh`
+- Harness 合约：`harness/tests/test_oma_contract.py`, `test_turn.py`
+
+### P0 完成后新增
+
+| 测试 | 位置 | 优先级 |
+|------|------|--------|
+| web_fetch smoke | `harness/tests/test_web_fetch.py` | P0 |
+| MCP tool smoke | `harness/tests/test_mcp.py` | P0 |
+| models/list 集成 | `internal/api/models_test.go` | P0 |
+| Agent tools E2E | `scripts/smoke-agent-tools.sh` | P0 |
+
+### P1 完成后新增
+
+| 测试 | 位置 | 优先级 |
+|------|------|--------|
+| Linear webhook E2E | `scripts/smoke-linear-webhook.sh` | P1 |
+| Eval worker 状态机 | `internal/eval/worker_test.go` | P1 |
+| Runtime attach | `internal/api/runtime_attach_test.go` | P1 |
+
+### 仍缺的 harness / 集成路径
+
+```
+[+] POST /v1/sessions/:id/events
+  ├── [★★★] uname -a smoke (manual / fake harness)
+  ├── [GAP] web_fetch / MCP tool loop
+  ├── [GAP] vault-injected HTTP
+  └── [GAP] webhook → user.message
+
+[+] Eval runs
+  ├── [★★] CRUD (console-integration)
+  └── [GAP] worker pending→completed
+
+[+] Integrations
+  ├── [★★] publication + dispatch CRUD
+  └── [GAP] OAuth callback + webhook dispatch
+```
 
 ---
 
-## Failure modes（MVP 必须处理）
+## Failure modes（待处理）
 
-| 路径 | 生产失败模式 | 测试? | 错误处理? | 用户可见? |
-|------|-------------|-------|-----------|-----------|
-| resolveModel | API key 缺失/过期 | GAP | 需 401 envelope | 需明确 error message |
-| harness loop | LLM rate limit | GAP | retry/backoff | 需 SSE error event |
-| bash tool | 命令 hang | GAP | timeout kill | partial output |
-| event append | SQLite locked | GAP | retry | 500 |
-| session not found | stale session id | GAP | 404 | ✅ |
-
-**Critical gap:** API key 缺失时 silent hang — 必须在 T7 加启动校验 + 请求级 error envelope。
+| 路径 | 失败模式 | 测试 | 处理 | 用户可见 |
+|------|----------|------|------|----------|
+| resolveModel | API key 缺失 | 部分 | 需 turn 级 error envelope | 需明确 message |
+| harness loop | LLM rate limit | GAP | retry/backoff | SSE error event |
+| bash tool | 命令 hang | 部分 | `HARNESS_HTTP_TIMEOUT_SEC` | partial output |
+| integration webhook | 签名失败 | GAP | 401 + 日志 | 静默丢事件 |
+| eval worker | 进程 crash | GAP | 标记 failed + 重试 | Console 显示 failed |
 
 ---
 
-## Completion Summary（Review）
+## 并行化策略
 
-- Step 0: Scope Challenge — **scope reduced** to Node MVP (~18 packages, 1 app)
-- Architecture Review: **4** issues (harness extract, http-routes trim, SessionDO defer, naming)
-- Code Quality Review: **2** issues (main-node 1350-line wiring → split bootstrap module)
-- Test Review: diagram produced, **14 gaps** identified; target 80% on in-scope paths
-- Performance Review: **0** blocking; 2 deferred
-- NOT in scope: written above
-- What already exists: written above
-- TODOS.md updates: see Phase 2/3 defer list (no separate TODOS.md yet)
-- Failure modes: **1** critical gap (API key / error envelope)
-- Outside voice: skipped
-- Parallelization: 3 lanes (A/B parallel → C)
-- Lake Score: 8/10 — recommend complete event-log + recovery tests, not shortcut sync-only API
+| Lane | 内容 | 依赖 |
+|------|------|------|
+| A | P0 harness 工具（web_fetch, MCP） | — |
+| B | P0 平台（outbound, models/list, model key） | — |
+| C | P1 integrations + oauth | A 可选 |
+| D | P1 eval worker + runtime attach | A |
+| E | P2 call_agent / compaction / dreams | A, D |
+
+Lane A/B 可并行；C/D 在 P0 核心工具就绪后启动。
 
 ---
 
 ## GSTACK REVIEW REPORT
 
-| Review | Trigger | Why | Runs | Status | Findings |
-|--------|---------|-----|------|--------|----------|
-| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | issues_open | 4 arch + 2 quality + 14 test gaps |
-| Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
-| DX Review | `/plan-devex-review` | Developer experience | 0 | — | — |
+| Review | Trigger | Runs | Status | Findings |
+|--------|---------|------|--------|----------|
+| Eng Review | `/plan-eng-review` | 2 | plan updated | P0+P1+P2 矩阵；~22✅ ~12🟡 ~15❌ |
+| CEO Review | — | 0 | — | — |
+| Design Review | — | 0 | — | — |
 
-- **UNRESOLVED:** MVP 命名策略（保留 @open-managed-agents vs rename @oma）；是否 Phase 1 包含 oma-vault sidecar
-- **VERDICT:** ENG REVIEW COMPLETE (plan stage) — ready to implement after naming decision
+- **SCOPE:** P0 + P1 + P2；不含 CF SessionDO
+- **VERDICT:** 文档与代码对齐完成 — 按 T1–T15 实施
+
+---
+
+## 变更历史
+
+| 日期 | 变更 |
+|------|------|
+| 2026-06-07 | 初版：TypeScript main-node MVP 计划 |
+| 2026-06-11 | 重写：Go+Python 现状、P0/P1/P2 对齐矩阵、Implementation Tasks T1–T15 |

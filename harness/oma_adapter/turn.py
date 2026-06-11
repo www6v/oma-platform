@@ -10,7 +10,7 @@ from typing import Any, Awaitable, Callable, Iterator
 
 from oma_adapter.emit import emit_oma_events
 from oma_adapter.project import project_oma_events
-from oma_adapter.tools import pypi_tools_from_agent
+from oma_adapter.tools import session_tool_config_from_agent
 from oma_adapter.types import AgentSnapshot, ModelConfig, TurnResponse
 
 CreateSessionFn = Callable[[Any], Awaitable[Any]]
@@ -58,7 +58,8 @@ async def _default_create_session(
     workdir: str,
     model: str,
     system_prompt: str | None,
-    tools: list[str],
+    builtin_tools: list[str],
+    extension_paths: list[str],
 ) -> Any:
     from pi_coding_agent.sdk import CreateAgentSessionOptions, create_agent_session
 
@@ -66,7 +67,8 @@ async def _default_create_session(
         cwd=Path(workdir),
         model=model,
         system_prompt=system_prompt,
-        tools=tools,
+        tools=builtin_tools,
+        extension_paths=extension_paths or None,
         in_memory=True,
     )
     return await create_agent_session(opts)
@@ -117,11 +119,13 @@ async def _run_turn_core(
         if create_session is not None:
             result = await create_session(None)
         else:
+            tool_cfg = session_tool_config_from_agent(agent)
             result = await _default_create_session(
                 workdir=workdir,
                 model=resolved_model,
                 system_prompt=agent.system_prompt,
-                tools=pypi_tools_from_agent(agent),
+                builtin_tools=tool_cfg.builtin_tools,
+                extension_paths=tool_cfg.extension_paths,
             )
         session = result.session
 
