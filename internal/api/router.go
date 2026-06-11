@@ -8,6 +8,7 @@ import (
 
 	"github.com/open-ma/oma-building/internal/auth"
 	"github.com/open-ma/oma-building/internal/console"
+	"github.com/open-ma/oma-building/internal/fileblob"
 	"github.com/open-ma/oma-building/internal/harness"
 	"github.com/open-ma/oma-building/internal/modelresolve"
 	"github.com/open-ma/oma-building/internal/session"
@@ -26,6 +27,8 @@ type Deps struct {
 	Credentials  *store.CredentialRepo
 	Skills       *store.SkillRepo
 	SkillFiles   *store.SkillFileStore
+	Files        *store.FileRepo
+	FileBlobs    *fileblob.Store
 	SessionOutputs *sessionoutputs.Store
 	ApiKeys      *store.ApiKeyRepo
 	Tenants      *store.TenantRepo
@@ -130,7 +133,11 @@ func NewRouter(deps Deps) http.Handler {
 		})
 	}
 
-	mountConsoleStubRoutes(r, deps.SessionOutputs)
+	mountConsoleStubRoutes(r, consoleStubDeps{
+		SessionOutputs: deps.SessionOutputs,
+		Files:          deps.Files,
+		FileBlobs:      deps.FileBlobs,
+	})
 
 	if deps.ConsoleDir != "" {
 		static := console.NewStaticHandler(deps.ConsoleDir)

@@ -18,34 +18,6 @@ import (
 	"github.com/open-ma/oma-building/internal/workdir"
 )
 
-type sessionResponse struct {
-	ID            string              `json:"id"`
-	AgentID       string              `json:"agent_id"`
-	Agent         string              `json:"agent"`
-	AgentVersion  int                 `json:"agent_version"`
-	EnvironmentID string              `json:"environment_id"`
-	Title         string              `json:"title"`
-	Status        store.SessionStatus `json:"status"`
-	CreatedAt     int64               `json:"created_at"`
-	UpdatedAt     *int64              `json:"updated_at,omitempty"`
-	ArchivedAt    *int64              `json:"archived_at,omitempty"`
-}
-
-func formatSession(s *store.Session) sessionResponse {
-	return sessionResponse{
-		ID:            s.ID,
-		AgentID:       s.AgentID,
-		Agent:         s.AgentID,
-		AgentVersion:  s.AgentVersion,
-		EnvironmentID: s.EnvironmentID,
-		Title:         s.Title,
-		Status:        s.Status,
-		CreatedAt:     s.CreatedAt,
-		UpdatedAt:     s.UpdatedAt,
-		ArchivedAt:    s.ArchivedAt,
-	}
-}
-
 type eventListItem struct {
 	Seq  int             `json:"seq"`
 	Type string          `json:"type"`
@@ -54,10 +26,10 @@ type eventListItem struct {
 }
 
 type createSessionRequest struct {
-	Agent         string `json:"agent"`
-	Title         string `json:"title"`
-	EnvironmentID string `json:"environment_id"`
-	Environment   string `json:"environment"`
+	Agent         json.RawMessage `json:"agent"`
+	Title         string          `json:"title"`
+	EnvironmentID string          `json:"environment_id"`
+	Environment   string          `json:"environment"`
 }
 
 type appendEventsRequest struct {
@@ -97,8 +69,13 @@ func mountSessionRoutes(r chi.Router, h *sessionHandlers) {
 			writeError(w, http.StatusBadRequest, "invalid json")
 			return
 		}
-		if body.Agent == "" {
+		if body.Agent == nil {
 			writeError(w, http.StatusBadRequest, "agent is required")
+			return
+		}
+		agentID, err := parseSessionAgentRef(body.Agent)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		envID := body.EnvironmentID
@@ -107,7 +84,7 @@ func mountSessionRoutes(r chi.Router, h *sessionHandlers) {
 		}
 		sess, err := h.sessions.Create(req.Context(), store.CreateSessionInput{
 			TenantID:      tenantID(req),
-			AgentID:       body.Agent,
+			AgentID:       agentID,
 			Title:         body.Title,
 			EnvironmentID: envID,
 		})
@@ -124,7 +101,7 @@ func mountSessionRoutes(r chi.Router, h *sessionHandlers) {
 			return
 		}
 		h.registerMachine(sess)
-		writeJSON(w, http.StatusCreated, formatSession(sess))
+		writeJSON(w, http.StatusCreated, formatAPISession(sess))
 	})
 
 	r.Get("/", func(w http.ResponseWriter, req *http.Request) {
@@ -138,9 +115,9 @@ func mountSessionRoutes(r chi.Router, h *sessionHandlers) {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		out := make([]sessionResponse, 0, len(page.Items))
+		out := make([]map[string]any, 0, len(page.Items))
 		for _, s := range page.Items {
-			out = append(out, formatSession(s))
+			out = append(out, formatAPISession(s))
 		}
 		writeListPage(w, out, page.NextCursor)
 	})
@@ -156,7 +133,7 @@ func mountSessionRoutes(r chi.Router, h *sessionHandlers) {
 			writeError(w, http.StatusNotFound, "not found")
 			return
 		}
-		writeJSON(w, http.StatusOK, formatSession(sess))
+		writeJSON(w, http.StatusOK, formatAPISession(sess))
 	})
 
 	r.Post("/{id}/events", func(w http.ResponseWriter, req *http.Request) {
@@ -231,7 +208,7 @@ func mountSessionRoutes(r chi.Router, h *sessionHandlers) {
 			return
 		}
 		h.registry.Remove(id)
-		writeJSON(w, http.StatusOK, formatSession(sess))
+		writeJSON(w, http.StatusOK, formatAPISession(sess))
 	})
 
 	r.Delete("/{id}", func(w http.ResponseWriter, req *http.Request) {

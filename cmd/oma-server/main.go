@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/open-ma/oma-building/internal/api"
+	"github.com/open-ma/oma-building/internal/fileblob"
 	"github.com/open-ma/oma-building/internal/harness"
 	"github.com/open-ma/oma-building/internal/modelresolve"
 	"github.com/open-ma/oma-building/internal/session"
@@ -24,6 +25,7 @@ func main() {
 	dbPath := envOrDefault("DATABASE_PATH", "./data/oma.db")
 	workdirBase := envOrDefault("SANDBOX_WORKDIR", "./data/sandboxes")
 	skillsDataDir := envOrDefault("SKILLS_DATA_DIR", "./data/skills")
+	filesDataDir := envOrDefault("FILES_DATA_DIR", "./data/files")
 	outputsDir := envOrDefault("SESSION_OUTPUTS_DIR", "./data/session-outputs")
 	absWorkdir, err := filepath.Abs(workdirBase)
 	if err != nil {
@@ -59,6 +61,9 @@ func main() {
 	if err := os.MkdirAll(skillsDataDir, 0o755); err != nil {
 		log.Fatal(err)
 	}
+	if err := os.MkdirAll(filesDataDir, 0o755); err != nil {
+		log.Fatal(err)
+	}
 	if err := os.MkdirAll(outputsDir, 0o755); err != nil {
 		log.Fatal(err)
 	}
@@ -78,6 +83,8 @@ func main() {
 	vaults := store.NewVaultRepo(db)
 	credentials := store.NewCredentialRepo(db)
 	skillFiles := store.NewSkillFileStore(skillsDataDir)
+	fileBlobs := fileblob.NewStore(filesDataDir)
+	files := store.NewFileRepo(db)
 	skills := store.NewSkillRepo(db, skillFiles)
 	sessionOutputs := sessionoutputs.NewStore(outputsDir)
 	apiKeys := store.NewApiKeyRepo(db)
@@ -118,6 +125,8 @@ func main() {
 		Credentials:  credentials,
 		Skills:         skills,
 		SkillFiles:     skillFiles,
+		Files:          files,
+		FileBlobs:      fileBlobs,
 		SessionOutputs: sessionOutputs,
 		ApiKeys:        apiKeys,
 		Tenants:        tenants,

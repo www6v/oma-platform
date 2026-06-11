@@ -29,7 +29,13 @@ async function apiDelete(path) {
   }
 }
 
-const browser = await chromium.launch({ headless: true });
+const headlessShell =
+  process.env.PW_EXECUTABLE_PATH ||
+  `${process.env.HOME}/Library/Caches/ms-playwright/chromium_headless_shell-1208/chrome-headless-shell-mac-x64/chrome-headless-shell`;
+const browser = await chromium.launch({
+  headless: true,
+  executablePath: headlessShell,
+});
 const page = await browser.newPage();
 page.on('pageerror', (e) => errors.push(`pageerror:${e.message}`));
 page.on('console', (msg) => {

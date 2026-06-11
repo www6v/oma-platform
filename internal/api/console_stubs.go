@@ -5,8 +5,16 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/open-ma/oma-building/internal/fileblob"
 	"github.com/open-ma/oma-building/internal/sessionoutputs"
+	"github.com/open-ma/oma-building/internal/store"
 )
+
+type consoleStubDeps struct {
+	SessionOutputs *sessionoutputs.Store
+	Files          *store.FileRepo
+	FileBlobs      *fileblob.Store
+}
 
 // mountConsoleStubRoutes registers empty-list stubs for Console pages that
 // main-node implements fully but oma-platform defers. Responses match the
@@ -14,7 +22,7 @@ import (
 // console.warn noise or HTML 404 bodies.
 func mountConsoleStubRoutes(
 	r chi.Router,
-	outputs *sessionoutputs.Store,
+	deps consoleStubDeps,
 ) {
 	r.Get("/v1/runtimes", handleRuntimesListStub)
 	r.Post("/v1/runtimes/connect-runtime", handleStubNotImplemented)
@@ -23,7 +31,11 @@ func mountConsoleStubRoutes(
 	r.Get("/v1/models/list", handleModelsListStub)
 
 	r.Route("/v1/files", func(r chi.Router) {
-		mountFileRoutes(r, filesDeps{Outputs: outputs})
+		mountFileRoutes(r, filesDeps{
+			Files:   deps.Files,
+			Blobs:   deps.FileBlobs,
+			Outputs: deps.SessionOutputs,
+		})
 	})
 
 	r.Get("/v1/memory_stores", writeEmptyDataList)

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/open-ma/oma-building/internal/api"
+	"github.com/open-ma/oma-building/internal/fileblob"
 	"github.com/open-ma/oma-building/internal/harness"
 	"github.com/open-ma/oma-building/internal/modelresolve"
 	"github.com/open-ma/oma-building/internal/session"
@@ -42,6 +43,8 @@ func testRouterWithOutputs(t *testing.T, outputsDir string) http.Handler {
 	vaults := store.NewVaultRepo(db)
 	credentials := store.NewCredentialRepo(db)
 	skillFiles := store.NewSkillFileStore(t.TempDir())
+	fileBlobs := fileblob.NewStore(t.TempDir())
+	files := store.NewFileRepo(db)
 	skills := store.NewSkillRepo(db, skillFiles)
 	models := &modelresolve.Resolver{Cards: modelCards}
 	sessions := store.NewSessionRepo(db, agents, environments)
@@ -60,6 +63,8 @@ func testRouterWithOutputs(t *testing.T, outputsDir string) http.Handler {
 		Credentials:    credentials,
 		Skills:         skills,
 		SkillFiles:     skillFiles,
+		Files:          files,
+		FileBlobs:      fileBlobs,
 		SessionOutputs: outputs,
 		Sessions: api.NewSessionHandlers(
 			sessions, events, pending, hub, reg, workdirs,
@@ -88,6 +93,8 @@ func testRouterHarness(
 	vaults := store.NewVaultRepo(db)
 	credentials := store.NewCredentialRepo(db)
 	skillFiles := store.NewSkillFileStore(t.TempDir())
+	fileBlobs := fileblob.NewStore(t.TempDir())
+	files := store.NewFileRepo(db)
 	skills := store.NewSkillRepo(db, skillFiles)
 	models := &modelresolve.Resolver{Cards: modelCards}
 	sessions := store.NewSessionRepo(db, agents, environments)
@@ -106,6 +113,8 @@ func testRouterHarness(
 		Credentials:  credentials,
 		Skills:       skills,
 		SkillFiles:   skillFiles,
+		Files:        files,
+		FileBlobs:    fileBlobs,
 		SessionOutputs: outputs,
 		Sessions: api.NewSessionHandlers(
 			sessions, events, pending, hub, reg, workdirs, outputs, client, models,
@@ -129,6 +138,8 @@ func testRouterSharedDB(
 	vaults := store.NewVaultRepo(db)
 	credentials := store.NewCredentialRepo(db)
 	skillFiles := store.NewSkillFileStore(t.TempDir())
+	fileBlobs := fileblob.NewStore(t.TempDir())
+	files := store.NewFileRepo(db)
 	skills := store.NewSkillRepo(db, skillFiles)
 	models := &modelresolve.Resolver{Cards: modelCards}
 	sessions := store.NewSessionRepo(db, agents, environments)
@@ -147,6 +158,8 @@ func testRouterSharedDB(
 		Credentials:  credentials,
 		Skills:       skills,
 		SkillFiles:   skillFiles,
+		Files:        files,
+		FileBlobs:    fileBlobs,
 		SessionOutputs: outputs,
 		Sessions: api.NewSessionHandlers(
 			sessions, events, pending, hub, reg, workdirs, outputs, client, models,
