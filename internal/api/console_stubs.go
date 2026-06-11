@@ -33,32 +33,6 @@ func mountConsoleStubRoutes(
 			Outputs: deps.SessionOutputs,
 		})
 	})
-
-	r.Get("/v1/memory_stores", writeEmptyDataList)
-	r.Post("/v1/memory_stores", handleStubNotImplemented)
-	r.Route("/v1/memory_stores/{id}", func(r chi.Router) {
-		r.Get("/", handleStubNotFound)
-		r.Delete("/", handleStubNotImplemented)
-		r.Post("/archive", handleStubNotImplemented)
-		r.Get("/memories", writeEmptyDataList)
-		r.Post("/memories", handleStubNotImplemented)
-		r.Route("/memories/{memoryId}", func(r chi.Router) {
-			r.Get("/", handleStubNotFound)
-			r.Post("/", handleStubNotImplemented)
-			r.Delete("/", handleStubNotImplemented)
-		})
-		r.Get("/memory_versions", writeEmptyDataList)
-		r.Route("/memory_versions/{versionId}", func(r chi.Router) {
-			r.Post("/redact", handleStubNotImplemented)
-		})
-	})
-
-	r.Get("/v1/evals/runs", writeEmptyDataList)
-	r.Route("/v1/evals/runs/{id}", func(r chi.Router) {
-		r.Get("/", handleStubNotFound)
-		r.Delete("/", handleStubNotImplemented)
-	})
-
 }
 
 func mountIntegrationStubRoutes(r chi.Router) {

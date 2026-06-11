@@ -315,6 +315,72 @@ if pub_id:
         expect=(200,),
     )
 
+log("memory store flow (POST/GET /v1/memory_stores/...)")
+_, mem_store = req(
+    "POST",
+    "/v1/memory_stores",
+    {"name": "integration-store", "description": "console integration"},
+    expect=(201,),
+)
+check(
+    "memory_store_type",
+    isinstance(mem_store, dict) and mem_store.get("type") == "memory_store",
+    mem_store,
+)
+store_id = mem_store.get("id") if isinstance(mem_store, dict) else None
+check(
+    "memory_store_id",
+    isinstance(store_id, str) and store_id.startswith("memstore-"),
+    store_id,
+)
+if store_id:
+    _, mem_written = req(
+        "POST",
+        f"/v1/memory_stores/{store_id}/memories",
+        {"path": "/notes/hello.md", "content": "integration memory"},
+        expect=(201,),
+    )
+    check(
+        "memory_id",
+        isinstance(mem_written, dict)
+        and mem_written.get("id", "").startswith("mem-"),
+        mem_written,
+    )
+    _, mem_list = req(
+        "GET", f"/v1/memory_stores/{store_id}/memories", expect=(200,),
+    )
+    check(
+        "memory_list",
+        isinstance(mem_list, dict) and len(mem_list.get("data", [])) == 1,
+        mem_list,
+    )
+
+log("eval run flow (POST/GET/DELETE /v1/evals/runs/...)")
+_, eval_created = req(
+    "POST",
+    "/v1/evals/runs",
+    {
+        "agent_id": aid,
+        "environment_id": env_id,
+        "tasks": [{"id": "smoke", "messages": ["hello"]}],
+    },
+    expect=(200,),
+)
+run_id = eval_created.get("run_id") if isinstance(eval_created, dict) else None
+check(
+    "eval_run_id",
+    isinstance(run_id, str) and run_id.startswith("evrun-"),
+    eval_created,
+)
+if run_id:
+    _, eval_detail = req("GET", f"/v1/evals/runs/{run_id}", expect=(200,))
+    check(
+        "eval_status_pending",
+        isinstance(eval_detail, dict) and eval_detail.get("status") == "pending",
+        eval_detail,
+    )
+    req("DELETE", f"/v1/evals/runs/{run_id}", expect=(200,))
+
 fid = None
 if sid:
     log(f"uploading file to session scope (POST /v1/files) scope_id={sid}")

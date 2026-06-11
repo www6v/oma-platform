@@ -66,6 +66,8 @@ func testRouterDeps(
 		Tenants:        store.NewTenantRepo(db),
 		Runtimes:       store.NewRuntimeRepo(db),
 		Integrations:   store.NewIntegrationRepo(db),
+		MemoryStores:   store.NewMemoryStoreRepo(db),
+		EvalRuns:       store.NewEvalRunRepo(db),
 		AuthDisabled:   true,
 		Sessions: api.NewSessionHandlers(
 			sessions, events, pending, hub, reg, workdirs,
@@ -150,6 +152,8 @@ func testRouterSharedDB(
 		Tenants:        store.NewTenantRepo(db),
 		Runtimes:       store.NewRuntimeRepo(db),
 		Integrations:   store.NewIntegrationRepo(db),
+		MemoryStores:   store.NewMemoryStoreRepo(db),
+		EvalRuns:       store.NewEvalRunRepo(db),
 		AuthDisabled:   true,
 		Sessions: api.NewSessionHandlers(
 			sessions, events, pending, hub, reg, workdirs, outputs, client, models,

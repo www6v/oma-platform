@@ -34,6 +34,8 @@ type Deps struct {
 	Tenants      *store.TenantRepo
 	Runtimes       *store.RuntimeRepo
 	Integrations   *store.IntegrationRepo
+	MemoryStores   *store.MemoryStoreRepo
+	EvalRuns       *store.EvalRunRepo
 	Sessions       *sessionHandlers
 	APIKey       string
 	ConsoleDir   string
@@ -152,6 +154,15 @@ func NewRouter(deps Deps) http.Handler {
 	mountIntegrationRoutes(r, integrationsDeps{
 		Integrations:  deps.Integrations,
 		GatewayOrigin: integrationsGatewayOrigin(),
+	})
+
+	mountMemoryStoreRoutes(r, memoryStoresDeps{
+		MemoryStores: deps.MemoryStores,
+	})
+	mountEvalRunRoutes(r, evalRunsDeps{
+		EvalRuns:     deps.EvalRuns,
+		Agents:       deps.Agents,
+		Environments: deps.Environments,
 	})
 
 	mountConsoleStubRoutes(r, consoleStubDeps{

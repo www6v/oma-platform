@@ -91,6 +91,8 @@ func main() {
 	tenants := store.NewTenantRepo(db)
 	runtimes := store.NewRuntimeRepo(db)
 	integrations := store.NewIntegrationRepo(db)
+	memoryStores := store.NewMemoryStoreRepo(db)
+	evalRuns := store.NewEvalRunRepo(db)
 	modelResolver := &modelresolve.Resolver{Cards: modelCards}
 	sessions := store.NewSessionRepo(db, agents, environments)
 	if n, err := sessions.RecoverRunning(context.Background()); err != nil {
@@ -134,6 +136,8 @@ func main() {
 		Tenants:        tenants,
 		Runtimes:       runtimes,
 		Integrations:   integrations,
+		MemoryStores:   memoryStores,
+		EvalRuns:       evalRuns,
 		Sessions: api.NewSessionHandlers(
 			sessions, events, pending, hub, registry, workdirs,
 			sessionOutputs, harnessClient, modelResolver,
