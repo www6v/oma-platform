@@ -12,6 +12,44 @@ def test_emit_agent_message() -> None:
     assert out[0]["content"][0]["text"] == "hi"
 
 
+def test_emit_dedupes_agent_message_across_calls() -> None:
+    seen: set[str] = set()
+    first = emit_oma_events(
+        [{"type": "assistant_message", "text": "hello"}],
+        seen_agent_text=seen,
+    )
+    second = emit_oma_events(
+        [
+            {
+                "type": "turn_end",
+                "message": {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "hello"}],
+                },
+            }
+        ],
+        seen_agent_text=seen,
+    )
+    assert len(first) == 1
+    assert second == []
+
+
+def test_emit_tool_result_extracts_agent_tool_result_text() -> None:
+    raw = [
+        {
+            "type": "tool_execution_end",
+            "toolCallId": "tc_1",
+            "result": {
+                "content": [{"type": "text", "text": "Example Domain"}],
+                "details": None,
+                "is_error": False,
+            },
+        }
+    ]
+    out = emit_oma_events(raw)
+    assert out[0]["content"][0]["text"] == "Example Domain"
+
+
 @pytest.mark.asyncio
 async def test_run_turn_fake(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OMA_FAKE_HARNESS", "1")

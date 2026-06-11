@@ -90,7 +90,7 @@ func formatAPISession(s *store.Session) map[string]any {
 		"environment_id":  s.EnvironmentID,
 		"title":           title,
 		"status":          s.Status,
-		"created_at":      s.CreatedAt,
+		"created_at":      formatISO(s.CreatedAt),
 		"vault_ids":       []any{},
 		"metadata":        map[string]any{},
 		"resources":       []any{},
@@ -99,10 +99,10 @@ func formatAPISession(s *store.Session) map[string]any {
 		"stats":           map[string]any{},
 	}
 	if s.UpdatedAt != nil {
-		out["updated_at"] = *s.UpdatedAt
+		out["updated_at"] = formatISO(*s.UpdatedAt)
 	}
 	if s.ArchivedAt != nil {
-		out["archived_at"] = *s.ArchivedAt
+		out["archived_at"] = formatISO(*s.ArchivedAt)
 	}
 	return out
 }

@@ -45,6 +45,9 @@ func TestSessionAMAWireShape(t *testing.T) {
 	if created["type"] != "session" {
 		t.Fatalf("type=%v", created["type"])
 	}
+	if _, ok := created["created_at"].(string); !ok {
+		t.Fatalf("created_at not ISO string: %v", created["created_at"])
+	}
 	agentObj, ok := created["agent"].(map[string]any)
 	if !ok {
 		t.Fatalf("agent not object: %T", created["agent"])

@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from typing import Any
 
 
-def emit_oma_events(raw_events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def emit_oma_events(
+    raw_events: list[dict[str, Any]],
+    *,
+    seen_agent_text: set[str] | None = None,
+) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
-    seen_agent_text: set[str] = set()
+    seen_agent_text = seen_agent_text if seen_agent_text is not None else set()
     for item in raw_events:
         kind = item.get("type") or item.get("event")
         if kind in {"assistant_message", "agent.message"}:
@@ -103,4 +108,25 @@ def _stringify(value: Any) -> str:
         return ""
     if isinstance(value, str):
         return value
+    if isinstance(value, dict):
+        text = _tool_result_text(value)
+        if text:
+            return text
+        return json.dumps(value, ensure_ascii=False, default=str)
+    if isinstance(value, list):
+        return json.dumps(value, ensure_ascii=False, default=str)
     return str(value)
+
+
+def _tool_result_text(payload: dict[str, Any]) -> str:
+    """Extract readable text from piPy AgentToolResult-shaped dicts."""
+    content = payload.get("content")
+    if not isinstance(content, list):
+        return ""
+    parts: list[str] = []
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+        if block.get("type") == "text" and block.get("text"):
+            parts.append(str(block["text"]))
+    return "".join(parts).strip()

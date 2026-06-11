@@ -131,6 +131,7 @@ async def _run_turn_core(
 
         buffer: list[dict[str, Any]] = []
         raw_cursor = 0
+        seen_agent_text: set[str] = set()
         oma_events: list[dict[str, Any]] = []
         queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
 
@@ -148,7 +149,10 @@ async def _run_turn_core(
         def listener(event: Any) -> None:
             nonlocal raw_cursor
             _collect_pi_event(buffer, event)
-            delta = emit_oma_events(buffer[raw_cursor:])
+            delta = emit_oma_events(
+                buffer[raw_cursor:],
+                seen_agent_text=seen_agent_text,
+            )
             raw_cursor = len(buffer)
             for ev in delta:
                 queue.put_nowait(ev)
@@ -163,7 +167,10 @@ async def _run_turn_core(
             await session.wait_for_idle()
 
         if not oma_events:
-            fallback = emit_oma_events(buffer)
+            fallback = emit_oma_events(
+                buffer,
+                seen_agent_text=seen_agent_text,
+            )
             if not fallback:
                 text = _assistant_text_from_session(session)
                 if text:
