@@ -27,6 +27,7 @@ type AgentSnapshot struct {
 	ID           string          `json:"id"`
 	Name         string          `json:"name"`
 	Model        string          `json:"model"`
+	AuxModel     string          `json:"aux_model,omitempty"`
 	SystemPrompt string          `json:"system_prompt,omitempty"`
 	Description  string          `json:"description,omitempty"`
 	Tools        json.RawMessage `json:"tools,omitempty"`
@@ -35,11 +36,13 @@ type AgentSnapshot struct {
 
 // TurnRequest is the harness turn payload.
 type TurnRequest struct {
-	SessionID string            `json:"session_id"`
-	Agent     AgentSnapshot     `json:"agent"`
-	Model     ModelConfig       `json:"model,omitempty"`
-	Events    []json.RawMessage `json:"events"`
-	Workdir   string            `json:"workdir"`
+	SessionID   string            `json:"session_id"`
+	Agent       AgentSnapshot     `json:"agent"`
+	Model       ModelConfig       `json:"model,omitempty"`
+	AuxModel    *ModelConfig      `json:"aux_model,omitempty"`
+	Environment json.RawMessage   `json:"environment,omitempty"`
+	Events      []json.RawMessage `json:"events"`
+	Workdir     string            `json:"workdir"`
 }
 
 // TurnResponse is the harness turn result.

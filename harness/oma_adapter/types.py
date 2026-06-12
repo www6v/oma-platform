@@ -19,6 +19,7 @@ class AgentSnapshot(BaseModel):
     id: str
     name: str
     model: str
+    aux_model: str | None = None
     system_prompt: str | None = None
     description: str | None = None
     tools: list[dict[str, Any]] | None = None
@@ -29,6 +30,8 @@ class TurnRequest(BaseModel):
     session_id: str
     agent: AgentSnapshot
     model: ModelConfig | None = None
+    aux_model: ModelConfig | None = None
+    environment: dict[str, Any] | None = None
     events: list[dict[str, Any]] = Field(default_factory=list)
     workdir: str
 

@@ -104,6 +104,19 @@ func (m *Machine) RunTurn(ctx context.Context) error {
 		return m.failTurn(ctx, turnID, err)
 	}
 
+	var auxCfg *harness.ModelConfig
+	if agent.AuxModel != "" {
+		cfg, auxErr := m.resolveModel(ctx, agent.AuxModel)
+		if auxErr == nil {
+			auxCfg = &cfg
+		}
+	}
+
+	envSnap := sess.EnvironmentSnapshot
+	if len(envSnap) == 0 {
+		envSnap = json.RawMessage(`{}`)
+	}
+
 	lifecycleStart, err := json.Marshal(map[string]any{
 		"type":    "session.lifecycle",
 		"phase":   "turn_start",
@@ -120,11 +133,13 @@ func (m *Machine) RunTurn(ctx context.Context) error {
 		turnCtx,
 		m.Harness,
 		harness.TurnRequest{
-			SessionID: m.SessionID,
-			Agent:     agent,
-			Model:     modelCfg,
-			Events:    eventPayloads,
-			Workdir:   workdirPath,
+			SessionID:   m.SessionID,
+			Agent:       agent,
+			Model:       modelCfg,
+			AuxModel:    auxCfg,
+			Environment: envSnap,
+			Events:      eventPayloads,
+			Workdir:     workdirPath,
 		},
 		func(ev json.RawMessage) error {
 			return m.publishEvents(ctx, []json.RawMessage{ev})

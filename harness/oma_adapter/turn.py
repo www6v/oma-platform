@@ -12,6 +12,7 @@ from oma_adapter.emit import emit_oma_events
 from oma_adapter.project import project_oma_events
 from oma_adapter.tools import session_tool_config_from_agent
 from oma_adapter.types import AgentSnapshot, ModelConfig, TurnResponse
+from oma_adapter.web_fetch.runtime import WebFetchRuntime, clear_web_fetch_runtime, configure_web_fetch
 
 CreateSessionFn = Callable[[Any], Awaitable[Any]]
 EventCallback = Callable[[dict[str, Any]], Awaitable[None]]
@@ -100,6 +101,8 @@ async def _run_turn_core(
     session_id: str,
     agent: AgentSnapshot,
     model: ModelConfig | None,
+    aux_model: ModelConfig | None = None,
+    environment: dict[str, Any] | None = None,
     events: list[dict[str, Any]],
     workdir: str,
     create_session: CreateSessionFn | None,
@@ -116,81 +119,96 @@ async def _run_turn_core(
         resolved_model = "faux/test"
 
     with _provider_env(model):
-        if create_session is not None:
-            result = await create_session(None)
-        else:
-            tool_cfg = session_tool_config_from_agent(agent)
-            result = await _default_create_session(
-                workdir=workdir,
-                model=resolved_model,
-                system_prompt=agent.system_prompt,
-                builtin_tools=tool_cfg.builtin_tools,
-                extension_paths=tool_cfg.extension_paths,
-            )
-        session = result.session
-
-        buffer: list[dict[str, Any]] = []
-        raw_cursor = 0
-        seen_agent_text: set[str] = set()
-        oma_events: list[dict[str, Any]] = []
         queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
 
-        async def drain_events() -> None:
-            while True:
-                item = await queue.get()
-                if item is None:
-                    break
-                oma_events.append(item)
-                if on_event is not None:
-                    await on_event(item)
+        async def emit_aux(event: dict[str, Any]) -> None:
+            queue.put_nowait(event)
 
-        drainer = asyncio.create_task(drain_events())
+        configure_web_fetch(
+            WebFetchRuntime(
+                workdir=workdir,
+                aux_model=aux_model,
+                environment=environment,
+                emit_event=emit_aux if aux_model is not None else None,
+            ),
+        )
+        try:
+            if create_session is not None:
+                result = await create_session(None)
+            else:
+                tool_cfg = session_tool_config_from_agent(agent)
+                result = await _default_create_session(
+                    workdir=workdir,
+                    model=resolved_model,
+                    system_prompt=agent.system_prompt,
+                    builtin_tools=tool_cfg.builtin_tools,
+                    extension_paths=tool_cfg.extension_paths,
+                )
+            session = result.session
 
-        def listener(event: Any) -> None:
-            nonlocal raw_cursor
-            _collect_pi_event(buffer, event)
-            delta = emit_oma_events(
-                buffer[raw_cursor:],
-                seen_agent_text=seen_agent_text,
-            )
-            raw_cursor = len(buffer)
-            for ev in delta:
-                queue.put_nowait(ev)
+            buffer: list[dict[str, Any]] = []
+            raw_cursor = 0
+            seen_agent_text: set[str] = set()
+            oma_events: list[dict[str, Any]] = []
 
-        if hasattr(session, "subscribe"):
-            session.subscribe(listener)
-        elif hasattr(session, "on"):
-            session.on("event", listener)
+            async def drain_events() -> None:
+                while True:
+                    item = await queue.get()
+                    if item is None:
+                        break
+                    oma_events.append(item)
+                    if on_event is not None:
+                        await on_event(item)
 
-        await session.prompt(prompt)
-        if hasattr(session, "wait_for_idle"):
-            await session.wait_for_idle()
+            drainer = asyncio.create_task(drain_events())
 
-        if not oma_events:
-            fallback = emit_oma_events(
-                buffer,
-                seen_agent_text=seen_agent_text,
-            )
-            if not fallback:
-                text = _assistant_text_from_session(session)
-                if text:
-                    fallback = [
-                        {
-                            "type": "agent.message",
-                            "content": [{"type": "text", "text": text}],
-                        }
-                    ]
-            for ev in fallback:
-                queue.put_nowait(ev)
+            def listener(event: Any) -> None:
+                nonlocal raw_cursor
+                _collect_pi_event(buffer, event)
+                delta = emit_oma_events(
+                    buffer[raw_cursor:],
+                    seen_agent_text=seen_agent_text,
+                )
+                raw_cursor = len(buffer)
+                for ev in delta:
+                    queue.put_nowait(ev)
 
-        queue.put_nowait(None)
-        await drainer
+            if hasattr(session, "subscribe"):
+                session.subscribe(listener)
+            elif hasattr(session, "on"):
+                session.on("event", listener)
 
-        if not oma_events:
-            msg = "harness turn produced no assistant output"
-            raise RuntimeError(msg)
+            await session.prompt(prompt)
+            if hasattr(session, "wait_for_idle"):
+                await session.wait_for_idle()
 
-        return TurnResponse(events=oma_events)
+            if not oma_events:
+                fallback = emit_oma_events(
+                    buffer,
+                    seen_agent_text=seen_agent_text,
+                )
+                if not fallback:
+                    text = _assistant_text_from_session(session)
+                    if text:
+                        fallback = [
+                            {
+                                "type": "agent.message",
+                                "content": [{"type": "text", "text": text}],
+                            }
+                        ]
+                for ev in fallback:
+                    queue.put_nowait(ev)
+
+            queue.put_nowait(None)
+            await drainer
+
+            if not oma_events:
+                msg = "harness turn produced no assistant output"
+                raise RuntimeError(msg)
+
+            return TurnResponse(events=oma_events)
+        finally:
+            clear_web_fetch_runtime()
 
 
 async def run_turn(
@@ -198,6 +216,8 @@ async def run_turn(
     session_id: str,
     agent: AgentSnapshot,
     model: ModelConfig | None = None,
+    aux_model: ModelConfig | None = None,
+    environment: dict[str, Any] | None = None,
     events: list[dict[str, Any]],
     workdir: str,
     create_session: CreateSessionFn | None = None,
@@ -206,6 +226,8 @@ async def run_turn(
         session_id=session_id,
         agent=agent,
         model=model,
+        aux_model=aux_model,
+        environment=environment,
         events=events,
         workdir=workdir,
         create_session=create_session,
@@ -218,6 +240,8 @@ async def run_turn_stream(
     session_id: str,
     agent: AgentSnapshot,
     model: ModelConfig | None = None,
+    aux_model: ModelConfig | None = None,
+    environment: dict[str, Any] | None = None,
     events: list[dict[str, Any]],
     workdir: str,
     create_session: CreateSessionFn | None = None,
@@ -227,6 +251,8 @@ async def run_turn_stream(
         session_id=session_id,
         agent=agent,
         model=model,
+        aux_model=aux_model,
+        environment=environment,
         events=events,
         workdir=workdir,
         create_session=create_session,
