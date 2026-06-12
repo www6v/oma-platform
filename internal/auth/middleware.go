@@ -171,6 +171,13 @@ func isExempt(path string, consoleMounted bool) bool {
 	if strings.HasPrefix(path, "/v1/mcp-proxy/") {
 		return true
 	}
+	if strings.HasPrefix(path, "/v1/internal/") {
+		return true
+	}
+	if strings.HasPrefix(path, "/linear/oauth/") ||
+		strings.HasPrefix(path, "/linear/webhook/") {
+		return true
+	}
 	if consoleMounted && !strings.HasPrefix(path, "/v1/") {
 		return true
 	}

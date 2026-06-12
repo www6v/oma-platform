@@ -52,12 +52,16 @@ func (r *Resolver) Resolve(
 		if err != nil {
 			return harness.ModelConfig{}, err
 		}
-		return harness.ModelConfig{
+		cfg := harness.ModelConfig{
 			Model:    agentModel,
 			Provider: defaultCard.Provider,
 			APIKey:   key,
 			BaseURL:  defaultCard.BaseURL,
-		}, nil
+		}
+		if len(defaultCard.CustomHeaders) > 0 {
+			cfg.CustomHeaders = defaultCard.CustomHeaders
+		}
+		return cfg, nil
 	}
 
 	cfg := harness.ModelConfig{Model: agentModel}

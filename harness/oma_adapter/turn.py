@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import os
-from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Iterator
+from typing import Any, Awaitable, Callable
 
 from oma_adapter.emit import emit_oma_events
 from oma_adapter.platform_guidance import compose_system_prompt
 from oma_adapter.project import project_oma_events
+from oma_adapter.provider_env import provider_env
 from oma_adapter.sandbox_paths import patch_path_utils
 from oma_adapter.outbound.setup import (
     clear_outbound_proxy_for_turn,
@@ -84,27 +84,6 @@ async def _default_create_session(
     return await create_agent_session(opts)
 
 
-@contextmanager
-def _provider_env(model: ModelConfig | None) -> Iterator[None]:
-    if model is None or not model.api_key:
-        yield
-        return
-    provider = (model.provider or "").lower()
-    keys = ["ANTHROPIC_API_KEY"]
-    if provider.startswith("oai") or provider == "openai":
-        keys = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"]
-    saved = {key: os.environ.get(key) for key in keys}
-    try:
-        os.environ[keys[0]] = model.api_key
-        yield
-    finally:
-        for key, value in saved.items():
-            if value is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = value
-
-
 async def _run_turn_core(
     *,
     session_id: str,
@@ -144,7 +123,7 @@ async def _run_turn_core(
         proxy_api_key=outbound_proxy_api_key,
     )
 
-    with _provider_env(model):
+    with provider_env(model):
         queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
 
         async def emit_aux(event: dict[str, Any]) -> None:

@@ -10,12 +10,14 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/open-ma/oma-building/internal/integrations/linear"
 	"github.com/open-ma/oma-building/internal/store"
 )
 
 type integrationsDeps struct {
-	Integrations *store.IntegrationRepo
+	Integrations  *store.IntegrationRepo
 	GatewayOrigin string
+	Linear        *linear.Handler
 }
 
 func mountIntegrationRoutes(r chi.Router, deps integrationsDeps) {
@@ -36,7 +38,9 @@ func mountIntegrationRoutes(r chi.Router, deps integrationsDeps) {
 		} {
 			p := provider
 			r.Route("/"+string(p), func(r chi.Router) {
-				mountProviderIntegrationRoutes(r, p, deps.Integrations, origin)
+				mountProviderIntegrationRoutes(
+					r, p, deps.Integrations, origin, deps.Linear,
+				)
 			})
 		}
 	})
@@ -47,6 +51,7 @@ func mountProviderIntegrationRoutes(
 	provider store.IntegrationProvider,
 	repo *store.IntegrationRepo,
 	origin string,
+	linearHandler *linear.Handler,
 ) {
 	r.Use(requireIntegrationUser)
 
@@ -319,8 +324,14 @@ func mountProviderIntegrationRoutes(
 				return
 			}
 			shell := linearPublicationShell(*pub, origin)
+			installURL := origin + "/linear/oauth/pub/" + id + "/authorize"
+			if linearHandler != nil {
+				if signed, err := linearHandler.BuildInstallURL(id, body.ReturnURL); err == nil {
+					installURL = signed
+				}
+			}
 			writeJSON(w, http.StatusOK, map[string]any{
-				"install_url":     origin + "/linear/oauth/pub/" + id + "/authorize",
+				"install_url":     installURL,
 				"publication_id":  id,
 				"callback_url":    shell["callback_url"],
 				"webhook_url":     shell["webhook_url"],
@@ -587,7 +598,7 @@ func linearPublicationShell(
 	return map[string]any{
 		"publication_id":       pub.ID,
 		"callback_url":         origin + "/linear/oauth/pub/" + pub.ID + "/callback",
-		"webhook_url":          origin + "/linear/webhooks/" + pub.ID,
+		"webhook_url":          origin + "/linear/webhook/pub/" + pub.ID,
 		"suggested_app_name":   pub.PersonaName,
 		"suggested_avatar_url": suggestedAvatar,
 		"return_url":           returnURL,

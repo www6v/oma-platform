@@ -124,6 +124,16 @@ func main() {
 
 	publicURL := envOrDefault("OMA_PUBLIC_URL", "http://127.0.0.1:8787")
 	outboundAddr := envOrDefault("OMA_OUTBOUND_PROXY_ADDR", ":8790")
+	internalSecret := os.Getenv("OMA_INTERNAL_SECRET")
+	sessionHandlers := api.NewSessionHandlers(
+		sessions, events, pending, hub, registry, workdirs,
+		sessionOutputs, harnessClient, modelResolver,
+		publicURL, apiKey,
+		outbound.HostForHarness(outboundAddr), apiKey,
+	)
+	linearGateway := api.NewLinearGatewayHandler(
+		integrations, sessionHandlers, publicURL, internalSecret,
+	)
 	handler := api.NewRouter(api.Deps{
 		Agents:       agents,
 		Environments: environments,
@@ -141,12 +151,7 @@ func main() {
 		Integrations:   integrations,
 		MemoryStores:   memoryStores,
 		EvalRuns:       evalRuns,
-		Sessions: api.NewSessionHandlers(
-			sessions, events, pending, hub, registry, workdirs,
-			sessionOutputs, harnessClient, modelResolver,
-			publicURL, apiKey,
-			outbound.HostForHarness(outboundAddr), apiKey,
-		),
+		Sessions:      sessionHandlers,
 		APIKey:       apiKey,
 		ConsoleDir:   consoleDir,
 		AuthDisabled: authDisabled,
@@ -155,6 +160,9 @@ func main() {
 		McpProxyKey:  apiKey,
 		OutboundProxyAddr: outboundAddr,
 		OutboundProxyKey:  apiKey,
+		InternalSecret:    internalSecret,
+		ModelResolver:     modelResolver,
+		LinearGateway:     linearGateway,
 	})
 
 	log.Printf("oma-server listening on %s", addr)

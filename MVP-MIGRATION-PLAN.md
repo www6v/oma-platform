@@ -101,7 +101,7 @@ Console 全量 wire 验收：`scripts/console-integration.sh`
 | POST /v1/models/list | `apps/main/routes/models.ts` | `console_stubs.go` 静态列表 | 🟡 | P0-4 |
 | Environment | `environments-store` | `environments.go` | ✅ | 无 per-env 容器镜像 |
 | 沙箱隔离 | CF Container | `internal/workdir/` | 🟡 | 目录级，非容器 |
-| Model card internal key | `/v1/internal/.../key` | — | ❌ | harness 解析用（P0-5） |
+| Model card internal key | `/v1/internal/.../key` | turn payload + internal resolve | ✅ | harness 解析用（P0-5） |
 
 ### P1 — Console 完整可用 + 集成执行
 
@@ -116,12 +116,12 @@ Console 全量 wire 验收：`scripts/console-integration.sh`
 | Model Cards CRUD | `model-cards-store` | `model_cards.go` | ✅ | |
 | Vaults + credentials | `vaults-store` | `vaults.go`, `vaultoauth/` | ✅ | OAuth refresh 已有 |
 | Session aux | threads/pending/trajectory/outputs | `session_aux.go`, `trajectory.go` | 🟡 | `threads` 仍为 stub（P1-7） |
-| Integrations Linear/GH/Slack | `apps/integrations` | `integrations.go` | 🟡 | publication/dispatch CRUD 有；**无 webhook/OAuth 执行**（P1-1/2/3） |
+| Integrations Linear/GH/Slack | `apps/integrations` | `integrations.go`, `oauth.go`, `linear/` | 🟡 | Linear **webhook + OAuth 已接**（P1-1/2）；GH/Slack 仍无执行（P1-3） |
 | Eval runs | cron `tickEvalRuns` | `eval_runs.go` | 🟡 | CRUD + `pending`；**无后台 worker**（P1-4） |
 | Runtimes + ACP daemon | RuntimeRoom DO | `runtimes.go`, `runtime_daemon.go` | 🟡 | connect/exchange 有；**无 WS attach**（P1-6） |
 | Memory stores | R2 + FUSE + queue | `memory_stores.go` | 🟡 | SQLite 内联 content；无 retention cron（P1-5） |
-| OAuth (/v1/oauth/*) | `routes/oauth.ts` | — | ❌ | P1-2 |
-| Internal API (/v1/internal/*) | `routes/internal.ts` | — | ❌ | P2-8 |
+| OAuth (/v1/oauth/*) | `routes/oauth.ts` | — | ❌ | 通用 OAuth defer；Linear 用 `/linear/oauth/pub/{id}` |
+| Internal API (/v1/internal/*) | `routes/internal.ts` | `internal.go` | 🟡 | model_cards key/resolve + Linear mock bind；其余 P2-8 |
 
 ### P2 — 平台 parity
 
@@ -238,7 +238,9 @@ Client / Console
 |------|------|
 | AMA Agent/Session wire | `internal/api/agentwire.go`, `sessionwire.go`, `*_ama_test.go` |
 | Console 契约集成测试 | `scripts/console-integration.sh`, `p1_console_test.go` |
-| DB migrations (001–010) | `internal/store/migrations/` |
+| DB migrations (001–011) | `internal/store/migrations/` |
+| Linear gateway (OAuth/webhook) | `internal/api/oauth.go`, `internal/integrations/linear/` |
+| Linear webhook smoke | `scripts/smoke-linear-webhook.sh` |
 | Fake harness CI | `OMA_FAKE_HARNESS=1`, `internal/harness/fake.go` |
 | Trajectory 导出 | `internal/api/trajectory.go` |
 | Tool confirmation / pending | `internal/api/pending.go` |
@@ -264,8 +266,8 @@ Client / Console
 - [ ] **T2 (P0)** — MCP 挂载 + 可选 `/v1/mcp-proxy` — harness + `internal/api/mcp_proxy.go`
 - [ ] **T3 (P0)** — Vault outbound HTTP 代理 — `internal/outbound/`
 - [ ] **T4 (P0)** — 真实 `POST /v1/models/list` — 替换 `internal/api/console_stubs.go`
-- [ ] **T5 (P0)** — model card internal key 供 harness — internal 端点或 turn payload
-- [ ] **T6 (P1)** — Linear webhook + OAuth — `integrations.go` + `oauth.go` — Verify: `console-integration.sh` publication 全流程
+- [x] **T5 (P0)** — model card internal key 供 harness — internal 端点或 turn payload
+- [x] **T6 (P1)** — Linear webhook + OAuth — `integrations.go` + `oauth.go` + `011_linear_gateway.sql` — Verify: `go test ./internal/api/...` + `scripts/smoke-linear-webhook.sh`（需重启 oma-server）
 - [ ] **T7 (P1)** — GitHub/Slack webhook 最小 E2E — integrations 扩展
 - [ ] **T8 (P1)** — Eval run background worker — `internal/eval/worker.go` — Verify: run pending→completed
 - [ ] **T9 (P1)** — Memory blob + retention — store + cron

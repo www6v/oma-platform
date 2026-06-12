@@ -51,6 +51,12 @@ func testRouterDeps(
 	}
 	outputs := sessionoutputs.NewStore(outputsDir)
 
+	integrations := store.NewIntegrationRepo(db)
+	sessionHandlers := api.NewSessionHandlers(
+		sessions, events, pending, hub, reg, workdirs,
+		outputs, client, models, "", "", "", "",
+	)
+	const testInternalSecret = "test-internal-secret"
 	deps := api.Deps{
 		Agents:         agents,
 		Environments:   environments,
@@ -65,13 +71,14 @@ func testRouterDeps(
 		ApiKeys:        store.NewApiKeyRepo(db),
 		Tenants:        store.NewTenantRepo(db),
 		Runtimes:       store.NewRuntimeRepo(db),
-		Integrations:   store.NewIntegrationRepo(db),
+		Integrations:   integrations,
 		MemoryStores:   store.NewMemoryStoreRepo(db),
 		EvalRuns:       store.NewEvalRunRepo(db),
 		AuthDisabled:   true,
-		Sessions: api.NewSessionHandlers(
-			sessions, events, pending, hub, reg, workdirs,
-			outputs, client, models, "", "", "", "",
+		Sessions:       sessionHandlers,
+		InternalSecret: testInternalSecret,
+		LinearGateway: api.NewLinearGatewayHandler(
+			integrations, sessionHandlers, "http://test", testInternalSecret,
 		),
 	}
 	return deps, reg

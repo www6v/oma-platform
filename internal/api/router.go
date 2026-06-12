@@ -8,6 +8,7 @@ import (
 
 	"github.com/open-ma/oma-building/internal/auth"
 	"github.com/open-ma/oma-building/internal/console"
+	"github.com/open-ma/oma-building/internal/integrations/linear"
 	"github.com/open-ma/oma-building/internal/fileblob"
 	"github.com/open-ma/oma-building/internal/harness"
 	"github.com/open-ma/oma-building/internal/mcpproxy"
@@ -46,6 +47,9 @@ type Deps struct {
 	McpProxyKey  string
 	OutboundProxyAddr string
 	OutboundProxyKey  string
+	InternalSecret    string
+	ModelResolver     *modelresolve.Resolver
+	LinearGateway     *linear.Handler
 }
 
 // NewRouter returns the platform HTTP handler.
@@ -167,10 +171,16 @@ func NewRouter(deps Deps) http.Handler {
 		})
 	}
 
+	gatewayOrigin := integrationsGatewayOrigin()
 	mountIntegrationRoutes(r, integrationsDeps{
 		Integrations:  deps.Integrations,
-		GatewayOrigin: integrationsGatewayOrigin(),
+		GatewayOrigin: gatewayOrigin,
+		Linear:        deps.LinearGateway,
 	})
+
+	if deps.LinearGateway != nil {
+		mountLinearGatewayRoutes(r, linearGatewayDeps{Handler: deps.LinearGateway})
+	}
 
 	mountMemoryStoreRoutes(r, memoryStoresDeps{
 		MemoryStores: deps.MemoryStores,
@@ -179,6 +189,15 @@ func NewRouter(deps Deps) http.Handler {
 		EvalRuns:     deps.EvalRuns,
 		Agents:       deps.Agents,
 		Environments: deps.Environments,
+	})
+
+	mountModelsListRoutes(r, modelsListDeps{})
+
+	mountInternalRoutes(r, internalDeps{
+		Secret:        deps.InternalSecret,
+		Cards:         deps.ModelCards,
+		Resolver:      deps.ModelResolver,
+		LinearGateway: deps.LinearGateway,
 	})
 
 	mountConsoleStubRoutes(r, consoleStubDeps{

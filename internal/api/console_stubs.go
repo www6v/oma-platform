@@ -24,8 +24,6 @@ func mountConsoleStubRoutes(
 	r chi.Router,
 	deps consoleStubDeps,
 ) {
-	r.Get("/v1/models/list", handleModelsListStub)
-
 	r.Route("/v1/files", func(r chi.Router) {
 		mountFileRoutes(r, filesDeps{
 			Files:   deps.Files,
@@ -72,28 +70,6 @@ func mountIntegrationStubRoutes(r chi.Router) {
 func handleRuntimesListStub(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"runtimes": []any{},
-	})
-}
-
-func handleModelsListStub(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"data": []map[string]any{
-			{
-				"id":           "claude-haiku-4-5-20251001",
-				"display_name": "Claude Haiku 4.5",
-				"speeds":       []string{"standard", "fast"},
-			},
-			{
-				"id":           "claude-sonnet-4-6",
-				"display_name": "Claude Sonnet 4.6",
-				"speeds":       []string{"standard"},
-			},
-			{
-				"id":           "claude-opus-4-7",
-				"display_name": "Claude Opus 4.7",
-				"speeds":       []string{"standard"},
-			},
-		},
 	})
 }
 
