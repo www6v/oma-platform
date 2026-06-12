@@ -98,12 +98,13 @@ def web_cache_display_path(workdir: str, url: str) -> str:
     return f"/workspace/.web/{rel}"
 
 
-async def _curl_fallback(url: str, cap: int) -> str:
+async def _curl_fallback(workdir: str, url: str, cap: int) -> str:
     cmd = (
         f"curl -sL -m 30 {shlex.quote(url)} | head -c {cap}"
     )
     proc = await asyncio.create_subprocess_shell(
         cmd,
+        cwd=workdir,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
@@ -117,7 +118,7 @@ async def _curl_fallback(url: str, cap: int) -> str:
     )
 
 
-async def _fetch_bytes(url: str) -> tuple[bytes, str, str]:
+async def _fetch_bytes(url: str, runtime: WebFetchRuntime) -> tuple[bytes, str, str]:
     headers = {
         "User-Agent": USER_AGENT,
         "Accept": (
@@ -125,27 +126,42 @@ async def _fetch_bytes(url: str) -> tuple[bytes, str, str]:
             "*/*;q=0.8"
         ),
     }
-    async with httpx.AsyncClient(
-        follow_redirects=True,
-        timeout=FETCH_TIMEOUT_SEC,
-    ) as client:
+    if runtime.session_id:
+        headers["X-OMA-Session-Id"] = runtime.session_id
+    if runtime.outbound_proxy_api_key:
+        headers["Proxy-Authorization"] = (
+            f"Bearer {runtime.outbound_proxy_api_key}"
+        )
+
+    client_kwargs: dict[str, Any] = {
+        "follow_redirects": True,
+        "timeout": FETCH_TIMEOUT_SEC,
+    }
+    if runtime.outbound_proxy_url:
+        client_kwargs["proxy"] = runtime.outbound_proxy_url
+
+    async with httpx.AsyncClient(**client_kwargs) as client:
         response = await client.get(url, headers=headers)
         response.raise_for_status()
         content_type = response.headers.get("content-type") or "text/html"
         return response.content, content_type, str(response.url)
 
 
-async def _fetch_to_markdown(url: str, cap: int) -> tuple[str, bool]:
+async def _fetch_to_markdown(
+    url: str,
+    cap: int,
+    runtime: WebFetchRuntime,
+) -> tuple[str, bool]:
     """Return (markdown, is_raw_fallback)."""
     try:
-        body, content_type, _final_url = await _fetch_bytes(url)
+        body, content_type, _final_url = await _fetch_bytes(url, runtime)
         text = body.decode("utf-8", errors="replace")
         markdown = html_to_markdown(text, content_type)
         if markdown is not None and markdown.strip():
             return markdown, False
     except Exception:
         pass
-    raw = await _curl_fallback(url, cap)
+    raw = await _curl_fallback(runtime.workdir, url, cap)
     return raw, True
 
 
@@ -167,7 +183,7 @@ async def fetch_web_content(url: str, cap: int) -> str:
     assert url is not None
 
     cap = min(max(cap, 1), MAX_TOOL_RESULT_CHARS)
-    markdown, is_raw = await _fetch_to_markdown(url, cap)
+    markdown, is_raw = await _fetch_to_markdown(url, cap, runtime)
 
     if (
         not is_raw

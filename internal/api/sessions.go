@@ -48,6 +48,8 @@ type sessionHandlers struct {
 	models       *modelresolve.Resolver
 	mcpProxyBase string
 	mcpProxyKey  string
+	outboundProxyAddr string
+	outboundProxyKey  string
 }
 
 func (h *sessionHandlers) registerMachine(sess *store.Session) {
@@ -63,6 +65,8 @@ func (h *sessionHandlers) registerMachine(sess *store.Session) {
 		Models:        h.models,
 		McpProxyBase:  h.mcpProxyBase,
 		McpProxyAPIKey: h.mcpProxyKey,
+		OutboundProxyAddr: h.outboundProxyAddr,
+		OutboundProxyAPIKey: h.outboundProxyKey,
 	})
 }
 

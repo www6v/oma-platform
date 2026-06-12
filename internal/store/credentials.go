@@ -146,6 +146,35 @@ func (r *CredentialRepo) FindActiveByMcpURL(
 	return cred, nil
 }
 
+// ListActiveForTenant returns active credentials for a tenant.
+func (r *CredentialRepo) ListActiveForTenant(
+	ctx context.Context,
+	tenantID string,
+) ([]*Credential, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, vault_id, display_name, auth_cipher,
+			created_at, updated_at, archived_at
+		FROM credentials
+		WHERE tenant_id = ? AND archived_at IS NULL
+		ORDER BY created_at ASC`,
+		tenantOrDefault(tenantID),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list tenant credentials: %w", err)
+	}
+	defer rows.Close()
+
+	var out []*Credential
+	for rows.Next() {
+		cred, err := scanCredential(rows, tenantOrDefault(tenantID))
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, cred)
+	}
+	return out, rows.Err()
+}
+
 // List returns active credentials for a vault.
 func (r *CredentialRepo) List(
 	ctx context.Context,

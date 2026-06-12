@@ -37,6 +37,8 @@ async def internal_turn(body: TurnRequest) -> TurnResponse:
                 workdir=body.workdir,
                 mcp_proxy_base=body.mcp_proxy_base,
                 mcp_proxy_api_key=body.mcp_proxy_api_key,
+                outbound_proxy_addr=body.outbound_proxy_addr,
+                outbound_proxy_api_key=body.outbound_proxy_api_key,
             ),
             timeout=TURN_TIMEOUT_SEC,
         )
@@ -70,6 +72,8 @@ async def internal_turn_stream(body: TurnRequest) -> StreamingResponse:
                     workdir=body.workdir,
                     mcp_proxy_base=body.mcp_proxy_base,
                     mcp_proxy_api_key=body.mcp_proxy_api_key,
+                    outbound_proxy_addr=body.outbound_proxy_addr,
+                    outbound_proxy_api_key=body.outbound_proxy_api_key,
                     on_event=on_event,
                 ),
                 timeout=TURN_TIMEOUT_SEC,

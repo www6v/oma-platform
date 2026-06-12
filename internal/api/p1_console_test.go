@@ -213,7 +213,7 @@ func testRouterWithApiKeys(t *testing.T) http.Handler {
 		SessionOutputs: outputs,
 		Sessions: api.NewSessionHandlers(
 			sessions, events, pending, hub, reg, workdirs,
-			outputs, &harness.FakeClient{}, models, "", "",
+			outputs, &harness.FakeClient{}, models, "", "", "", "",
 		),
 	})
 }

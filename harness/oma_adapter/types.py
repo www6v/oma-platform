@@ -38,6 +38,8 @@ class TurnRequest(BaseModel):
     workdir: str
     mcp_proxy_base: str | None = None
     mcp_proxy_api_key: str | None = None
+    outbound_proxy_addr: str | None = None
+    outbound_proxy_api_key: str | None = None
 
 
 class TurnResponse(BaseModel):

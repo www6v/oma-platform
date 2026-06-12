@@ -71,7 +71,7 @@ func testRouterDeps(
 		AuthDisabled:   true,
 		Sessions: api.NewSessionHandlers(
 			sessions, events, pending, hub, reg, workdirs,
-			outputs, client, models, "", "",
+			outputs, client, models, "", "", "", "",
 		),
 	}
 	return deps, reg
@@ -156,7 +156,7 @@ func testRouterSharedDB(
 		EvalRuns:       store.NewEvalRunRepo(db),
 		AuthDisabled:   true,
 		Sessions: api.NewSessionHandlers(
-			sessions, events, pending, hub, reg, workdirs, outputs, client, models, "", "",
+			sessions, events, pending, hub, reg, workdirs, outputs, client, models, "", "", "", "",
 		),
 	})
 	return handler, reg, sessions

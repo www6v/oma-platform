@@ -12,6 +12,11 @@ from oma_adapter.emit import emit_oma_events
 from oma_adapter.platform_guidance import compose_system_prompt
 from oma_adapter.project import project_oma_events
 from oma_adapter.sandbox_paths import patch_path_utils
+from oma_adapter.outbound.setup import (
+    clear_outbound_proxy_for_turn,
+    normalize_outbound_proxy_addr,
+    setup_outbound_proxy_for_turn,
+)
 from oma_adapter.mcp.runtime import clear_mcp_runtime
 from oma_adapter.mcp.setup import mcp_servers_from_agent, setup_mcp_runtime_for_turn
 from oma_adapter.tools import session_tool_config_from_agent
@@ -112,6 +117,8 @@ async def _run_turn_core(
     workdir: str,
     mcp_proxy_base: str | None = None,
     mcp_proxy_api_key: str | None = None,
+    outbound_proxy_addr: str | None = None,
+    outbound_proxy_api_key: str | None = None,
     create_session: CreateSessionFn | None,
     on_event: EventCallback | None,
 ) -> TurnResponse:
@@ -126,6 +133,17 @@ async def _run_turn_core(
 
     patch_path_utils(workdir)
 
+    outbound_host = normalize_outbound_proxy_addr(outbound_proxy_addr)
+    outbound_proxy_url = (
+        f"http://{outbound_host}" if outbound_host else None
+    )
+    saved_proxy_env = setup_outbound_proxy_for_turn(
+        workdir=workdir,
+        session_id=session_id,
+        proxy_addr=outbound_proxy_addr,
+        proxy_api_key=outbound_proxy_api_key,
+    )
+
     with _provider_env(model):
         queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
 
@@ -138,6 +156,9 @@ async def _run_turn_core(
                 aux_model=aux_model,
                 environment=environment,
                 emit_event=emit_aux if aux_model is not None else None,
+                outbound_proxy_url=outbound_proxy_url,
+                outbound_proxy_api_key=outbound_proxy_api_key,
+                session_id=session_id,
             ),
         )
         await setup_mcp_runtime_for_turn(
@@ -222,6 +243,7 @@ async def _run_turn_core(
 
             return TurnResponse(events=oma_events)
         finally:
+            clear_outbound_proxy_for_turn(saved_proxy_env)
             clear_web_fetch_runtime()
             clear_mcp_runtime()
 
@@ -238,6 +260,8 @@ async def run_turn(
     workdir: str,
     mcp_proxy_base: str | None = None,
     mcp_proxy_api_key: str | None = None,
+    outbound_proxy_addr: str | None = None,
+    outbound_proxy_api_key: str | None = None,
     create_session: CreateSessionFn | None = None,
 ) -> TurnResponse:
     return await _run_turn_core(
@@ -251,6 +275,8 @@ async def run_turn(
         workdir=workdir,
         mcp_proxy_base=mcp_proxy_base,
         mcp_proxy_api_key=mcp_proxy_api_key,
+        outbound_proxy_addr=outbound_proxy_addr,
+        outbound_proxy_api_key=outbound_proxy_api_key,
         create_session=create_session,
         on_event=None,
     )
@@ -268,6 +294,8 @@ async def run_turn_stream(
     workdir: str,
     mcp_proxy_base: str | None = None,
     mcp_proxy_api_key: str | None = None,
+    outbound_proxy_addr: str | None = None,
+    outbound_proxy_api_key: str | None = None,
     create_session: CreateSessionFn | None = None,
     on_event: EventCallback,
 ) -> TurnResponse:
@@ -282,6 +310,8 @@ async def run_turn_stream(
         workdir=workdir,
         mcp_proxy_base=mcp_proxy_base,
         mcp_proxy_api_key=mcp_proxy_api_key,
+        outbound_proxy_addr=outbound_proxy_addr,
+        outbound_proxy_api_key=outbound_proxy_api_key,
         create_session=create_session,
         on_event=on_event,
     )

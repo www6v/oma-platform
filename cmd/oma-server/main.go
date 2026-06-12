@@ -13,6 +13,7 @@ import (
 	"github.com/open-ma/oma-building/internal/fileblob"
 	"github.com/open-ma/oma-building/internal/harness"
 	"github.com/open-ma/oma-building/internal/modelresolve"
+	"github.com/open-ma/oma-building/internal/outbound"
 	"github.com/open-ma/oma-building/internal/session"
 	"github.com/open-ma/oma-building/internal/sessionoutputs"
 	"github.com/open-ma/oma-building/internal/store"
@@ -122,6 +123,7 @@ func main() {
 	}
 
 	publicURL := envOrDefault("OMA_PUBLIC_URL", "http://127.0.0.1:8787")
+	outboundAddr := envOrDefault("OMA_OUTBOUND_PROXY_ADDR", ":8790")
 	handler := api.NewRouter(api.Deps{
 		Agents:       agents,
 		Environments: environments,
@@ -143,6 +145,7 @@ func main() {
 			sessions, events, pending, hub, registry, workdirs,
 			sessionOutputs, harnessClient, modelResolver,
 			publicURL, apiKey,
+			outbound.HostForHarness(outboundAddr), apiKey,
 		),
 		APIKey:       apiKey,
 		ConsoleDir:   consoleDir,
@@ -150,9 +153,28 @@ func main() {
 		AuthUpstream: authUpstream,
 		McpProxyBase: publicURL,
 		McpProxyKey:  apiKey,
+		OutboundProxyAddr: outboundAddr,
+		OutboundProxyKey:  apiKey,
 	})
 
 	log.Printf("oma-server listening on %s", addr)
+	if outboundAddr != "" {
+		go func() {
+			proxy := outbound.NewProxy(outbound.ProxyDeps{
+				Resolver: &outbound.Resolver{
+					Sessions:    sessions,
+					Credentials: credentials,
+				},
+				ApiKeys: apiKeys,
+				APIKey:  apiKey,
+			})
+			if err := outbound.ListenAndServe(
+				context.Background(), outboundAddr, proxy,
+			); err != nil {
+				log.Printf("outbound proxy stopped: %v", err)
+			}
+		}()
+	}
 	if consoleDir != "" {
 		log.Printf(
 			"console UI mounted from %s (auth_disabled=%v upstream=%s)",

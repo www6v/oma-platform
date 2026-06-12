@@ -36,6 +36,8 @@ type Machine struct {
 	Models       *modelresolve.Resolver
 	McpProxyBase string
 	McpProxyAPIKey string
+	OutboundProxyAddr string
+	OutboundProxyAPIKey string
 	appendLocker sync.Locker
 	activeTurn   string
 	activeTurnM  sync.Mutex
@@ -145,6 +147,8 @@ func (m *Machine) RunTurn(ctx context.Context) error {
 			Workdir:        workdirPath,
 			McpProxyBase:   m.McpProxyBase,
 			McpProxyAPIKey: m.McpProxyAPIKey,
+			OutboundProxyAddr: m.OutboundProxyAddr,
+			OutboundProxyAPIKey: m.OutboundProxyAPIKey,
 		},
 		func(ev json.RawMessage) error {
 			return m.publishEvents(ctx, []json.RawMessage{ev})

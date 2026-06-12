@@ -17,6 +17,9 @@ class WebFetchRuntime:
     aux_model: ModelConfig | None = None
     environment: dict[str, Any] | None = None
     emit_event: EmitEventFn | None = None
+    outbound_proxy_url: str | None = None
+    outbound_proxy_api_key: str | None = None
+    session_id: str | None = None
 
 
 _runtime: WebFetchRuntime | None = None

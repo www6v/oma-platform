@@ -44,6 +44,8 @@ type Deps struct {
 	AuthUpstream string
 	McpProxyBase string
 	McpProxyKey  string
+	OutboundProxyAddr string
+	OutboundProxyKey  string
 }
 
 // NewRouter returns the platform HTTP handler.
@@ -206,6 +208,8 @@ func NewSessionHandlers(
 	models *modelresolve.Resolver,
 	mcpProxyBase string,
 	mcpProxyKey string,
+	outboundProxyAddr string,
+	outboundProxyKey string,
 ) *sessionHandlers {
 	return &sessionHandlers{
 		sessions:     sessions,
@@ -219,5 +223,7 @@ func NewSessionHandlers(
 		models:       models,
 		mcpProxyBase: mcpProxyBase,
 		mcpProxyKey:  mcpProxyKey,
+		outboundProxyAddr: outboundProxyAddr,
+		outboundProxyKey:  outboundProxyKey,
 	}
 }
