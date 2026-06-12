@@ -8,7 +8,9 @@ import (
 
 	"github.com/open-ma/oma-building/internal/auth"
 	"github.com/open-ma/oma-building/internal/console"
+	"github.com/open-ma/oma-building/internal/integrations/github"
 	"github.com/open-ma/oma-building/internal/integrations/linear"
+	"github.com/open-ma/oma-building/internal/integrations/slack"
 	"github.com/open-ma/oma-building/internal/fileblob"
 	"github.com/open-ma/oma-building/internal/harness"
 	"github.com/open-ma/oma-building/internal/mcpproxy"
@@ -50,6 +52,8 @@ type Deps struct {
 	InternalSecret    string
 	ModelResolver     *modelresolve.Resolver
 	LinearGateway     *linear.Handler
+	GitHubGateway     *github.Handler
+	SlackGateway      *slack.Handler
 }
 
 // NewRouter returns the platform HTTP handler.
@@ -181,6 +185,12 @@ func NewRouter(deps Deps) http.Handler {
 	if deps.LinearGateway != nil {
 		mountLinearGatewayRoutes(r, linearGatewayDeps{Handler: deps.LinearGateway})
 	}
+	if deps.GitHubGateway != nil {
+		mountGitHubGatewayRoutes(r, githubGatewayDeps{Handler: deps.GitHubGateway})
+	}
+	if deps.SlackGateway != nil {
+		mountSlackGatewayRoutes(r, slackGatewayDeps{Handler: deps.SlackGateway})
+	}
 
 	mountMemoryStoreRoutes(r, memoryStoresDeps{
 		MemoryStores: deps.MemoryStores,
@@ -198,6 +208,8 @@ func NewRouter(deps Deps) http.Handler {
 		Cards:         deps.ModelCards,
 		Resolver:      deps.ModelResolver,
 		LinearGateway: deps.LinearGateway,
+		GitHubGateway: deps.GitHubGateway,
+		SlackGateway:  deps.SlackGateway,
 	})
 
 	mountConsoleStubRoutes(r, consoleStubDeps{

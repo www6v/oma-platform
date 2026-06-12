@@ -134,6 +134,12 @@ func main() {
 	linearGateway := api.NewLinearGatewayHandler(
 		integrations, sessionHandlers, publicURL, internalSecret,
 	)
+	githubGateway := api.NewGitHubGatewayHandler(
+		integrations, sessionHandlers, publicURL,
+	)
+	slackGateway := api.NewSlackGatewayHandler(
+		integrations, sessionHandlers, publicURL,
+	)
 	handler := api.NewRouter(api.Deps{
 		Agents:       agents,
 		Environments: environments,
@@ -163,6 +169,8 @@ func main() {
 		InternalSecret:    internalSecret,
 		ModelResolver:     modelResolver,
 		LinearGateway:     linearGateway,
+		GitHubGateway:     githubGateway,
+		SlackGateway:      slackGateway,
 	})
 
 	log.Printf("oma-server listening on %s", addr)

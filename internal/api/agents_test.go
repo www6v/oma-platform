@@ -57,6 +57,7 @@ func testRouterDeps(
 		outputs, client, models, "", "", "", "",
 	)
 	const testInternalSecret = "test-internal-secret"
+	gatewayOrigin := "http://test"
 	deps := api.Deps{
 		Agents:         agents,
 		Environments:   environments,
@@ -78,7 +79,13 @@ func testRouterDeps(
 		Sessions:       sessionHandlers,
 		InternalSecret: testInternalSecret,
 		LinearGateway: api.NewLinearGatewayHandler(
-			integrations, sessionHandlers, "http://test", testInternalSecret,
+			integrations, sessionHandlers, gatewayOrigin, testInternalSecret,
+		),
+		GitHubGateway: api.NewGitHubGatewayHandler(
+			integrations, sessionHandlers, gatewayOrigin,
+		),
+		SlackGateway: api.NewSlackGatewayHandler(
+			integrations, sessionHandlers, gatewayOrigin,
 		),
 	}
 	return deps, reg

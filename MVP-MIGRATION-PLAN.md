@@ -268,7 +268,7 @@ Client / Console
 - [ ] **T4 (P0)** — 真实 `POST /v1/models/list` — 替换 `internal/api/console_stubs.go`
 - [x] **T5 (P0)** — model card internal key 供 harness — internal 端点或 turn payload
 - [x] **T6 (P1)** — Linear webhook + OAuth — `integrations.go` + `oauth.go` + `011_linear_gateway.sql` — Verify: `go test ./internal/api/...` + `scripts/smoke-linear-webhook.sh`（需重启 oma-server）
-- [ ] **T7 (P1)** — GitHub/Slack webhook 最小 E2E — integrations 扩展
+- [x] **T7 (P1)** — GitHub/Slack webhook 最小 E2E — integrations 扩展
 - [ ] **T8 (P1)** — Eval run background worker — `internal/eval/worker.go` — Verify: run pending→completed
 - [ ] **T9 (P1)** — Memory blob + retention — store + cron
 - [ ] **T10 (P1)** — Runtime WebSocket attach — `runtime_daemon.go`

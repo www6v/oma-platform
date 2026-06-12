@@ -10,7 +10,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/open-ma/oma-building/internal/integrations/github"
 	"github.com/open-ma/oma-building/internal/integrations/linear"
+	"github.com/open-ma/oma-building/internal/integrations/slack"
 	"github.com/open-ma/oma-building/internal/store"
 )
 
@@ -236,112 +238,269 @@ func mountProviderIntegrationRoutes(
 				"publication is '"+pub.Status+"'; cannot reissue form token")
 			return
 		}
-		writeJSON(w, http.StatusOK, linearPublicationShell(*pub, origin))
+		writeJSON(w, http.StatusOK, providerPublicationShell(provider, *pub, origin))
 	})
 
 	if provider == store.ProviderLinear {
-		r.Post("/publications", func(w http.ResponseWriter, req *http.Request) {
-			uid := userID(req)
-			var body struct {
-				AgentID          string  `json:"agentId"`
-				EnvironmentID    string  `json:"environmentId"`
-				PersonaName      string  `json:"personaName"`
-				PersonaAvatarURL *string `json:"personaAvatarUrl"`
-				ReturnURL        string  `json:"returnUrl"`
-			}
-			if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
-				writeError(w, http.StatusBadRequest, "invalid JSON body")
-				return
-			}
-			if body.AgentID == "" || body.EnvironmentID == "" ||
-				body.PersonaName == "" || body.ReturnURL == "" {
-				writeError(w, http.StatusBadRequest,
-					"agentId, environmentId, personaName, returnUrl required")
-				return
-			}
-			id := "pub_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-			pub, err := repo.InsertPublicationShell(
-				req.Context(), provider, id,
-				store.NewPublicationShell{
-					TenantID:         tenantID(req),
-					UserID:           uid,
-					AgentID:          body.AgentID,
-					EnvironmentID:    body.EnvironmentID,
-					PersonaName:      body.PersonaName,
-					PersonaAvatarURL: body.PersonaAvatarURL,
-					Capabilities:     []string{},
-					ReturnURL:        body.ReturnURL,
-				},
-			)
-			if err != nil {
-				writeError(w, http.StatusInternalServerError, err.Error())
-				return
-			}
-			writeJSON(w, http.StatusOK, linearPublicationShell(*pub, origin))
-		})
-
-		r.Patch("/publications/{id}/credentials", func(w http.ResponseWriter, req *http.Request) {
-			id := chi.URLParam(req, "id")
-			pub, err := loadOwnedPublication(w, req, repo, provider, id)
-			if pub == nil {
-				return
-			}
-			if err != nil {
-				writeError(w, http.StatusInternalServerError, err.Error())
-				return
-			}
-			var body struct {
-				ClientID      string  `json:"clientId"`
-				ClientSecret  string  `json:"clientSecret"`
-				WebhookSecret string  `json:"webhookSecret"`
-				SigningSecret *string `json:"signingSecret"`
-				ReturnURL     string  `json:"returnUrl"`
-			}
-			if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
-				writeError(w, http.StatusBadRequest, "invalid JSON body")
-				return
-			}
-			if body.ClientID == "" || body.ClientSecret == "" ||
-				body.WebhookSecret == "" {
-				writeError(w, http.StatusBadRequest,
-					"clientId, clientSecret, webhookSecret required")
-				return
-			}
-			if body.ReturnURL == "" {
-				writeError(w, http.StatusBadRequest, "returnUrl required")
-				return
-			}
-			if err := repo.SetPublicationCredentials(
-				req.Context(), provider, id,
-				store.PublicationCredentials{
-					ClientID:      body.ClientID,
-					ClientSecret:  body.ClientSecret,
-					WebhookSecret: body.WebhookSecret,
-					SigningSecret: body.SigningSecret,
-				},
-			); err != nil {
-				writeError(w, http.StatusInternalServerError, err.Error())
-				return
-			}
-			shell := linearPublicationShell(*pub, origin)
-			installURL := origin + "/linear/oauth/pub/" + id + "/authorize"
-			if linearHandler != nil {
-				if signed, err := linearHandler.BuildInstallURL(id, body.ReturnURL); err == nil {
-					installURL = signed
-				}
-			}
-			writeJSON(w, http.StatusOK, map[string]any{
-				"install_url":     installURL,
-				"publication_id":  id,
-				"callback_url":    shell["callback_url"],
-				"webhook_url":     shell["webhook_url"],
-			})
-		})
-
+		mountLinearPublicationRoutes(r, repo, origin, linearHandler)
 		mountLinearDispatchRuleRoutes(r, repo)
+	} else if provider == store.ProviderGitHub {
+		mountGitHubPublicationRoutes(r, repo, origin)
+	} else if provider == store.ProviderSlack {
+		mountSlackPublicationRoutes(r, repo, origin)
 	} else {
 		r.Post("/publications", handleInstallProxyNotConfigured)
 	}
+}
+
+func mountLinearPublicationRoutes(
+	r chi.Router,
+	repo *store.IntegrationRepo,
+	origin string,
+	linearHandler *linear.Handler,
+) {
+	provider := store.ProviderLinear
+	r.Post("/publications", func(w http.ResponseWriter, req *http.Request) {
+		handleCreatePublicationShell(w, req, repo, provider, origin)
+	})
+	r.Patch("/publications/{id}/credentials", func(w http.ResponseWriter, req *http.Request) {
+		id := chi.URLParam(req, "id")
+		pub, err := loadOwnedPublication(w, req, repo, provider, id)
+		if pub == nil {
+			return
+		}
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		var body struct {
+			ClientID      string  `json:"clientId"`
+			ClientSecret  string  `json:"clientSecret"`
+			WebhookSecret string  `json:"webhookSecret"`
+			SigningSecret *string `json:"signingSecret"`
+			ReturnURL     string  `json:"returnUrl"`
+		}
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		if body.ClientID == "" || body.ClientSecret == "" ||
+			body.WebhookSecret == "" {
+			writeError(w, http.StatusBadRequest,
+				"clientId, clientSecret, webhookSecret required")
+			return
+		}
+		if body.ReturnURL == "" {
+			writeError(w, http.StatusBadRequest, "returnUrl required")
+			return
+		}
+		if err := repo.SetPublicationCredentials(
+			req.Context(), provider, id,
+			store.PublicationCredentials{
+				ClientID:      body.ClientID,
+				ClientSecret:  body.ClientSecret,
+				WebhookSecret: body.WebhookSecret,
+				SigningSecret: body.SigningSecret,
+			},
+		); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		shell := providerPublicationShell(provider, *pub, origin)
+		installURL := origin + "/linear/oauth/pub/" + id + "/authorize"
+		if linearHandler != nil {
+			if signed, err := linearHandler.BuildInstallURL(id, body.ReturnURL); err == nil {
+				installURL = signed
+			}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"install_url":     installURL,
+			"publication_id":  id,
+			"callback_url":    shell["callback_url"],
+			"webhook_url":     shell["webhook_url"],
+		})
+	})
+}
+
+func mountGitHubPublicationRoutes(
+	r chi.Router,
+	repo *store.IntegrationRepo,
+	origin string,
+) {
+	provider := store.ProviderGitHub
+	r.Post("/publications", func(w http.ResponseWriter, req *http.Request) {
+		handleCreatePublicationShell(w, req, repo, provider, origin)
+	})
+	r.Patch("/publications/{id}/credentials", func(w http.ResponseWriter, req *http.Request) {
+		id := chi.URLParam(req, "id")
+		pub, err := loadOwnedPublication(w, req, repo, provider, id)
+		if pub == nil {
+			return
+		}
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		var body struct {
+			ClientID      string  `json:"clientId"`
+			ClientSecret  string  `json:"clientSecret"`
+			WebhookSecret string  `json:"webhookSecret"`
+			ReturnURL     string  `json:"returnUrl"`
+		}
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		if body.WebhookSecret == "" {
+			writeError(w, http.StatusBadRequest, "webhookSecret required")
+			return
+		}
+		if err := repo.SetPublicationCredentials(
+			req.Context(), provider, id,
+			store.PublicationCredentials{
+				ClientID:      body.ClientID,
+				ClientSecret:  body.ClientSecret,
+				WebhookSecret: body.WebhookSecret,
+			},
+		); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		shell := providerPublicationShell(provider, *pub, origin)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"publication_id": id,
+			"webhook_url":    shell["webhook_url"],
+			"trigger_label":  store.PublicationTriggerLabel(pub.PersonaName),
+		})
+	})
+}
+
+func mountSlackPublicationRoutes(
+	r chi.Router,
+	repo *store.IntegrationRepo,
+	origin string,
+) {
+	provider := store.ProviderSlack
+	r.Post("/publications", func(w http.ResponseWriter, req *http.Request) {
+		handleCreatePublicationShell(w, req, repo, provider, origin)
+	})
+	r.Patch("/publications/{id}/credentials", func(w http.ResponseWriter, req *http.Request) {
+		id := chi.URLParam(req, "id")
+		pub, err := loadOwnedPublication(w, req, repo, provider, id)
+		if pub == nil {
+			return
+		}
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		var body struct {
+			ClientID      string `json:"clientId"`
+			ClientSecret  string `json:"clientSecret"`
+			SigningSecret string `json:"signingSecret"`
+			ReturnURL     string `json:"returnUrl"`
+		}
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		if body.SigningSecret == "" {
+			writeError(w, http.StatusBadRequest, "signingSecret required")
+			return
+		}
+		signing := body.SigningSecret
+		if err := repo.SetPublicationCredentials(
+			req.Context(), provider, id,
+			store.PublicationCredentials{
+				ClientID:       body.ClientID,
+				ClientSecret:   body.ClientSecret,
+				SigningSecret:  &signing,
+			},
+		); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		shell := providerPublicationShell(provider, *pub, origin)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"publication_id": id,
+			"webhook_url":    shell["webhook_url"],
+		})
+	})
+}
+
+func handleCreatePublicationShell(
+	w http.ResponseWriter,
+	req *http.Request,
+	repo *store.IntegrationRepo,
+	provider store.IntegrationProvider,
+	origin string,
+) {
+	uid := userID(req)
+	var body struct {
+		AgentID          string  `json:"agentId"`
+		EnvironmentID    string  `json:"environmentId"`
+		PersonaName      string  `json:"personaName"`
+		PersonaAvatarURL *string `json:"personaAvatarUrl"`
+		ReturnURL        string  `json:"returnUrl"`
+	}
+	if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if body.AgentID == "" || body.EnvironmentID == "" ||
+		body.PersonaName == "" || body.ReturnURL == "" {
+		writeError(w, http.StatusBadRequest,
+			"agentId, environmentId, personaName, returnUrl required")
+		return
+	}
+	id := "pub_" + strings.ReplaceAll(uuid.NewString(), "-", "")
+	pub, err := repo.InsertPublicationShell(
+		req.Context(), provider, id,
+		store.NewPublicationShell{
+			TenantID:         tenantID(req),
+			UserID:           uid,
+			AgentID:          body.AgentID,
+			EnvironmentID:    body.EnvironmentID,
+			PersonaName:      body.PersonaName,
+			PersonaAvatarURL: body.PersonaAvatarURL,
+			Capabilities:     []string{},
+			ReturnURL:        body.ReturnURL,
+		},
+	)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, providerPublicationShell(provider, *pub, origin))
+}
+
+func providerPublicationShell(
+	provider store.IntegrationProvider,
+	pub store.IntegrationPublication,
+	origin string,
+) map[string]any {
+	returnURL := ""
+	if pub.ReturnURL != nil {
+		returnURL = *pub.ReturnURL
+	}
+	suggestedAvatar := pub.PersonaAvatarURL
+	out := map[string]any{
+		"publication_id":       pub.ID,
+		"suggested_app_name":   pub.PersonaName,
+		"suggested_avatar_url": suggestedAvatar,
+		"return_url":           returnURL,
+	}
+	switch provider {
+	case store.ProviderLinear:
+		out["callback_url"] = origin + "/linear/oauth/pub/" + pub.ID + "/callback"
+		out["webhook_url"] = linear.PublicationWebhookURI(origin, pub.ID)
+	case store.ProviderGitHub:
+		out["webhook_url"] = github.PublicationWebhookURI(origin, pub.ID)
+		out["trigger_label"] = store.PublicationTriggerLabel(pub.PersonaName)
+	case store.ProviderSlack:
+		out["webhook_url"] = slack.PublicationWebhookURI(origin, pub.ID)
+	}
+	return out
 }
 
 func mountLinearDispatchRuleRoutes(
@@ -583,25 +742,6 @@ func isPendingPublicationStatus(status string) bool {
 		return true
 	default:
 		return false
-	}
-}
-
-func linearPublicationShell(
-	pub store.IntegrationPublication,
-	origin string,
-) map[string]any {
-	returnURL := ""
-	if pub.ReturnURL != nil {
-		returnURL = *pub.ReturnURL
-	}
-	suggestedAvatar := pub.PersonaAvatarURL
-	return map[string]any{
-		"publication_id":       pub.ID,
-		"callback_url":         origin + "/linear/oauth/pub/" + pub.ID + "/callback",
-		"webhook_url":          origin + "/linear/webhook/pub/" + pub.ID,
-		"suggested_app_name":   pub.PersonaName,
-		"suggested_avatar_url": suggestedAvatar,
-		"return_url":           returnURL,
 	}
 }
 

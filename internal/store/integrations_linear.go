@@ -73,49 +73,6 @@ func (r *IntegrationRepo) AttachWebhookDeliverySession(
 	return nil
 }
 
-// GetPublicationCredentials returns decrypted OAuth app credentials from the
-// publication row. MVP stores plaintext in *_cipher columns.
-func (r *IntegrationRepo) GetPublicationCredentials(
-	ctx context.Context,
-	publicationID string,
-) (*PublicationCredentials, error) {
-	pub, err := r.GetPublication(ctx, ProviderLinear, publicationID)
-	if err != nil {
-		return nil, err
-	}
-	if pub == nil {
-		return nil, nil
-	}
-	if pub.ClientID == nil || pub.ClientSecretCipher == nil ||
-		pub.WebhookSecretCipher == nil {
-		return nil, nil
-	}
-	creds := &PublicationCredentials{
-		ClientID:      *pub.ClientID,
-		ClientSecret:  *pub.ClientSecretCipher,
-		WebhookSecret: *pub.WebhookSecretCipher,
-	}
-	if pub.SigningSecretCipher != nil {
-		creds.SigningSecret = pub.SigningSecretCipher
-	}
-	return creds, nil
-}
-
-// GetPublicationWebhookSecret returns the webhook signing secret for a pub.
-func (r *IntegrationRepo) GetPublicationWebhookSecret(
-	ctx context.Context,
-	publicationID string,
-) (string, error) {
-	pub, err := r.GetPublication(ctx, ProviderLinear, publicationID)
-	if err != nil {
-		return "", err
-	}
-	if pub == nil || pub.WebhookSecretCipher == nil {
-		return "", nil
-	}
-	return *pub.WebhookSecretCipher, nil
-}
-
 // FindLinearInstallationByWorkspace returns a live dedicated install, if any.
 func (r *IntegrationRepo) FindLinearInstallationByWorkspace(
 	ctx context.Context,

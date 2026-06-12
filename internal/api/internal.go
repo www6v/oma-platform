@@ -1,22 +1,27 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/open-ma/oma-building/internal/harness"
+	"github.com/open-ma/oma-building/internal/integrations/github"
 	"github.com/open-ma/oma-building/internal/integrations/linear"
+	"github.com/open-ma/oma-building/internal/integrations/slack"
 	"github.com/open-ma/oma-building/internal/modelresolve"
 	"github.com/open-ma/oma-building/internal/store"
 )
 
 type internalDeps struct {
-	Secret         string
-	Cards          *store.ModelCardRepo
-	Resolver       *modelresolve.Resolver
-	LinearGateway  *linear.Handler
+	Secret        string
+	Cards         *store.ModelCardRepo
+	Resolver      *modelresolve.Resolver
+	LinearGateway *linear.Handler
+	GitHubGateway *github.Handler
+	SlackGateway  *slack.Handler
 }
 
 func mountInternalRoutes(r chi.Router, deps internalDeps) {
@@ -33,6 +38,18 @@ func mountInternalRoutes(r chi.Router, deps internalDeps) {
 			r.Post(
 				"/linear/publications/{pubId}/bind-mock-install",
 				handleInternalLinearMockInstall(deps),
+			)
+		}
+		if deps.GitHubGateway != nil {
+			r.Post(
+				"/github/publications/{pubId}/bind-mock-install",
+				handleInternalGitHubMockInstall(deps),
+			)
+		}
+		if deps.SlackGateway != nil {
+			r.Post(
+				"/slack/publications/{pubId}/bind-mock-install",
+				handleInternalSlackMockInstall(deps),
 			)
 		}
 	})
@@ -102,7 +119,20 @@ func handleInternalModelResolve(deps internalDeps) http.HandlerFunc {
 	}
 }
 
-func handleInternalLinearMockInstall(deps internalDeps) http.HandlerFunc {
+func handleInternalGitHubMockInstall(deps internalDeps) http.HandlerFunc {
+	return handleInternalProviderMockInstall(deps.GitHubGateway.BindMockInstallation)
+}
+
+func handleInternalSlackMockInstall(deps internalDeps) http.HandlerFunc {
+	return handleInternalProviderMockInstall(deps.SlackGateway.BindMockInstallation)
+}
+
+type mockInstallFn func(
+	ctx context.Context,
+	pubID, workspaceID, workspaceName, botUserID string,
+) error
+
+func handleInternalProviderMockInstall(bind mockInstallFn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		pubID := chi.URLParam(r, "pubId")
 		var body struct {
@@ -123,7 +153,7 @@ func handleInternalLinearMockInstall(deps internalDeps) http.HandlerFunc {
 		if body.BotUserID == "" {
 			body.BotUserID = "bot_mock"
 		}
-		if err := deps.LinearGateway.BindMockInstallation(
+		if err := bind(
 			r.Context(), pubID,
 			body.WorkspaceID, body.WorkspaceName, body.BotUserID,
 		); err != nil {
@@ -135,6 +165,10 @@ func handleInternalLinearMockInstall(deps internalDeps) http.HandlerFunc {
 			"status":         "live",
 		})
 	}
+}
+
+func handleInternalLinearMockInstall(deps internalDeps) http.HandlerFunc {
+	return handleInternalProviderMockInstall(deps.LinearGateway.BindMockInstallation)
 }
 
 func modelConfigResponse(cfg harness.ModelConfig) map[string]any {

@@ -100,7 +100,9 @@ func (h *Handler) AuthorizeRedirectURL(
 	if state.PublicationID != pubID {
 		return "", fmt.Errorf("state publication mismatch")
 	}
-	creds, err := h.Integrations.GetPublicationCredentials(ctx, pubID)
+	creds, err := h.Integrations.GetPublicationCredentials(
+		ctx, store.ProviderLinear, pubID,
+	)
 	if err != nil {
 		return "", err
 	}
@@ -140,7 +142,9 @@ func (h *Handler) CompleteOAuth(
 		result.AlreadyLive = true
 		return result, nil
 	}
-	creds, err := h.Integrations.GetPublicationCredentials(ctx, pubID)
+	creds, err := h.Integrations.GetPublicationCredentials(
+		ctx, store.ProviderLinear, pubID,
+	)
 	if err != nil {
 		return result, err
 	}
@@ -267,7 +271,9 @@ func (h *Handler) HandleWebhook(
 		return out, nil
 	}
 
-	secret, err := h.Integrations.GetPublicationWebhookSecret(ctx, pubID)
+	secret, err := h.Integrations.GetPublicationWebhookSecret(
+		ctx, store.ProviderLinear, pubID,
+	)
 	if err != nil {
 		return out, err
 	}

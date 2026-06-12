@@ -138,36 +138,5 @@ func TestLinearWebhookCreatesSession(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("webhook status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	var resp map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatal(err)
-	}
-	if resp["ok"] != true {
-		t.Fatalf("ok=%v reason=%v", resp["ok"], resp["reason"])
-	}
-	sessionID, ok := resp["session_id"].(string)
-	if !ok || sessionID == "" {
-		t.Fatalf("missing session_id: %v", resp)
-	}
-
-	req = httptest.NewRequest(
-		http.MethodGet,
-		"/v1/sessions/"+sessionID+"/events",
-		nil,
-	)
-	rec = httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("events status=%d body=%s", rec.Code, rec.Body.String())
-	}
-	var events map[string]any
-	_ = json.Unmarshal(rec.Body.Bytes(), &events)
-	data := events["data"].([]any)
-	if len(data) == 0 {
-		t.Fatal("expected session events")
-	}
-	first := data[0].(map[string]any)
-	if first["type"] != "user.message" {
-		t.Fatalf("event type=%v", first["type"])
-	}
+	assertWebhookSessionCreated(t, handler, rec.Body.Bytes())
 }

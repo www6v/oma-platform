@@ -178,6 +178,10 @@ func isExempt(path string, consoleMounted bool) bool {
 		strings.HasPrefix(path, "/linear/webhook/") {
 		return true
 	}
+	if strings.HasPrefix(path, "/github/webhook/") ||
+		strings.HasPrefix(path, "/slack/webhook/") {
+		return true
+	}
 	if consoleMounted && !strings.HasPrefix(path, "/v1/") {
 		return true
 	}
