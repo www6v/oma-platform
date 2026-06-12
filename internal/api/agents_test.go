@@ -45,7 +45,7 @@ func testRouterDeps(
 	pending := store.NewPendingRepo(db)
 	hub := stream.NewHub()
 	reg := session.NewRegistry()
-	workdirs := workdir.NewManager(t.TempDir())
+	workdirs := workdir.NewManager(t.TempDir(), "")
 	if outputsDir == "" {
 		outputsDir = t.TempDir()
 	}
@@ -71,7 +71,7 @@ func testRouterDeps(
 		AuthDisabled:   true,
 		Sessions: api.NewSessionHandlers(
 			sessions, events, pending, hub, reg, workdirs,
-			outputs, client, models,
+			outputs, client, models, "", "",
 		),
 	}
 	return deps, reg
@@ -134,7 +134,7 @@ func testRouterSharedDB(
 	pending := store.NewPendingRepo(db)
 	hub := stream.NewHub()
 	reg := session.NewRegistry()
-	workdirs := workdir.NewManager(t.TempDir())
+	workdirs := workdir.NewManager(t.TempDir(), "")
 	outputs := sessionoutputs.NewStore(t.TempDir())
 
 	handler := api.NewRouter(api.Deps{
@@ -156,7 +156,7 @@ func testRouterSharedDB(
 		EvalRuns:       store.NewEvalRunRepo(db),
 		AuthDisabled:   true,
 		Sessions: api.NewSessionHandlers(
-			sessions, events, pending, hub, reg, workdirs, outputs, client, models,
+			sessions, events, pending, hub, reg, workdirs, outputs, client, models, "", "",
 		),
 	})
 	return handler, reg, sessions

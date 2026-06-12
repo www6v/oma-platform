@@ -28,12 +28,15 @@ async def internal_turn(body: TurnRequest) -> TurnResponse:
         return await asyncio.wait_for(
             run_turn(
                 session_id=body.session_id,
+                tenant_id=body.tenant_id,
                 agent=body.agent,
                 model=body.model,
                 aux_model=body.aux_model,
                 environment=body.environment,
                 events=body.events,
                 workdir=body.workdir,
+                mcp_proxy_base=body.mcp_proxy_base,
+                mcp_proxy_api_key=body.mcp_proxy_api_key,
             ),
             timeout=TURN_TIMEOUT_SEC,
         )
@@ -58,12 +61,15 @@ async def internal_turn_stream(body: TurnRequest) -> StreamingResponse:
             return await asyncio.wait_for(
                 run_turn_stream(
                     session_id=body.session_id,
+                    tenant_id=body.tenant_id,
                     agent=body.agent,
                     model=body.model,
                     aux_model=body.aux_model,
                     environment=body.environment,
                     events=body.events,
                     workdir=body.workdir,
+                    mcp_proxy_base=body.mcp_proxy_base,
+                    mcp_proxy_api_key=body.mcp_proxy_api_key,
                     on_event=on_event,
                 ),
                 timeout=TURN_TIMEOUT_SEC,

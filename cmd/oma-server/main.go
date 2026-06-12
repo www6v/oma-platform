@@ -105,7 +105,7 @@ func main() {
 	pending := store.NewPendingRepo(db)
 	hub := stream.NewHub()
 	registry := session.NewRegistry()
-	workdirs := workdir.NewManager(workdirBase)
+	workdirs := workdir.NewManager(workdirBase, outputsDir)
 
 	harnessTimeout := 10 * time.Minute
 	if raw := os.Getenv("HARNESS_HTTP_TIMEOUT_SEC"); raw != "" {
@@ -121,6 +121,7 @@ func main() {
 		harnessClient = &harness.FakeClient{}
 	}
 
+	publicURL := envOrDefault("OMA_PUBLIC_URL", "http://127.0.0.1:8787")
 	handler := api.NewRouter(api.Deps{
 		Agents:       agents,
 		Environments: environments,
@@ -141,11 +142,14 @@ func main() {
 		Sessions: api.NewSessionHandlers(
 			sessions, events, pending, hub, registry, workdirs,
 			sessionOutputs, harnessClient, modelResolver,
+			publicURL, apiKey,
 		),
 		APIKey:       apiKey,
 		ConsoleDir:   consoleDir,
 		AuthDisabled: authDisabled,
 		AuthUpstream: authUpstream,
+		McpProxyBase: publicURL,
+		McpProxyKey:  apiKey,
 	})
 
 	log.Printf("oma-server listening on %s", addr)

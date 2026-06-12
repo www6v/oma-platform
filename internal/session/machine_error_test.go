@@ -56,7 +56,7 @@ func TestRunTurnHarnessFailureEmitsSessionError(t *testing.T) {
 		Sessions:  sessions,
 		Events:    events,
 		Hub:       stream.NewHub(),
-		Workdirs:  workdir.NewManager(t.TempDir()),
+		Workdirs:  workdir.NewManager(t.TempDir(), ""),
 		Harness:   failingHarness{},
 	}
 

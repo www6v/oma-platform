@@ -122,6 +122,30 @@ func (r *CredentialRepo) Get(
 	return scanCredential(row, tenantOrDefault(tenantID))
 }
 
+// FindActiveByMcpURL returns the newest active credential for an MCP URL.
+func (r *CredentialRepo) FindActiveByMcpURL(
+	ctx context.Context,
+	tenantID, mcpURL string,
+) (*Credential, error) {
+	if mcpURL == "" {
+		return nil, nil
+	}
+	row := r.db.QueryRowContext(ctx, `
+		SELECT id, vault_id, display_name, auth_cipher,
+			created_at, updated_at, archived_at
+		FROM credentials
+		WHERE tenant_id = ? AND mcp_server_url = ? AND archived_at IS NULL
+		ORDER BY COALESCE(updated_at, created_at) DESC
+		LIMIT 1`,
+		tenantOrDefault(tenantID), mcpURL,
+	)
+	cred, err := scanCredential(row, tenantOrDefault(tenantID))
+	if err != nil {
+		return nil, fmt.Errorf("find credential by mcp url: %w", err)
+	}
+	return cred, nil
+}
+
 // List returns active credentials for a vault.
 func (r *CredentialRepo) List(
 	ctx context.Context,

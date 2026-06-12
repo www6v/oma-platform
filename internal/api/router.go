@@ -10,6 +10,7 @@ import (
 	"github.com/open-ma/oma-building/internal/console"
 	"github.com/open-ma/oma-building/internal/fileblob"
 	"github.com/open-ma/oma-building/internal/harness"
+	"github.com/open-ma/oma-building/internal/mcpproxy"
 	"github.com/open-ma/oma-building/internal/modelresolve"
 	"github.com/open-ma/oma-building/internal/session"
 	"github.com/open-ma/oma-building/internal/sessionoutputs"
@@ -41,6 +42,8 @@ type Deps struct {
 	ConsoleDir   string
 	AuthDisabled bool
 	AuthUpstream string
+	McpProxyBase string
+	McpProxyKey  string
 }
 
 // NewRouter returns the platform HTTP handler.
@@ -111,6 +114,17 @@ func NewRouter(deps Deps) http.Handler {
 				Vaults:      deps.Vaults,
 				Credentials: deps.Credentials,
 			})
+		})
+	}
+
+	if deps.Sessions != nil && deps.Credentials != nil {
+		mountMcpProxyRoutes(r, mcpProxyDeps{
+			Resolver: &mcpproxy.Resolver{
+				Sessions:    deps.Sessions.sessions,
+				Credentials: deps.Credentials,
+			},
+			ApiKeys: deps.ApiKeys,
+			APIKey:  deps.APIKey,
 		})
 	}
 
@@ -190,16 +204,20 @@ func NewSessionHandlers(
 	outputs *sessionoutputs.Store,
 	client harness.Client,
 	models *modelresolve.Resolver,
+	mcpProxyBase string,
+	mcpProxyKey string,
 ) *sessionHandlers {
 	return &sessionHandlers{
-		sessions: sessions,
-		events:   events,
-		pending:  pending,
-		hub:      hub,
-		registry: registry,
-		workdirs: workdirs,
-		outputs:  outputs,
-		harness:  client,
-		models:   models,
+		sessions:     sessions,
+		events:       events,
+		pending:      pending,
+		hub:          hub,
+		registry:     registry,
+		workdirs:     workdirs,
+		outputs:      outputs,
+		harness:      client,
+		models:       models,
+		mcpProxyBase: mcpProxyBase,
+		mcpProxyKey:  mcpProxyKey,
 	}
 }

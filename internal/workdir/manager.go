@@ -10,22 +10,33 @@ import (
 
 // Manager provisions per-session working directories.
 type Manager struct {
-	base string
+	base        string
+	outputsRoot string
 }
 
-// NewManager returns a workdir manager rooted at base.
-func NewManager(base string) *Manager {
-	return &Manager{base: base}
+// NewManager returns a workdir manager rooted at base. When outputsRoot is
+// non-empty, Ensure also mounts session outputs at .mnt/session/outputs.
+func NewManager(base, outputsRoot string) *Manager {
+	return &Manager{base: base, outputsRoot: outputsRoot}
 }
 
-// Ensure creates the session directory if needed.
-func (m *Manager) Ensure(_ context.Context, sessionID string) (string, error) {
+// Ensure creates the session directory and mounts session outputs when
+// outputsRoot is configured.
+func (m *Manager) Ensure(
+	_ context.Context,
+	tenantID, sessionID string,
+) (string, error) {
 	if err := validateSessionID(sessionID); err != nil {
 		return "", err
 	}
 	path := filepath.Join(m.base, sessionID)
 	if err := os.MkdirAll(path, 0o755); err != nil {
 		return "", fmt.Errorf("mkdir workdir: %w", err)
+	}
+	if m.outputsRoot != "" {
+		if err := mountSessionOutputs(path, m.outputsRoot, tenantID, sessionID); err != nil {
+			return "", err
+		}
 	}
 	return path, nil
 }
@@ -42,11 +53,58 @@ func (m *Manager) Remove(_ context.Context, sessionID string) error {
 	return nil
 }
 
+func mountSessionOutputs(
+	workdir, outputsRoot, tenantID, sessionID string,
+) error {
+	targetDir := filepath.Join(outputsRoot, normalizeTenant(tenantID), sessionID)
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		return fmt.Errorf("mkdir session outputs: %w", err)
+	}
+	absTarget, err := filepath.Abs(targetDir)
+	if err != nil {
+		return fmt.Errorf("abs session outputs: %w", err)
+	}
+
+	mountParent := filepath.Join(workdir, ".mnt", "session")
+	if err := os.MkdirAll(mountParent, 0o755); err != nil {
+		return fmt.Errorf("mkdir outputs mount parent: %w", err)
+	}
+	workdirLink := filepath.Join(mountParent, "outputs")
+	if err := replaceSymlink(workdirLink, absTarget); err != nil {
+		return fmt.Errorf("symlink %s: %w", workdirLink, err)
+	}
+
+	tryRootSessionOutputsMount(absTarget)
+	return nil
+}
+
+func tryRootSessionOutputsMount(targetDir string) {
+	sessionDir := "/mnt/session"
+	outputsLink := "/mnt/session/outputs"
+	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
+		return
+	}
+	_ = replaceSymlink(outputsLink, targetDir)
+}
+
+func replaceSymlink(link, target string) error {
+	_ = os.Remove(link)
+	return os.Symlink(target, link)
+}
+
+func normalizeTenant(tenantID string) string {
+	if tenantID == "" {
+		return "default"
+	}
+	return tenantID
+}
+
 func validateSessionID(sessionID string) error {
 	if sessionID == "" {
 		return fmt.Errorf("session id required")
 	}
-	if strings.Contains(sessionID, "..") || strings.ContainsAny(sessionID, `/\`) {
+	if strings.Contains(sessionID, "..") ||
+		strings.ContainsAny(sessionID, `/\`) {
 		return fmt.Errorf("invalid session id")
 	}
 	return nil

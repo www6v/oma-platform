@@ -66,7 +66,7 @@ func TestInterruptCancelsActiveTurn(t *testing.T) {
 	events := store.NewEventRepo(db)
 	pending := store.NewPendingRepo(db)
 	hub := stream.NewHub()
-	workdirs := workdir.NewManager(t.TempDir())
+	workdirs := workdir.NewManager(t.TempDir(), "")
 
 	agent, err := agents.Create(ctx, store.CreateAgentInput{
 		Name:  "interrupt-agent",
@@ -180,7 +180,7 @@ func TestInterruptDrainsQueuedTurns(t *testing.T) {
 	events := store.NewEventRepo(db)
 	pending := store.NewPendingRepo(db)
 	hub := stream.NewHub()
-	workdirs := workdir.NewManager(t.TempDir())
+	workdirs := workdir.NewManager(t.TempDir(), "")
 
 	agent, err := agents.Create(ctx, store.CreateAgentInput{
 		Name:  "queue-agent",
@@ -278,7 +278,7 @@ func TestNoOpInterruptDoesNotEmitIdle(t *testing.T) {
 		Sessions:  sessions,
 		Events:    events,
 		Hub:       stream.NewHub(),
-		Workdirs:  workdir.NewManager(t.TempDir()),
+		Workdirs:  workdir.NewManager(t.TempDir(), ""),
 		Harness:   &harness.FakeClient{},
 	}
 	reg := session.NewRegistry()

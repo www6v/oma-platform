@@ -9,7 +9,10 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable, Iterator
 
 from oma_adapter.emit import emit_oma_events
+from oma_adapter.platform_guidance import compose_system_prompt
 from oma_adapter.project import project_oma_events
+from oma_adapter.mcp.runtime import clear_mcp_runtime
+from oma_adapter.mcp.setup import mcp_servers_from_agent, setup_mcp_runtime_for_turn
 from oma_adapter.tools import session_tool_config_from_agent
 from oma_adapter.types import AgentSnapshot, ModelConfig, TurnResponse
 from oma_adapter.web_fetch.runtime import WebFetchRuntime, clear_web_fetch_runtime, configure_web_fetch
@@ -99,16 +102,18 @@ def _provider_env(model: ModelConfig | None) -> Iterator[None]:
 async def _run_turn_core(
     *,
     session_id: str,
+    tenant_id: str | None = None,
     agent: AgentSnapshot,
     model: ModelConfig | None,
     aux_model: ModelConfig | None = None,
     environment: dict[str, Any] | None = None,
     events: list[dict[str, Any]],
     workdir: str,
+    mcp_proxy_base: str | None = None,
+    mcp_proxy_api_key: str | None = None,
     create_session: CreateSessionFn | None,
     on_event: EventCallback | None,
 ) -> TurnResponse:
-    del session_id  # stateless MVP
 
     prompt = project_oma_events(events)
     if not prompt:
@@ -132,6 +137,12 @@ async def _run_turn_core(
                 emit_event=emit_aux if aux_model is not None else None,
             ),
         )
+        await setup_mcp_runtime_for_turn(
+            mcp_servers=mcp_servers_from_agent(agent),
+            session_id=session_id,
+            proxy_base=mcp_proxy_base,
+            proxy_api_key=mcp_proxy_api_key,
+        )
         try:
             if create_session is not None:
                 result = await create_session(None)
@@ -140,7 +151,7 @@ async def _run_turn_core(
                 result = await _default_create_session(
                     workdir=workdir,
                     model=resolved_model,
-                    system_prompt=agent.system_prompt,
+                    system_prompt=compose_system_prompt(agent.system_prompt),
                     builtin_tools=tool_cfg.builtin_tools,
                     extension_paths=tool_cfg.extension_paths,
                 )
@@ -209,27 +220,34 @@ async def _run_turn_core(
             return TurnResponse(events=oma_events)
         finally:
             clear_web_fetch_runtime()
+            clear_mcp_runtime()
 
 
 async def run_turn(
     *,
     session_id: str,
+    tenant_id: str | None = None,
     agent: AgentSnapshot,
     model: ModelConfig | None = None,
     aux_model: ModelConfig | None = None,
     environment: dict[str, Any] | None = None,
     events: list[dict[str, Any]],
     workdir: str,
+    mcp_proxy_base: str | None = None,
+    mcp_proxy_api_key: str | None = None,
     create_session: CreateSessionFn | None = None,
 ) -> TurnResponse:
     return await _run_turn_core(
         session_id=session_id,
+        tenant_id=tenant_id,
         agent=agent,
         model=model,
         aux_model=aux_model,
         environment=environment,
         events=events,
         workdir=workdir,
+        mcp_proxy_base=mcp_proxy_base,
+        mcp_proxy_api_key=mcp_proxy_api_key,
         create_session=create_session,
         on_event=None,
     )
@@ -238,23 +256,29 @@ async def run_turn(
 async def run_turn_stream(
     *,
     session_id: str,
+    tenant_id: str | None = None,
     agent: AgentSnapshot,
     model: ModelConfig | None = None,
     aux_model: ModelConfig | None = None,
     environment: dict[str, Any] | None = None,
     events: list[dict[str, Any]],
     workdir: str,
+    mcp_proxy_base: str | None = None,
+    mcp_proxy_api_key: str | None = None,
     create_session: CreateSessionFn | None = None,
     on_event: EventCallback,
 ) -> TurnResponse:
     return await _run_turn_core(
         session_id=session_id,
+        tenant_id=tenant_id,
         agent=agent,
         model=model,
         aux_model=aux_model,
         environment=environment,
         events=events,
         workdir=workdir,
+        mcp_proxy_base=mcp_proxy_base,
+        mcp_proxy_api_key=mcp_proxy_api_key,
         create_session=create_session,
         on_event=on_event,
     )

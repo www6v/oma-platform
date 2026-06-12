@@ -34,6 +34,8 @@ type Machine struct {
 	Workdirs    *workdir.Manager
 	Harness      harness.Client
 	Models       *modelresolve.Resolver
+	McpProxyBase string
+	McpProxyAPIKey string
 	appendLocker sync.Locker
 	activeTurn   string
 	activeTurnM  sync.Mutex
@@ -80,7 +82,7 @@ func (m *Machine) RunTurn(ctx context.Context) error {
 		return store.ErrNotFound
 	}
 
-	workdirPath, err := m.Workdirs.Ensure(ctx, m.SessionID)
+	workdirPath, err := m.Workdirs.Ensure(ctx, m.TenantID, m.SessionID)
 	if err != nil {
 		return err
 	}
@@ -133,13 +135,16 @@ func (m *Machine) RunTurn(ctx context.Context) error {
 		turnCtx,
 		m.Harness,
 		harness.TurnRequest{
-			SessionID:   m.SessionID,
-			Agent:       agent,
-			Model:       modelCfg,
-			AuxModel:    auxCfg,
-			Environment: envSnap,
-			Events:      eventPayloads,
-			Workdir:     workdirPath,
+			SessionID:      m.SessionID,
+			TenantID:       m.TenantID,
+			Agent:          agent,
+			Model:          modelCfg,
+			AuxModel:       auxCfg,
+			Environment:    envSnap,
+			Events:         eventPayloads,
+			Workdir:        workdirPath,
+			McpProxyBase:   m.McpProxyBase,
+			McpProxyAPIKey: m.McpProxyAPIKey,
 		},
 		func(ev json.RawMessage) error {
 			return m.publishEvents(ctx, []json.RawMessage{ev})

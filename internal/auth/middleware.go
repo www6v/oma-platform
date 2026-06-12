@@ -168,6 +168,9 @@ func isExempt(path string, consoleMounted bool) bool {
 	if strings.HasPrefix(path, "/agents/runtime") {
 		return true
 	}
+	if strings.HasPrefix(path, "/v1/mcp-proxy/") {
+		return true
+	}
 	if consoleMounted && !strings.HasPrefix(path, "/v1/") {
 		return true
 	}

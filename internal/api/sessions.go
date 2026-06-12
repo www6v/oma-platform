@@ -37,28 +37,32 @@ type appendEventsRequest struct {
 }
 
 type sessionHandlers struct {
-	sessions *store.SessionRepo
-	events   *store.EventRepo
-	pending  *store.PendingRepo
-	hub      *stream.Hub
-	registry *session.Registry
-	workdirs *workdir.Manager
-	outputs  *sessionoutputs.Store
-	harness  harness.Client
-	models   *modelresolve.Resolver
+	sessions     *store.SessionRepo
+	events       *store.EventRepo
+	pending      *store.PendingRepo
+	hub          *stream.Hub
+	registry     *session.Registry
+	workdirs     *workdir.Manager
+	outputs      *sessionoutputs.Store
+	harness      harness.Client
+	models       *modelresolve.Resolver
+	mcpProxyBase string
+	mcpProxyKey  string
 }
 
 func (h *sessionHandlers) registerMachine(sess *store.Session) {
 	h.registry.Register(sess.ID, &session.Machine{
-		TenantID:  sess.TenantID,
-		SessionID: sess.ID,
-		Sessions:  h.sessions,
-		Events:    h.events,
-		Pending:   h.pending,
-		Hub:       h.hub,
-		Workdirs:  h.workdirs,
-		Harness:   h.harness,
-		Models:    h.models,
+		TenantID:      sess.TenantID,
+		SessionID:     sess.ID,
+		Sessions:      h.sessions,
+		Events:        h.events,
+		Pending:       h.pending,
+		Hub:           h.hub,
+		Workdirs:      h.workdirs,
+		Harness:       h.harness,
+		Models:        h.models,
+		McpProxyBase:  h.mcpProxyBase,
+		McpProxyAPIKey: h.mcpProxyKey,
 	})
 }
 

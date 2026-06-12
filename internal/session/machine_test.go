@@ -29,7 +29,7 @@ func TestTurnMarksSessionRunningThenIdle(t *testing.T) {
 	events := store.NewEventRepo(db)
 	pending := store.NewPendingRepo(db)
 	hub := stream.NewHub()
-	workdirs := workdir.NewManager(t.TempDir())
+	workdirs := workdir.NewManager(t.TempDir(), "")
 	ctx := context.Background()
 
 	agent, err := agents.Create(ctx, store.CreateAgentInput{
@@ -111,7 +111,7 @@ func TestRegistryEnqueueRunsAsync(t *testing.T) {
 	events := store.NewEventRepo(db)
 	pending := store.NewPendingRepo(db)
 	hub := stream.NewHub()
-	workdirs := workdir.NewManager(t.TempDir())
+	workdirs := workdir.NewManager(t.TempDir(), "")
 	ctx := context.Background()
 
 	agent, err := agents.Create(ctx, store.CreateAgentInput{

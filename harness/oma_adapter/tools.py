@@ -39,6 +39,9 @@ PIPY_TOOL_ORDER = [*PIPY_BUILTIN_ORDER, *PIPY_EXTENSION_ORDER]
 WEB_FETCH_EXTENSION_PATH = (
     Path(__file__).resolve().parent / "extensions" / "web_fetch.py"
 )
+MCP_LOADER_EXTENSION_PATH = (
+    Path(__file__).resolve().parent / "extensions" / "mcp_loader.py"
+)
 
 OMA_EXTENSION_TOOLS = frozenset({"web_fetch"})
 PIPY_BUILTIN_NAMES = frozenset(PIPY_BUILTIN_ORDER)
@@ -62,6 +65,13 @@ def _extension_paths_for_names(names: set[str]) -> list[str]:
     paths: list[str] = []
     if "web_fetch" in names and WEB_FETCH_EXTENSION_PATH.is_file():
         paths.append(str(WEB_FETCH_EXTENSION_PATH))
+    return paths
+
+
+def _extension_paths_for_agent(agent: AgentSnapshot) -> list[str]:
+    paths = _extension_paths_for_names(_resolved_tool_names(agent))
+    if agent.mcp_servers and MCP_LOADER_EXTENSION_PATH.is_file():
+        paths.append(str(MCP_LOADER_EXTENSION_PATH))
     return paths
 
 
@@ -155,7 +165,7 @@ def session_tool_config_from_agent(agent: AgentSnapshot) -> SessionToolConfig:
     builtin_tools = [
         name for name in PIPY_BUILTIN_ORDER if name in enabled
     ]
-    extension_paths = _extension_paths_for_names(enabled)
+    extension_paths = _extension_paths_for_agent(agent)
     return SessionToolConfig(
         builtin_tools=builtin_tools,
         extension_paths=extension_paths,

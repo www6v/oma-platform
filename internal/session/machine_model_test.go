@@ -58,7 +58,7 @@ func TestRunTurnResolvesModelCardByModelID(t *testing.T) {
 		Sessions:  sessions,
 		Events:    events,
 		Hub:       stream.NewHub(),
-		Workdirs:  workdir.NewManager(t.TempDir()),
+		Workdirs:  workdir.NewManager(t.TempDir(), ""),
 		Harness:   recording,
 		Models:    &modelresolve.Resolver{Cards: cards},
 	}
@@ -136,7 +136,7 @@ func TestRunTurnUsesDefaultCardForProviderModel(t *testing.T) {
 		Sessions:  sessions,
 		Events:    events,
 		Hub:       stream.NewHub(),
-		Workdirs:  workdir.NewManager(t.TempDir()),
+		Workdirs:  workdir.NewManager(t.TempDir(), ""),
 		Harness:   recording,
 		Models:    &modelresolve.Resolver{Cards: cards},
 	}

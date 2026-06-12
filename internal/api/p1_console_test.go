@@ -200,7 +200,7 @@ func testRouterWithApiKeys(t *testing.T) http.Handler {
 	pending := store.NewPendingRepo(db)
 	hub := stream.NewHub()
 	reg := session.NewRegistry()
-	workdirs := workdir.NewManager(t.TempDir())
+	workdirs := workdir.NewManager(t.TempDir(), "")
 	outputs := sessionoutputs.NewStore(t.TempDir())
 	models := &modelresolve.Resolver{Cards: modelCards}
 
@@ -213,7 +213,7 @@ func testRouterWithApiKeys(t *testing.T) http.Handler {
 		SessionOutputs: outputs,
 		Sessions: api.NewSessionHandlers(
 			sessions, events, pending, hub, reg, workdirs,
-			outputs, &harness.FakeClient{}, models,
+			outputs, &harness.FakeClient{}, models, "", "",
 		),
 	})
 }

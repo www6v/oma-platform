@@ -31,18 +31,22 @@ type AgentSnapshot struct {
 	SystemPrompt string          `json:"system_prompt,omitempty"`
 	Description  string          `json:"description,omitempty"`
 	Tools        json.RawMessage `json:"tools,omitempty"`
+	MCPServers   json.RawMessage `json:"mcp_servers,omitempty"`
 	Version      int             `json:"version"`
 }
 
 // TurnRequest is the harness turn payload.
 type TurnRequest struct {
-	SessionID   string            `json:"session_id"`
-	Agent       AgentSnapshot     `json:"agent"`
-	Model       ModelConfig       `json:"model,omitempty"`
-	AuxModel    *ModelConfig      `json:"aux_model,omitempty"`
-	Environment json.RawMessage   `json:"environment,omitempty"`
-	Events      []json.RawMessage `json:"events"`
-	Workdir     string            `json:"workdir"`
+	SessionID      string            `json:"session_id"`
+	TenantID       string            `json:"tenant_id,omitempty"`
+	Agent          AgentSnapshot     `json:"agent"`
+	Model          ModelConfig       `json:"model,omitempty"`
+	AuxModel       *ModelConfig      `json:"aux_model,omitempty"`
+	Environment    json.RawMessage   `json:"environment,omitempty"`
+	Events         []json.RawMessage `json:"events"`
+	Workdir        string            `json:"workdir"`
+	McpProxyBase   string            `json:"mcp_proxy_base,omitempty"`
+	McpProxyAPIKey string            `json:"mcp_proxy_api_key,omitempty"`
 }
 
 // TurnResponse is the harness turn result.

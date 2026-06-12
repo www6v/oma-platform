@@ -23,17 +23,21 @@ class AgentSnapshot(BaseModel):
     system_prompt: str | None = None
     description: str | None = None
     tools: list[dict[str, Any]] | None = None
+    mcp_servers: list[dict[str, Any]] | None = None
     version: int = 1
 
 
 class TurnRequest(BaseModel):
     session_id: str
+    tenant_id: str | None = None
     agent: AgentSnapshot
     model: ModelConfig | None = None
     aux_model: ModelConfig | None = None
     environment: dict[str, Any] | None = None
     events: list[dict[str, Any]] = Field(default_factory=list)
     workdir: str
+    mcp_proxy_base: str | None = None
+    mcp_proxy_api_key: str | None = None
 
 
 class TurnResponse(BaseModel):
