@@ -74,6 +74,13 @@ func mountSessionOutputs(
 		return fmt.Errorf("symlink %s: %w", workdirLink, err)
 	}
 
+	// Short alias so agents can write outputs/report.md (AMA local-subprocess
+	// also exposes OMA_OUTPUTS_DIR at the workdir-relative mount).
+	rootAlias := filepath.Join(workdir, "outputs")
+	if err := replaceSymlink(rootAlias, absTarget); err != nil {
+		return fmt.Errorf("symlink %s: %w", rootAlias, err)
+	}
+
 	tryRootSessionOutputsMount(absTarget)
 	return nil
 }

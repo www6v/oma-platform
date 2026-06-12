@@ -1,10 +1,12 @@
 package api
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -59,9 +61,19 @@ func (h *mcpProxyHandler) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var body io.Reader
+	var bodyBytes []byte
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		body = r.Body
+		var err error
+		bodyBytes, err = io.ReadAll(r.Body)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid body")
+			return
+		}
+	}
+
+	var body io.Reader
+	if len(bodyBytes) > 0 {
+		body = bytes.NewReader(bodyBytes)
 	}
 
 	upReq, err := http.NewRequestWithContext(
@@ -74,6 +86,11 @@ func (h *mcpProxyHandler) serve(w http.ResponseWriter, r *http.Request) {
 	copyHeaders(upReq.Header, r.Header)
 	upReq.Header.Set("Authorization", "Bearer "+target.UpstreamToken)
 	upReq.Header.Del("Host")
+	upReq.Header.Del("x-api-key")
+	if len(bodyBytes) > 0 {
+		upReq.ContentLength = int64(len(bodyBytes))
+		upReq.Header.Set("Content-Length", strconv.Itoa(len(bodyBytes)))
+	}
 
 	resp, err := http.DefaultClient.Do(upReq)
 	if err != nil {

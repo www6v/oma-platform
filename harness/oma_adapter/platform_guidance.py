@@ -17,12 +17,15 @@ LOOP_STOP_GUIDANCE = (
 )
 
 SESSION_OUTPUTS_GUIDANCE = (
-    "Files you write under `/mnt/session/outputs/` persist after the session "
-    "ends and are downloadable by the user from the session's Files panel. "
-    "Use this path for final artifacts the user should keep (reports, "
-    "exports, generated docs, packaged code). Files written anywhere else "
-    "(e.g. `/workspace/`) are scratch — they may be lost on container "
-    "recycle and are not user-accessible."
+    "Files you write under `/mnt/session/outputs/` (or `outputs/` relative "
+    "to the workspace — same directory) persist after the session ends and "
+    "are downloadable by the user from the session's Files panel. Use "
+    "`outputs/<filename>` for every deliverable the user asked you to save "
+    "(reports, exports, generated docs, markdown files, packaged code). "
+    "Never write user-facing deliverables to the workspace root. Files "
+    "written elsewhere (e.g. `/workspace/` or bare filenames in the root) "
+    "are scratch — they may be lost on container recycle and are not "
+    "user-accessible."
 )
 
 PLATFORM_GUIDANCE = (

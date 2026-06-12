@@ -63,4 +63,13 @@ func TestEnsureMountsSessionOutputs(t *testing.T) {
 	if resolved != absTarget {
 		t.Fatalf("link=%s target=%s", resolved, absTarget)
 	}
+
+	rootAlias := filepath.Join(p, "outputs")
+	aliasInfo, err := os.Lstat(rootAlias)
+	if err != nil {
+		t.Fatalf("workdir outputs alias: %v", err)
+	}
+	if aliasInfo.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("expected symlink at %s", rootAlias)
+	}
 }

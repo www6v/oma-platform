@@ -11,6 +11,7 @@ from typing import Any, Awaitable, Callable, Iterator
 from oma_adapter.emit import emit_oma_events
 from oma_adapter.platform_guidance import compose_system_prompt
 from oma_adapter.project import project_oma_events
+from oma_adapter.sandbox_paths import patch_path_utils
 from oma_adapter.mcp.runtime import clear_mcp_runtime
 from oma_adapter.mcp.setup import mcp_servers_from_agent, setup_mcp_runtime_for_turn
 from oma_adapter.tools import session_tool_config_from_agent
@@ -122,6 +123,8 @@ async def _run_turn_core(
     resolved_model = model.model if model is not None else agent.model
     if not resolved_model.startswith("faux/") and os.environ.get("OMA_FAKE_HARNESS") == "1":
         resolved_model = "faux/test"
+
+    patch_path_utils(workdir)
 
     with _provider_env(model):
         queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
