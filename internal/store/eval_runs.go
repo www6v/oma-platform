@@ -164,6 +164,92 @@ func (r *EvalRunRepo) List(
 	return out, rows.Err()
 }
 
+// ListActive returns pending and running eval runs across all tenants.
+func (r *EvalRunRepo) ListActive(ctx context.Context) ([]EvalRunRow, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, tenant_id, agent_id, environment_id, suite,
+		       status, started_at, completed_at, results, score, error
+		FROM eval_runs
+		WHERE status IN (?, ?)
+		ORDER BY started_at ASC
+	`, string(EvalStatusPending), string(EvalStatusRunning))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []EvalRunRow
+	for rows.Next() {
+		item, err := scanEvalRunRows(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *item)
+	}
+	return out, rows.Err()
+}
+
+// UpdateProgress persists in-flight status and results JSON.
+func (r *EvalRunRepo) UpdateProgress(
+	ctx context.Context,
+	tenantID, runID string,
+	status EvalRunStatus,
+	results json.RawMessage,
+) error {
+	run, err := r.Get(ctx, tenantID, runID)
+	if err != nil {
+		return err
+	}
+	if run == nil {
+		return ErrEvalRunNotFound
+	}
+	if len(results) == 0 {
+		results = run.Results
+	}
+	_, err = r.db.ExecContext(ctx, `
+		UPDATE eval_runs
+		SET status = ?, results = ?
+		WHERE tenant_id = ? AND id = ?
+	`, string(status), string(results), tenantOrDefault(tenantID), runID)
+	return err
+}
+
+// MarkFinished sets terminal status, results, optional score, and completed_at.
+func (r *EvalRunRepo) MarkFinished(
+	ctx context.Context,
+	tenantID, runID string,
+	status EvalRunStatus,
+	results json.RawMessage,
+	score *float64,
+	errMsg string,
+) error {
+	run, err := r.Get(ctx, tenantID, runID)
+	if err != nil {
+		return err
+	}
+	if run == nil {
+		return ErrEvalRunNotFound
+	}
+	if len(results) == 0 {
+		results = run.Results
+	}
+	now := time.Now().UnixMilli()
+	var scoreVal sql.NullFloat64
+	if score != nil {
+		scoreVal = sql.NullFloat64{Float64: *score, Valid: true}
+	}
+	var errSQL sql.NullString
+	if errMsg != "" {
+		errSQL = sql.NullString{String: errMsg, Valid: true}
+	}
+	_, err = r.db.ExecContext(ctx, `
+		UPDATE eval_runs
+		SET status = ?, results = ?, score = ?, error = ?, completed_at = ?
+		WHERE tenant_id = ? AND id = ?
+	`, string(status), string(results), nullSQLFloat(scoreVal),
+		nullSQLString(errSQL), now, tenantOrDefault(tenantID), runID)
+	return err
+}
+
 // MarkFailed cancels an in-flight run before delete.
 func (r *EvalRunRepo) MarkFailed(
 	ctx context.Context,

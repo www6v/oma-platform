@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/open-ma/oma-building/internal/api"
+	"github.com/open-ma/oma-building/internal/eval"
 	"github.com/open-ma/oma-building/internal/fileblob"
 	"github.com/open-ma/oma-building/internal/harness"
 	"github.com/open-ma/oma-building/internal/modelresolve"
@@ -131,6 +132,28 @@ func main() {
 		publicURL, apiKey,
 		outbound.HostForHarness(outboundAddr), apiKey,
 	)
+	evalWorker := &eval.Worker{
+		EvalRuns: evalRuns,
+		Sessions: api.NewEvalSessionRunner(sessionHandlers),
+	}
+	if os.Getenv("OMA_EVAL_WORKER_DISABLED") != "1" {
+		interval := 30 * time.Second
+		if raw := os.Getenv("OMA_EVAL_WORKER_INTERVAL"); raw != "" {
+			if d, err := time.ParseDuration(raw); err == nil && d > 0 {
+				interval = d
+			}
+		}
+		go func() {
+			ticker := time.NewTicker(interval)
+			defer ticker.Stop()
+			for range ticker.C {
+				if _, err := evalWorker.Tick(context.Background()); err != nil {
+					log.Printf("eval worker tick: %v", err)
+				}
+			}
+		}()
+		log.Printf("eval worker enabled (interval=%s)", interval)
+	}
 	linearGateway := api.NewLinearGatewayHandler(
 		integrations, sessionHandlers, publicURL, internalSecret,
 	)
