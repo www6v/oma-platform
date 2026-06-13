@@ -8,3 +8,5 @@ __pycache__/
 .gstack/
 auth-sidecar/node_modules/
 scripts/node_modules/
+console/node_modules/
+console/dist/

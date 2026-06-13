@@ -11,7 +11,7 @@ services:
       HARNESS_URL: http://oma-harness:8090
       OMA_API_KEY: ${OMA_API_KEY:-dev-key}
       OMA_FAKE_HARNESS: ${OMA_FAKE_HARNESS:-1}
-      # Optional console: build ../open-managed-agents/apps/console/dist, then set:
+      # Optional console: run ./scripts/build-console.sh, then set:
       # CONSOLE_DIR=/app/console and uncomment the volume below.
       CONSOLE_DIR: ${CONSOLE_DIR:-}
       AUTH_DISABLED: ${AUTH_DISABLED:-0}
@@ -20,7 +20,7 @@ services:
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8787}
     volumes:
       - ./data:/data
-      # - ${CONSOLE_DIST:-../open-managed-agents/apps/console/dist}:/app/console:ro
+      # - ${CONSOLE_DIST:-./console/dist}:/app/console:ro
     depends_on:
       oma-harness:
         condition: service_healthy

@@ -2,7 +2,6 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WORKSPACE_ROOT="$(cd "${ROOT_DIR}/.." && pwd)"
 
 # shellcheck disable=SC1091
 source "${ROOT_DIR}/scripts/go-env.sh"
@@ -14,7 +13,7 @@ if [[ -f "${ROOT_DIR}/.env" ]]; then
   set +a
 fi
 
-CONSOLE_DIST="${CONSOLE_DIR:-${WORKSPACE_ROOT}/open-managed-agents/apps/console/dist}"
+CONSOLE_DIST="${CONSOLE_DIR:-${ROOT_DIR}/console/dist}"
 
 if [[ ! -f "${CONSOLE_DIST}/index.html" ]]; then
   echo "Console dist missing at ${CONSOLE_DIST}; building..."

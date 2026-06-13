@@ -1,0 +1,10 @@
+{
+  "name": "@oma-platform/acp-known-agents",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/known-agents.ts",
+    "./known-agents": "./src/known-agents.ts"
+  }
+}

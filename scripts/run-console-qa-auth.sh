@@ -12,7 +12,7 @@ QA_AUTH_DB="${ROOT_DIR}/data/qa-auth-sidecar.db"
 # shellcheck disable=SC1091
 source "${ROOT_DIR}/scripts/go-env.sh"
 
-CONSOLE_DIST="${CONSOLE_DIR:-${WORKSPACE_ROOT}/open-managed-agents/apps/console/dist}"
+CONSOLE_DIST="${CONSOLE_DIR:-${ROOT_DIR}/console/dist}"
 if [[ ! -f "${CONSOLE_DIST}/index.html" ]]; then
   echo "Building console dist..."
   "${ROOT_DIR}/scripts/build-console.sh"

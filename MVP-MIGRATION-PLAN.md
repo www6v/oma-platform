@@ -111,7 +111,7 @@ Console 全量 wire 验收：`scripts/console-integration.sh`
 
 | 功能域 | 源参考 | oma-platform 实现 | 状态 | 缺口 / 备注 |
 |--------|--------|-------------------|------|-------------|
-| Console 同源 SPA | main `assets` binding | `internal/console/` + `CONSOLE_DIR` | ✅ | 挂载 `open-managed-agents/apps/console/dist` |
+| Console 同源 SPA | main `assets` binding | `internal/console/` + `CONSOLE_DIR` | ✅ | 挂载 `console/dist` |
 | Auth (API key + cookie) | better-auth | `internal/auth/` | ✅ | `AUTH_UPSTREAM_URL` 或 `AUTH_DISABLED=1` |
 | /v1/me, api_keys, tenants | main routes | `me.go`（tenants 在 `/v1/me/tenants`） | ✅ | |
 | /v1/stats | `routes/stats.ts` | `stats.go` | ✅ | |

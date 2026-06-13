@@ -38,7 +38,7 @@ This repo implements a large slice of the [open-managed-agents](https://github.c
 
 ### Operations
 
-- **Console UI** — SPA from `open-managed-agents/apps/console`, same origin as the API.
+- **Console UI** — SPA in `console/`, same origin as the API.
 - **Auth** — API key (`x-api-key` / `Authorization: Bearer`) or better-auth cookie session.
 - **Docker Compose** — Two-service stack (`oma-platform` + `oma-harness`) with health checks.
 - **Fake harness mode** — `OMA_FAKE_HARNESS=1` for local dev and CI without LLM API keys.
@@ -220,9 +220,9 @@ Set `ANTHROPIC_API_KEY` in `.env` or configure piPy via `~/.pi/agent/{settings,m
 
 ## Console UI
 
-The OMA Console SPA from `open-managed-agents/apps/console` is served on the same port as the API when `CONSOLE_DIR` is set. `./start-console.sh` builds `dist/` if missing, starts the better-auth sidecar, and proxies `/auth/*` for email/password sign-in.
+The OMA Console SPA in `console/` is served on the same port as the API when `CONSOLE_DIR` is set. `./start-console.sh` builds `console/dist/` if missing, starts the better-auth sidecar, and proxies `/auth/*` for email/password sign-in.
 
-**Docker:** `docker compose up` can mount `../open-managed-agents/apps/console/dist` at `/app/console` when present. Build the console first, or set `CONSOLE_DIST` in compose.
+**Docker:** `docker compose up` can mount `./console/dist` at `/app/console` when present. Build the console first (`./scripts/build-console.sh`), or set `CONSOLE_DIST` in compose.
 
 **Coverage:** Agents, sessions, environments, model cards, skills, vaults, files, integrations, evals, runtimes, and memory stores are wired to oma-platform APIs. Dreams, cost reports, browser tools, and some CF-only features remain deferred — see [MVP-MIGRATION-PLAN.md](./MVP-MIGRATION-PLAN.md).
 

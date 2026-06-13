@@ -38,7 +38,7 @@
 
 ### 运维与开发
 
-- **Console 控制台** — 挂载 `open-managed-agents/apps/console` 的 SPA，与 API 同端口。
+- **Console 控制台** — 本仓库 `console/` 下的 SPA，与 API 同端口。
 - **认证** — API Key（`x-api-key` / `Authorization: Bearer`）或 better-auth Cookie 会话。
 - **Docker Compose** — 双服务栈（`oma-platform` + `oma-harness`），含健康检查。
 - **Fake Harness 模式** — `OMA_FAKE_HARNESS=1` 可在无 LLM API Key 时本地开发与 CI 运行。
@@ -220,9 +220,9 @@ SMOKE_SKIP_LLM=1 ./smoke-test.sh
 
 ## Console 控制台
 
-当设置 `CONSOLE_DIR` 时，来自 `open-managed-agents/apps/console` 的 OMA Console SPA 与 API 同端口提供服务。`./start-console.sh` 会在缺少 `dist/` 时自动构建，启动 better-auth 侧车并代理 `/auth/*`，支持邮箱密码注册登录。
+当设置 `CONSOLE_DIR` 时，本仓库 `console/` 下的 OMA Console SPA 与 API 同端口提供服务。`./start-console.sh` 会在缺少 `console/dist/` 时自动构建，启动 better-auth 侧车并代理 `/auth/*`，支持邮箱密码注册登录。
 
-**Docker：** `docker compose up` 在存在构建产物时，可将 `../open-managed-agents/apps/console/dist` 挂载到 `/app/console`。需先构建 Console，或在 compose 中设置 `CONSOLE_DIST`。
+**Docker：** `docker compose up` 在存在构建产物时，可将 `./console/dist` 挂载到 `/app/console`。需先运行 `./scripts/build-console.sh`，或在 compose 中设置 `CONSOLE_DIST`。
 
 **覆盖范围：** Agents、sessions、environments、model cards、skills、vaults、files、integrations、evals、runtimes、memory stores 已对接 oma-platform API。Dreams、cost report、browser tools 及部分 CF 专属能力仍延后 — 详见 [MVP-MIGRATION-PLAN.md](./MVP-MIGRATION-PLAN.md)。
 
