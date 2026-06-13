@@ -47,6 +47,7 @@ type TurnRequest struct {
 	Model                 ModelConfig                `json:"model,omitempty"`
 	AuxModel              *ModelConfig               `json:"aux_model,omitempty"`
 	Environment           json.RawMessage            `json:"environment,omitempty"`
+	Resources             []json.RawMessage          `json:"resources,omitempty"`
 	Events                []json.RawMessage          `json:"events"`
 	Workdir               string                     `json:"workdir"`
 	McpProxyBase          string                     `json:"mcp_proxy_base,omitempty"`
@@ -58,6 +59,33 @@ type TurnRequest struct {
 // TurnResponse is the harness turn result.
 type TurnResponse struct {
 	Events []json.RawMessage `json:"events"`
+}
+
+// OutcomeRubric describes eval criteria for LLM-as-judge.
+type OutcomeRubric struct {
+	Description string   `json:"description"`
+	Criteria    []string `json:"criteria,omitempty"`
+}
+
+// OutcomeEvaluateRequest is the harness outcome evaluator payload.
+type OutcomeEvaluateRequest struct {
+	Rubric      OutcomeRubric `json:"rubric"`
+	AgentOutput string        `json:"agent_output"`
+	Model       ModelConfig   `json:"model"`
+}
+
+// OutcomeEvaluateResponse is the harness outcome evaluator result.
+type OutcomeEvaluateResponse struct {
+	Result   string `json:"result"`
+	Feedback string `json:"feedback"`
+}
+
+// OutcomeEvaluator scores agent output against a rubric.
+type OutcomeEvaluator interface {
+	EvaluateOutcome(
+		ctx context.Context,
+		req OutcomeEvaluateRequest,
+	) (OutcomeEvaluateResponse, error)
 }
 
 // EventHandler receives one harness event as it is produced.
@@ -207,6 +235,53 @@ func (c *HTTPClient) RunTurnStream(
 	return scanner.Err()
 }
 
+// EvaluateOutcome posts to POST /internal/evaluate-outcome.
+func (c *HTTPClient) EvaluateOutcome(
+	ctx context.Context,
+	req OutcomeEvaluateRequest,
+) (OutcomeEvaluateResponse, error) {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return OutcomeEvaluateResponse{}, err
+	}
+	url := c.BaseURL + "/internal/evaluate-outcome"
+	httpReq, err := http.NewRequestWithContext(
+		ctx, http.MethodPost, url, bytes.NewReader(body),
+	)
+	if err != nil {
+		return OutcomeEvaluateResponse{}, err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	client := c.HTTP
+	if client == nil {
+		client = &http.Client{Timeout: 2 * time.Minute}
+	}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return OutcomeEvaluateResponse{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return OutcomeEvaluateResponse{}, fmt.Errorf(
+			"harness evaluate-outcome status=%d: %s",
+			resp.StatusCode,
+			strings.TrimSpace(string(raw)),
+		)
+	}
+	var out OutcomeEvaluateResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return OutcomeEvaluateResponse{}, err
+	}
+	return out, nil
+}
+
+// AsOutcomeEvaluator returns c when it supports outcome scoring.
+func AsOutcomeEvaluator(c Client) OutcomeEvaluator {
+	oe, _ := c.(OutcomeEvaluator)
+	return oe
+}
+
 // FakeClient emits a single agent.message for tests.
 type FakeClient struct {
 	Text string
@@ -247,6 +322,23 @@ func (f *FakeClient) RunTurnStream(
 		}
 	}
 	return nil
+}
+
+// EvaluateOutcome implements OutcomeEvaluator for tests (always satisfied).
+func (f *FakeClient) EvaluateOutcome(
+	_ context.Context,
+	req OutcomeEvaluateRequest,
+) (OutcomeEvaluateResponse, error) {
+	if strings.Contains(strings.ToLower(req.AgentOutput), "fail") {
+		return OutcomeEvaluateResponse{
+			Result:   "needs_revision",
+			Feedback: "fake evaluator rejected output containing 'fail'",
+		}, nil
+	}
+	return OutcomeEvaluateResponse{
+		Result:   "satisfied",
+		Feedback: "fake evaluator pass",
+	}, nil
 }
 
 // RecordingClient captures turn requests for integration tests.

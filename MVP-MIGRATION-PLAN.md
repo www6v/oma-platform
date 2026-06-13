@@ -129,8 +129,8 @@ Console 全量 wire 验收：`scripts/console-integration.sh`
 |--------|--------|-------------------|------|-------------|
 | call_agent / 子 Agent | `harness/tools.ts` | harness `call_agent/` | ✅ | P2-1 |
 | Compaction 上下文压缩 | `harness/compaction.ts` | `compaction.py` | ✅ | P2-2 |
-| Resource mounter | `runtime/resource-mounter.ts` | — | ❌ | memory/files/github（P2-3） |
-| Outcome evaluator | `harness/outcome-evaluator.ts` | — | ❌ | eval 依赖（P2-4） |
+| Resource mounter | `runtime/resource-mounter.ts` | `harness/oma_adapter/resource_mounter.py` | ✅ | file/memory/env；github 本地 skip（P2-3） |
+| Outcome evaluator | `harness/outcome-evaluator.ts` | `outcome_evaluator.py` + eval worker | ✅ | LLM rubric judge（P2-4） |
 | Dreams | `/v1/dreams`, `dreams-store` | — | ❌ | P2-5 |
 | Cost report | `/v1/cost_report`, `cf-billing` | — | ❌ | 简化 token 聚合（P2-6） |
 | browser tools | `harness/browser-tools.ts` | — | ❌ | P2-7 |
@@ -274,7 +274,7 @@ Client / Console
 - [x] **T10 (P1)** — Runtime WebSocket attach — `runtime_daemon.go`
 - [x] **T11 (P1)** — Session threads 从 event log 派生 — `session_aux.go`
 - [x] **T12 (P2)** — call_agent + compaction — harness
-- [ ] **T13 (P2)** — resource mounter + outcome evaluator — harness + eval worker
+- [x] **T13 (P2)** — resource mounter + outcome evaluator — harness + eval worker — Verify: `./scripts/smoke-t13-e2e.sh`
 - [ ] **T14 (P2)** — Dreams + cost_report API — 新 store + routes
 - [ ] **T15 (P2)** — `/v1/internal/*` — 供未来 integrations 拆分
 

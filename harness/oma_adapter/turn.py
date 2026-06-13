@@ -27,6 +27,7 @@ from oma_adapter.outbound.setup import (
     normalize_outbound_proxy_addr,
     setup_outbound_proxy_for_turn,
 )
+from oma_adapter.resource_mounter import mount_resources
 from oma_adapter.mcp.runtime import clear_mcp_runtime
 from oma_adapter.mcp.setup import mcp_servers_from_agent, setup_mcp_runtime_for_turn
 from oma_adapter.tools import session_tool_config_from_agent
@@ -103,6 +104,7 @@ async def _run_turn_core(
     model: ModelConfig | None,
     aux_model: ModelConfig | None = None,
     environment: dict[str, Any] | None = None,
+    resources: list[dict[str, Any]] | None = None,
     events: list[dict[str, Any]],
     workdir: str,
     mcp_proxy_base: str | None = None,
@@ -141,6 +143,7 @@ async def _run_turn_core(
         resolved_model = "faux/test"
 
     patch_path_utils(workdir)
+    saved_env = mount_resources(workdir, resources)
 
     outbound_host = normalize_outbound_proxy_addr(outbound_proxy_addr)
     outbound_proxy_url = (
@@ -269,6 +272,8 @@ async def _run_turn_core(
 
             return TurnResponse(events=oma_events)
         finally:
+            for key in saved_env:
+                os.environ.pop(key, None)
             clear_outbound_proxy_for_turn(saved_proxy_env)
             clear_web_fetch_runtime()
             clear_mcp_runtime()
@@ -284,6 +289,7 @@ async def run_turn(
     model: ModelConfig | None = None,
     aux_model: ModelConfig | None = None,
     environment: dict[str, Any] | None = None,
+    resources: list[dict[str, Any]] | None = None,
     events: list[dict[str, Any]],
     workdir: str,
     mcp_proxy_base: str | None = None,
@@ -300,6 +306,7 @@ async def run_turn(
         model=model,
         aux_model=aux_model,
         environment=environment,
+        resources=resources,
         events=events,
         workdir=workdir,
         mcp_proxy_base=mcp_proxy_base,
@@ -320,6 +327,7 @@ async def run_turn_stream(
     model: ModelConfig | None = None,
     aux_model: ModelConfig | None = None,
     environment: dict[str, Any] | None = None,
+    resources: list[dict[str, Any]] | None = None,
     events: list[dict[str, Any]],
     workdir: str,
     mcp_proxy_base: str | None = None,
@@ -337,6 +345,7 @@ async def run_turn_stream(
         model=model,
         aux_model=aux_model,
         environment=environment,
+        resources=resources,
         events=events,
         workdir=workdir,
         mcp_proxy_base=mcp_proxy_base,

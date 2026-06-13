@@ -35,6 +35,7 @@ type Machine struct {
 	Workdirs    *workdir.Manager
 	Harness      harness.Client
 	Models       *modelresolve.Resolver
+	Resources    *harness.ResourceResolver
 	McpProxyBase string
 	McpProxyAPIKey string
 	OutboundProxyAddr string
@@ -130,6 +131,16 @@ func (m *Machine) RunTurn(ctx context.Context) error {
 		envSnap = json.RawMessage(`{}`)
 	}
 
+	var resources []json.RawMessage
+	if m.Resources != nil {
+		resolved, resErr := m.Resources.ResolveForTurn(
+			ctx, m.TenantID, envSnap,
+		)
+		if resErr == nil {
+			resources = resolved
+		}
+	}
+
 	lifecycleStart, err := json.Marshal(map[string]any{
 		"type":    "session.lifecycle",
 		"phase":   "turn_start",
@@ -153,6 +164,7 @@ func (m *Machine) RunTurn(ctx context.Context) error {
 			Model:          modelCfg,
 			AuxModel:       auxCfg,
 			Environment:    envSnap,
+			Resources:      resources,
 			Events:         eventPayloads,
 			Workdir:        workdirPath,
 			McpProxyBase:   m.McpProxyBase,

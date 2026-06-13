@@ -57,7 +57,13 @@ func testRouterDeps(
 	runtimeRooms := runtime.NewRegistry(runtimes)
 	sessionHandlers := api.NewSessionHandlers(
 		sessions, agents, events, pending, hub, reg, workdirs,
-		outputs, client, models, "", "", "", "",
+		outputs, client, models,
+		&harness.ResourceResolver{
+			Files:        files,
+			FileBlobs:    fileBlobs,
+			MemoryStores: store.NewMemoryStoreRepo(db, nil),
+		},
+		"", "", "", "",
 	)
 	const testInternalSecret = "test-internal-secret"
 	gatewayOrigin := "http://test"
@@ -81,6 +87,7 @@ func testRouterDeps(
 		EvalRuns:       store.NewEvalRunRepo(db),
 		AuthDisabled:   true,
 		Sessions:       sessionHandlers,
+		ModelResolver:  models,
 		InternalSecret: testInternalSecret,
 		LinearGateway: api.NewLinearGatewayHandler(
 			integrations, sessionHandlers, gatewayOrigin, testInternalSecret,
@@ -174,7 +181,9 @@ func testRouterSharedDB(
 		EvalRuns:       store.NewEvalRunRepo(db),
 		AuthDisabled:   true,
 		Sessions: api.NewSessionHandlers(
-			sessions, agents, events, pending, hub, reg, workdirs, outputs, client, models, "", "", "", "",
+			sessions, agents, events, pending, hub, reg, workdirs, outputs, client, models,
+			&harness.ResourceResolver{Files: files, FileBlobs: fileBlobs},
+			"", "", "", "",
 		),
 	})
 	return handler, reg, sessions

@@ -135,15 +135,24 @@ func main() {
 	publicURL := envOrDefault("OMA_PUBLIC_URL", "http://127.0.0.1:8787")
 	outboundAddr := envOrDefault("OMA_OUTBOUND_PROXY_ADDR", ":8790")
 	internalSecret := os.Getenv("OMA_INTERNAL_SECRET")
+	resourceResolver := &harness.ResourceResolver{
+		Files:        files,
+		FileBlobs:    fileBlobs,
+		MemoryStores: memoryStores,
+	}
 	sessionHandlers := api.NewSessionHandlers(
 		sessions, agents, events, pending, hub, registry, workdirs,
-		sessionOutputs, harnessClient, modelResolver,
+		sessionOutputs, harnessClient, modelResolver, resourceResolver,
 		publicURL, apiKey,
 		outbound.HostForHarness(outboundAddr), apiKey,
 	)
 	evalWorker := &eval.Worker{
-		EvalRuns: evalRuns,
-		Sessions: api.NewEvalSessionRunner(sessionHandlers),
+		EvalRuns:  evalRuns,
+		Sessions:  api.NewEvalSessionRunner(sessionHandlers),
+		Events:    events,
+		Agents:    agents,
+		Models:    modelResolver,
+		Evaluator: harness.AsOutcomeEvaluator(harnessClient),
 	}
 	if os.Getenv("OMA_EVAL_WORKER_DISABLED") != "1" {
 		interval := 30 * time.Second

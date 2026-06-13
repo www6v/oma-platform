@@ -9,8 +9,14 @@ import os
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 
+from oma_adapter.outcome_evaluator import OutcomeRubric, evaluate_outcome
 from oma_adapter.turn import run_turn, run_turn_stream
-from oma_adapter.types import TurnRequest, TurnResponse
+from oma_adapter.types import (
+    OutcomeEvaluateRequest,
+    OutcomeEvaluateResponse,
+    TurnRequest,
+    TurnResponse,
+)
 
 TURN_TIMEOUT_SEC = float(os.environ.get("HARNESS_TURN_TIMEOUT_SEC", "300"))
 
@@ -34,6 +40,7 @@ async def internal_turn(body: TurnRequest) -> TurnResponse:
                 model=body.model,
                 aux_model=body.aux_model,
                 environment=body.environment,
+                resources=body.resources,
                 events=body.events,
                 workdir=body.workdir,
                 mcp_proxy_base=body.mcp_proxy_base,
@@ -115,3 +122,24 @@ async def internal_turn_stream(body: TurnRequest) -> StreamingResponse:
             return
 
     return StreamingResponse(ndjson(), media_type="application/x-ndjson")
+
+
+@app.post("/internal/evaluate-outcome", response_model=OutcomeEvaluateResponse)
+async def internal_evaluate_outcome(
+    body: OutcomeEvaluateRequest,
+) -> OutcomeEvaluateResponse:
+    try:
+        result = await evaluate_outcome(
+            rubric=OutcomeRubric(
+                description=body.rubric.description,
+                criteria=body.rubric.criteria,
+            ),
+            agent_output=body.agent_output,
+            model_cfg=body.model,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return OutcomeEvaluateResponse(
+        result=result.result,
+        feedback=result.feedback,
+    )

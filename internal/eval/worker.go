@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/open-ma/oma-building/internal/harness"
+	"github.com/open-ma/oma-building/internal/modelresolve"
 	"github.com/open-ma/oma-building/internal/store"
 )
 
@@ -13,8 +15,12 @@ const defaultTrialTimeout = time.Hour
 
 // Worker advances pending/running eval runs toward completion.
 type Worker struct {
-	EvalRuns *store.EvalRunRepo
-	Sessions SessionRunner
+	EvalRuns  *store.EvalRunRepo
+	Sessions  SessionRunner
+	Events    *store.EventRepo
+	Agents    *store.AgentRepo
+	Models    *modelresolve.Resolver
+	Evaluator harness.OutcomeEvaluator
 }
 
 // TickResult summarizes one worker pass.
@@ -247,9 +253,26 @@ func (w *Worker) advanceTrial(
 	}
 
 	trial.TrajectoryID = "tr-" + trial.SessionID
+	reward, feedback, scoreErr := w.scoreTrial(ctx, row, task, trial)
+	if scoreErr != nil {
+		trial.Status = "failed"
+		trial.Error = scoreErr.Error()
+		trial.EndedAt = nowISO()
+		return true
+	}
+	trial.Reward = reward
+	if reward < 1 {
+		trial.Status = "failed"
+		if feedback != "" {
+			trial.Error = feedback
+		} else {
+			trial.Error = "rubric not satisfied"
+		}
+		trial.EndedAt = nowISO()
+		return true
+	}
 	trial.Status = "completed"
 	trial.EndedAt = nowISO()
-	trial.Reward = 1
 	return true
 }
 
@@ -284,9 +307,10 @@ type taskState struct {
 }
 
 type taskSpec struct {
-	ID       string   `json:"id"`
-	Messages []string `json:"messages"`
-	TimeoutMs int   `json:"timeout_ms,omitempty"`
+	ID        string       `json:"id"`
+	Messages  []string     `json:"messages"`
+	Rubric    *rubricSpec  `json:"rubric,omitempty"`
+	TimeoutMs int          `json:"timeout_ms,omitempty"`
 }
 
 type trialState struct {
@@ -336,6 +360,20 @@ func parseRunState(row *store.EvalRunRow) (*runState, error) {
 				}
 			}
 			task.Spec.TimeoutMs = asInt(specRaw["timeout_ms"])
+			if rubricRaw, ok := specRaw["rubric"].(map[string]any); ok {
+				task.Spec.Rubric = &rubricSpec{
+					Description: strVal(rubricRaw["description"]),
+				}
+				if crit, ok := rubricRaw["criteria"].([]any); ok {
+					for _, c := range crit {
+						if s, ok := c.(string); ok && s != "" {
+							task.Spec.Rubric.Criteria = append(
+								task.Spec.Rubric.Criteria, s,
+							)
+						}
+					}
+				}
+			}
 		}
 		if trialsRaw, ok := taskMap["trials"].([]any); ok {
 			for _, tr := range trialsRaw {
@@ -389,7 +427,7 @@ func marshalRunState(state *runState) (json.RawMessage, error) {
 			if trial.TrajectoryID != "" {
 				entry["trajectory_id"] = trial.TrajectoryID
 			}
-			if trial.Reward > 0 {
+			if trial.Reward > 0 || trial.Status == "failed" {
 				entry["reward"] = trial.Reward
 			}
 			if trial.Error != "" {

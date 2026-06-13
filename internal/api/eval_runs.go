@@ -210,11 +210,17 @@ func mountEvalRunRoutes(r chi.Router, deps evalRunsDeps) {
 }
 
 type evalTaskSpec struct {
-	ID          string `json:"id"`
-	Messages    []string `json:"messages"`
-	Trials      int    `json:"trials,omitempty"`
-	TimeoutMs   int    `json:"timeout_ms,omitempty"`
-	SetupScript string `json:"setup_script,omitempty"`
+	ID          string           `json:"id"`
+	Messages    []string         `json:"messages"`
+	Trials      int              `json:"trials,omitempty"`
+	TimeoutMs   int              `json:"timeout_ms,omitempty"`
+	SetupScript string           `json:"setup_script,omitempty"`
+	Rubric      *evalRubricSpec  `json:"rubric,omitempty"`
+}
+
+type evalRubricSpec struct {
+	Description string   `json:"description"`
+	Criteria    []string `json:"criteria,omitempty"`
 }
 
 func buildInitialEvalResults(tasks []evalTaskSpec) map[string]any {

@@ -98,7 +98,7 @@ running trial（每 Tick 检查一次）
 
 - 每个 trial 跑完且无错误 → `reward = 1`，计为 pass
 - Run 结束时：若有 completed task，score ≈ `completed_count / task_count`
-- **尚未接入** P2 的 outcome evaluator（按答案质量打分）
+- **已接入** P2 outcome evaluator：trial 完成后按 task `rubric` 调用 harness `/internal/evaluate-outcome`（LLM-as-judge），写入 `trial.reward` / 失败原因
 
 ---
 

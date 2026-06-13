@@ -58,6 +58,7 @@ class TurnRequest(BaseModel):
     model: ModelConfig | None = None
     aux_model: ModelConfig | None = None
     environment: dict[str, Any] | None = None
+    resources: list[dict[str, Any]] = Field(default_factory=list)
     events: list[dict[str, Any]] = Field(default_factory=list)
     workdir: str
     mcp_proxy_base: str | None = None
@@ -68,3 +69,19 @@ class TurnRequest(BaseModel):
 
 class TurnResponse(BaseModel):
     events: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class OutcomeRubricRequest(BaseModel):
+    description: str
+    criteria: list[str] = Field(default_factory=list)
+
+
+class OutcomeEvaluateRequest(BaseModel):
+    rubric: OutcomeRubricRequest
+    agent_output: str
+    model: ModelConfig
+
+
+class OutcomeEvaluateResponse(BaseModel):
+    result: str
+    feedback: str = ""
