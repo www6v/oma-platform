@@ -77,6 +77,7 @@ async def internal_turn_stream(body: TurnRequest) -> StreamingResponse:
                     model=body.model,
                     aux_model=body.aux_model,
                     environment=body.environment,
+                    resources=body.resources,
                     events=body.events,
                     workdir=body.workdir,
                     mcp_proxy_base=body.mcp_proxy_base,

@@ -19,6 +19,9 @@ pi-ai = { path = "../../../piPy-env/piPy/packages/pi_ai", editable = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+  "live: real oma-server + harness integration (requires OMA_FAKE_HARNESS=0)",
+]
 
 [dependency-groups]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.24", "pytest-httpx>=0.35.0"]

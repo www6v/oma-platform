@@ -6,7 +6,10 @@
 #   - Go eval worker rubric integration tests
 #   - Go API eval worker rubric integration test
 #   - Python resource_mounter + outcome_evaluator tests
-#   - Python live piPy harness turn with mounted file/env (bash reads mount)
+#   - Python faux in-process harness turn (bash reads mount; no platform)
+#
+# For real platform agent/session + Console UI, run:
+#   ./scripts/smoke-resource-live-e2e.sh
 #
 # Usage:
 #   ./scripts/smoke-t13-e2e.sh
@@ -39,8 +42,8 @@ log "Python resource mounter + outcome evaluator"
   cd harness
   if command -v uv >/dev/null 2>&1; then
     uv run pytest tests/test_resource_mounter.py tests/test_outcome_evaluator.py -v
-    log "Python resource mounter live harness (pi session + bash reads mount)"
-    uv run pytest tests/test_resource_live_harness.py -v
+    log "Python resource mounter faux harness (in-process pi turn)"
+    uv run pytest tests/test_resource_live_harness.py::test_resource_mounter_faux_harness_turn -v
   else
     python3 -m pytest tests/test_resource_mounter.py tests/test_outcome_evaluator.py -v
     echo "skip test_resource_live_harness.py (uv not installed; use uv for pi harness)" >&2

@@ -12,6 +12,12 @@ fi
 
 export OMA_FAKE_HARNESS="${OMA_FAKE_HARNESS:-1}"
 
+# Shell HTTP(S)_PROXY breaks piPy LLM clients (empty assistant + connection errors).
+# Sandbox outbound uses per-turn .curlrc instead (see outbound/setup.py).
+unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy ALL_PROXY all_proxy || true
+export NO_PROXY="${NO_PROXY:-localhost,127.0.0.1,::1}"
+export no_proxy="${no_proxy:-$NO_PROXY}"
+
 cd "${ROOT_DIR}/harness"
 
 if [[ ! -x "${ROOT_DIR}/harness/.venv/bin/uvicorn" ]]; then
