@@ -42,7 +42,7 @@ This repo implements a large slice of the [open-managed-agents](https://github.c
 - **Auth** — API key (`x-api-key` / `Authorization: Bearer`) or better-auth cookie session.
 - **Docker Compose** — Two-service stack (`oma-platform` + `oma-harness`) with health checks.
 - **Fake harness mode** — `OMA_FAKE_HARNESS=1` for local dev and CI without LLM API keys.
-- **Smoke & integration scripts** — `smoke-test.sh`, `scripts/console-integration.sh`, provider webhooks, MCP, runtime, sub-agent E2E.
+- **Smoke & integration scripts** — `scripts/smoke-test.sh`, `scripts/console-integration.sh`, provider webhooks, MCP, runtime, sub-agent E2E.
 
 ## Architecture
 
@@ -198,10 +198,10 @@ Open http://localhost:8787
 
 ```bash
 # With platform + harness running (OMA_FAKE_HARNESS=0 for real LLM)
-./smoke-test.sh
+./scripts/smoke-test.sh
 
 # API-only, no harness / no LLM
-SMOKE_SKIP_LLM=1 ./smoke-test.sh
+SMOKE_SKIP_LLM=1 ./scripts/smoke-test.sh
 ```
 
 Set `ANTHROPIC_API_KEY` in `.env` or configure piPy via `~/.pi/agent/{settings,models,auth}.json` for real model calls.
@@ -222,14 +222,14 @@ Set `ANTHROPIC_API_KEY` in `.env` or configure piPy via `~/.pi/agent/{settings,m
 
 The OMA Console SPA in `console/` is served on the same port as the API when `CONSOLE_DIR` is set. `./start-console.sh` builds `console/dist/` if missing, starts the better-auth sidecar, and proxies `/auth/*` for email/password sign-in.
 
-**Docker:** `docker compose up` can mount `./console/dist` at `/app/console` when present. Build the console first (`./scripts/build-console.sh`), or set `CONSOLE_DIST` in compose.
+**Docker:** `./deploy/docker.sh up` can mount `./console/dist` at `/app/console` when present. Build the console first (`./scripts/build-console.sh`), or set `CONSOLE_DIST` in compose.
 
 **Coverage:** Agents, sessions, environments, model cards, skills, vaults, files, integrations, evals, runtimes, and memory stores are wired to oma-platform APIs. Dreams, cost reports, browser tools, and some CF-only features remain deferred — see [MVP-MIGRATION-PLAN.md](./MVP-MIGRATION-PLAN.md).
 
 ## Docker
 
 ```bash
-docker compose up --build
+./deploy/docker.sh up
 ```
 
 Copy `.env.example` to `.env`. For real model calls set `OMA_FAKE_HARNESS=0` and configure piPy via `~/.pi/agent/settings.json`, `models.json`, and `auth.json` (mounted into the harness container in compose).

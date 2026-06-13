@@ -1,8 +1,8 @@
 services:
   oma-platform:
     build:
-      context: .
-      dockerfile: Dockerfile.platform
+      context: ..
+      dockerfile: deploy/Dockerfile.platform
     ports:
       - "8787:8787"
     environment:
@@ -19,16 +19,16 @@ services:
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8787}
     volumes:
-      - ./data:/data
-      # - ${CONSOLE_DIST:-./console/dist}:/app/console:ro
+      - ../data:/data
+      # - ${CONSOLE_DIST:-../console/dist}:/app/console:ro
     depends_on:
       oma-harness:
         condition: service_healthy
 
   oma-harness:
     build:
-      context: ..
-      dockerfile: oma-platform/Dockerfile.harness
+      context: ../..
+      dockerfile: oma-platform/deploy/Dockerfile.harness
     ports:
       - "8090:8090"
     environment:
