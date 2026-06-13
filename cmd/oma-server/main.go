@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/open-ma/oma-building/internal/api"
+	"github.com/open-ma/oma-building/internal/dream"
 	"github.com/open-ma/oma-building/internal/eval"
 	"github.com/open-ma/oma-building/internal/fileblob"
 	"github.com/open-ma/oma-building/internal/harness"
@@ -104,6 +105,7 @@ func main() {
 	memoryBlobs := memoryblob.NewStore(memoryDataDir)
 	memoryStores := store.NewMemoryStoreRepo(db, memoryBlobs)
 	evalRuns := store.NewEvalRunRepo(db)
+	dreams := store.NewDreamRepo(db)
 	modelResolver := &modelresolve.Resolver{Cards: modelCards}
 	sessions := store.NewSessionRepo(db, agents, environments)
 	if n, err := sessions.RecoverRunning(context.Background()); err != nil {
@@ -172,6 +174,29 @@ func main() {
 		}()
 		log.Printf("eval worker enabled (interval=%s)", interval)
 	}
+	dreamWorker := &dream.Worker{
+		Dreams:       dreams,
+		MemoryStores: memoryStores,
+		Sessions:     sessions,
+	}
+	if os.Getenv("OMA_DREAM_WORKER_DISABLED") != "1" {
+		interval := 30 * time.Second
+		if raw := os.Getenv("OMA_DREAM_WORKER_INTERVAL"); raw != "" {
+			if d, err := time.ParseDuration(raw); err == nil && d > 0 {
+				interval = d
+			}
+		}
+		go func() {
+			ticker := time.NewTicker(interval)
+			defer ticker.Stop()
+			for range ticker.C {
+				if _, err := dreamWorker.Tick(context.Background()); err != nil {
+					log.Printf("dream worker tick: %v", err)
+				}
+			}
+		}()
+		log.Printf("dream worker enabled (interval=%s)", interval)
+	}
 	memoryRetention := &memory.RetentionWorker{
 		MemoryStores: memoryStores,
 	}
@@ -220,6 +245,9 @@ func main() {
 		Integrations:   integrations,
 		MemoryStores:   memoryStores,
 		EvalRuns:       evalRuns,
+		Dreams:         dreams,
+		DreamWorker:    dreamWorker,
+		Events:         events,
 		Sessions:      sessionHandlers,
 		APIKey:       apiKey,
 		ConsoleDir:   consoleDir,

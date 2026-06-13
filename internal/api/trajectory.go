@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/open-ma/oma-building/internal/store"
+	"github.com/open-ma/oma-building/internal/usage"
 )
 
 type trajectoryEvent struct {
@@ -21,12 +22,7 @@ type trajectorySummary struct {
 	NumToolErrors int `json:"num_tool_errors"`
 	NumThreads    int `json:"num_threads"`
 	DurationMs    int `json:"duration_ms"`
-	TokenUsage    struct {
-		InputTokens              int `json:"input_tokens"`
-		OutputTokens             int `json:"output_tokens"`
-		CacheReadInputTokens     int `json:"cache_read_input_tokens"`
-		CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
-	} `json:"token_usage"`
+	TokenUsage    usage.TokenTotals `json:"token_usage"`
 }
 
 func buildTrajectory(sess *store.Session, events []store.StoredEvent) map[string]any {
@@ -140,7 +136,7 @@ func computeTrajectorySummary(
 				threadIDs[tid] = struct{}{}
 			}
 		case "span.model_request_end":
-			applySpanUsage(data, &summary)
+			usage.ApplySpanUsage(data, &summary.TokenUsage)
 		}
 	}
 	summary.NumThreads = len(threadIDs)
@@ -174,37 +170,6 @@ func isTrajectoryToolError(data map[string]any) bool {
 	}
 	isErr, ok := data["is_error"].(bool)
 	return ok && isErr
-}
-
-func applySpanUsage(data map[string]any, summary *trajectorySummary) {
-	if data == nil {
-		return
-	}
-	usageRaw, ok := data["model_usage"].(map[string]any)
-	if !ok {
-		return
-	}
-	summary.TokenUsage.InputTokens += intNumber(usageRaw["input_tokens"])
-	summary.TokenUsage.OutputTokens += intNumber(usageRaw["output_tokens"])
-	summary.TokenUsage.CacheReadInputTokens += intNumber(
-		usageRaw["cache_read_input_tokens"],
-	)
-	summary.TokenUsage.CacheCreationInputTokens += intNumber(
-		usageRaw["cache_creation_input_tokens"],
-	)
-}
-
-func intNumber(v any) int {
-	switch n := v.(type) {
-	case float64:
-		return int(n)
-	case int:
-		return n
-	case int64:
-		return int(n)
-	default:
-		return 0
-	}
 }
 
 func modelIDFromSnapshot(raw json.RawMessage) string {

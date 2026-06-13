@@ -15,6 +15,7 @@ import (
 
 type memoryStoresDeps struct {
 	MemoryStores *store.MemoryStoreRepo
+	Dreams       *store.DreamRepo
 }
 
 func mountMemoryStoreRoutes(r chi.Router, deps memoryStoresDeps) {
@@ -93,9 +94,15 @@ func mountMemoryStoreRoutes(r chi.Router, deps memoryStoresDeps) {
 			})
 
 			r.Post("/archive", func(w http.ResponseWriter, req *http.Request) {
-				row, err := repo.ArchiveStore(
-					req.Context(), tenantID(req), storeID(req),
-				)
+				tid := tenantID(req)
+				id := storeID(req)
+				if blocked := dreamBlocksMemoryStore(
+					req, deps.Dreams, tid, id,
+				); blocked != nil {
+					writeJSON(w, http.StatusBadRequest, blocked)
+					return
+				}
+				row, err := repo.ArchiveStore(req.Context(), tid, id)
 				if err != nil {
 					writeMemoryStoreError(w, err)
 					return
@@ -104,10 +111,15 @@ func mountMemoryStoreRoutes(r chi.Router, deps memoryStoresDeps) {
 			})
 
 			r.Delete("/", func(w http.ResponseWriter, req *http.Request) {
+				tid := tenantID(req)
 				id := storeID(req)
-				if err := repo.DeleteStore(
-					req.Context(), tenantID(req), id,
-				); err != nil {
+				if blocked := dreamBlocksMemoryStore(
+					req, deps.Dreams, tid, id,
+				); blocked != nil {
+					writeJSON(w, http.StatusBadRequest, blocked)
+					return
+				}
+				if err := repo.DeleteStore(req.Context(), tid, id); err != nil {
 					writeMemoryStoreError(w, err)
 					return
 				}

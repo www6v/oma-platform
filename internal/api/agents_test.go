@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/open-ma/oma-building/internal/api"
+	"github.com/open-ma/oma-building/internal/dream"
 	"github.com/open-ma/oma-building/internal/fileblob"
 	"github.com/open-ma/oma-building/internal/harness"
 	"github.com/open-ma/oma-building/internal/modelresolve"
@@ -67,6 +68,8 @@ func testRouterDeps(
 	)
 	const testInternalSecret = "test-internal-secret"
 	gatewayOrigin := "http://test"
+	memoryStores := store.NewMemoryStoreRepo(db, nil)
+	dreams := store.NewDreamRepo(db)
 	deps := api.Deps{
 		Agents:         agents,
 		Environments:   environments,
@@ -83,8 +86,15 @@ func testRouterDeps(
 		Integrations:   integrations,
 		Runtimes:       runtimes,
 		RuntimeRooms:   runtimeRooms,
-		MemoryStores:   store.NewMemoryStoreRepo(db, nil),
+		MemoryStores:   memoryStores,
 		EvalRuns:       store.NewEvalRunRepo(db),
+		Dreams:         dreams,
+		DreamWorker: &dream.Worker{
+			Dreams:       dreams,
+			MemoryStores: memoryStores,
+			Sessions:     sessions,
+		},
+		Events:         events,
 		AuthDisabled:   true,
 		Sessions:       sessionHandlers,
 		ModelResolver:  models,
@@ -161,6 +171,8 @@ func testRouterSharedDB(
 	reg := session.NewRegistry()
 	workdirs := workdir.NewManager(t.TempDir(), "")
 	outputs := sessionoutputs.NewStore(t.TempDir())
+	memoryStores := store.NewMemoryStoreRepo(db, nil)
+	dreams := store.NewDreamRepo(db)
 
 	handler := api.NewRouter(api.Deps{
 		Agents:         agents,
@@ -177,8 +189,15 @@ func testRouterSharedDB(
 		Tenants:        store.NewTenantRepo(db),
 		Runtimes:       store.NewRuntimeRepo(db),
 		Integrations:   store.NewIntegrationRepo(db),
-		MemoryStores:   store.NewMemoryStoreRepo(db, nil),
+		MemoryStores:   memoryStores,
 		EvalRuns:       store.NewEvalRunRepo(db),
+		Dreams:         dreams,
+		DreamWorker: &dream.Worker{
+			Dreams:       dreams,
+			MemoryStores: memoryStores,
+			Sessions:     sessions,
+		},
+		Events:         events,
 		AuthDisabled:   true,
 		Sessions: api.NewSessionHandlers(
 			sessions, agents, events, pending, hub, reg, workdirs, outputs, client, models,

@@ -8,6 +8,7 @@ import (
 
 	"github.com/open-ma/oma-building/internal/auth"
 	"github.com/open-ma/oma-building/internal/console"
+	"github.com/open-ma/oma-building/internal/dream"
 	"github.com/open-ma/oma-building/internal/integrations/github"
 	"github.com/open-ma/oma-building/internal/integrations/linear"
 	"github.com/open-ma/oma-building/internal/integrations/slack"
@@ -42,6 +43,9 @@ type Deps struct {
 	Integrations   *store.IntegrationRepo
 	MemoryStores   *store.MemoryStoreRepo
 	EvalRuns       *store.EvalRunRepo
+	Dreams         *store.DreamRepo
+	DreamWorker    *dream.Worker
+	Events         *store.EventRepo
 	Sessions       *sessionHandlers
 	APIKey       string
 	ConsoleDir   string
@@ -198,11 +202,22 @@ func NewRouter(deps Deps) http.Handler {
 
 	mountMemoryStoreRoutes(r, memoryStoresDeps{
 		MemoryStores: deps.MemoryStores,
+		Dreams:       deps.Dreams,
 	})
 	mountEvalRunRoutes(r, evalRunsDeps{
 		EvalRuns:     deps.EvalRuns,
 		Agents:       deps.Agents,
 		Environments: deps.Environments,
+	})
+	mountDreamRoutes(r, dreamsDeps{
+		Dreams:       deps.Dreams,
+		MemoryStores: deps.MemoryStores,
+		Sessions:     sessionRepoFromHandlers(deps.Sessions),
+		Worker:       deps.DreamWorker,
+	})
+	mountCostReportRoutes(r, costReportDeps{
+		Events:   deps.Events,
+		Sessions: sessionRepoFromHandlers(deps.Sessions),
 	})
 
 	mountModelsListRoutes(r, modelsListDeps{})
@@ -229,6 +244,13 @@ func NewRouter(deps Deps) http.Handler {
 	}
 
 	return r
+}
+
+func sessionRepoFromHandlers(h *sessionHandlers) *store.SessionRepo {
+	if h == nil {
+		return nil
+	}
+	return h.sessions
 }
 
 // NewSessionHandlers builds session HTTP dependencies.

@@ -28,6 +28,9 @@ def emit_oma_events(
                 if text and text not in seen_agent_text:
                     seen_agent_text.add(text)
                     out.append(_agent_message(text))
+                usage_span = _model_usage_span(message)
+                if usage_span is not None:
+                    out.append(usage_span)
         elif kind in {"tool_use", "agent.tool_use", "tool_execution_start"}:
             tool_id = (
                 item.get("id")
@@ -71,6 +74,38 @@ def _agent_message(text: str) -> dict[str, Any]:
         "type": "agent.message",
         "content": [{"type": "text", "text": text}],
     }
+
+
+def _model_usage_span(message: dict[str, Any]) -> dict[str, Any] | None:
+    usage = message.get("usage")
+    if not isinstance(usage, dict):
+        return None
+    model_usage = {
+        "input_tokens": _usage_int(usage, "input_tokens", "input"),
+        "output_tokens": _usage_int(usage, "output_tokens", "output"),
+        "cache_read_input_tokens": _usage_int(
+            usage, "cache_read_input_tokens", "cache_read",
+        ),
+        "cache_creation_input_tokens": _usage_int(
+            usage, "cache_creation_input_tokens", "cache_creation",
+        ),
+    }
+    if all(v == 0 for v in model_usage.values()):
+        return None
+    return {
+        "type": "span.model_request_end",
+        "model_usage": model_usage,
+    }
+
+
+def _usage_int(usage: dict[str, Any], *keys: str) -> int:
+    for key in keys:
+        value = usage.get(key)
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, (int, float)):
+            return int(value)
+    return 0
 
 
 def _extract_pi_message_text(message: dict[str, Any]) -> str:
