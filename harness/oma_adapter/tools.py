@@ -42,6 +42,9 @@ WEB_FETCH_EXTENSION_PATH = (
 MCP_LOADER_EXTENSION_PATH = (
     Path(__file__).resolve().parent / "extensions" / "mcp_loader.py"
 )
+CALL_AGENT_EXTENSION_PATH = (
+    Path(__file__).resolve().parent / "extensions" / "call_agent.py"
+)
 
 OMA_EXTENSION_TOOLS = frozenset({"web_fetch"})
 PIPY_BUILTIN_NAMES = frozenset(PIPY_BUILTIN_ORDER)
@@ -72,7 +75,15 @@ def _extension_paths_for_agent(agent: AgentSnapshot) -> list[str]:
     paths = _extension_paths_for_names(_resolved_tool_names(agent))
     if agent.mcp_servers and MCP_LOADER_EXTENSION_PATH.is_file():
         paths.append(str(MCP_LOADER_EXTENSION_PATH))
+    if _needs_call_agent_extension(agent) and CALL_AGENT_EXTENSION_PATH.is_file():
+        paths.append(str(CALL_AGENT_EXTENSION_PATH))
     return paths
+
+
+def _needs_call_agent_extension(agent: AgentSnapshot) -> bool:
+    if agent.callable_agents:
+        return True
+    return agent.enable_general_subagent
 
 
 def _pipy_name(raw: str) -> str | None:

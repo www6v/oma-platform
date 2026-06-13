@@ -24,31 +24,35 @@ type ModelConfig struct {
 
 // AgentSnapshot is the agent config sent to the harness sidecar.
 type AgentSnapshot struct {
-	ID           string          `json:"id"`
-	Name         string          `json:"name"`
-	Model        string          `json:"model"`
-	AuxModel     string          `json:"aux_model,omitempty"`
-	SystemPrompt string          `json:"system_prompt,omitempty"`
-	Description  string          `json:"description,omitempty"`
-	Tools        json.RawMessage `json:"tools,omitempty"`
-	MCPServers   json.RawMessage `json:"mcp_servers,omitempty"`
-	Version      int             `json:"version"`
+	ID             string          `json:"id"`
+	Name           string          `json:"name"`
+	Model          string          `json:"model"`
+	AuxModel       string          `json:"aux_model,omitempty"`
+	SystemPrompt   string          `json:"system_prompt,omitempty"`
+	System         string          `json:"system,omitempty"`
+	Description    string          `json:"description,omitempty"`
+	Tools          json.RawMessage `json:"tools,omitempty"`
+	MCPServers     json.RawMessage `json:"mcp_servers,omitempty"`
+	CallableAgents json.RawMessage `json:"callable_agents,omitempty"`
+	Metadata       json.RawMessage `json:"metadata,omitempty"`
+	Version        int             `json:"version"`
 }
 
 // TurnRequest is the harness turn payload.
 type TurnRequest struct {
-	SessionID      string            `json:"session_id"`
-	TenantID       string            `json:"tenant_id,omitempty"`
-	Agent          AgentSnapshot     `json:"agent"`
-	Model          ModelConfig       `json:"model,omitempty"`
-	AuxModel       *ModelConfig      `json:"aux_model,omitempty"`
-	Environment    json.RawMessage   `json:"environment,omitempty"`
-	Events         []json.RawMessage `json:"events"`
-	Workdir        string            `json:"workdir"`
-	McpProxyBase   string            `json:"mcp_proxy_base,omitempty"`
-	McpProxyAPIKey string            `json:"mcp_proxy_api_key,omitempty"`
-	OutboundProxyAddr string         `json:"outbound_proxy_addr,omitempty"`
-	OutboundProxyAPIKey string       `json:"outbound_proxy_api_key,omitempty"`
+	SessionID             string                     `json:"session_id"`
+	TenantID              string                     `json:"tenant_id,omitempty"`
+	Agent                 AgentSnapshot              `json:"agent"`
+	SubAgents             map[string]AgentSnapshot   `json:"sub_agents,omitempty"`
+	Model                 ModelConfig                `json:"model,omitempty"`
+	AuxModel              *ModelConfig               `json:"aux_model,omitempty"`
+	Environment           json.RawMessage            `json:"environment,omitempty"`
+	Events                []json.RawMessage          `json:"events"`
+	Workdir               string                     `json:"workdir"`
+	McpProxyBase          string                     `json:"mcp_proxy_base,omitempty"`
+	McpProxyAPIKey        string                     `json:"mcp_proxy_api_key,omitempty"`
+	OutboundProxyAddr     string                     `json:"outbound_proxy_addr,omitempty"`
+	OutboundProxyAPIKey   string                     `json:"outbound_proxy_api_key,omitempty"`
 }
 
 // TurnResponse is the harness turn result.

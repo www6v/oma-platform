@@ -136,7 +136,7 @@ func main() {
 	outboundAddr := envOrDefault("OMA_OUTBOUND_PROXY_ADDR", ":8790")
 	internalSecret := os.Getenv("OMA_INTERNAL_SECRET")
 	sessionHandlers := api.NewSessionHandlers(
-		sessions, events, pending, hub, registry, workdirs,
+		sessions, agents, events, pending, hub, registry, workdirs,
 		sessionOutputs, harnessClient, modelResolver,
 		publicURL, apiKey,
 		outbound.HostForHarness(outboundAddr), apiKey,

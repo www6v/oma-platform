@@ -28,6 +28,7 @@ type Machine struct {
 	TenantID    string
 	SessionID   string
 	Sessions    *store.SessionRepo
+	Agents      *store.AgentRepo
 	Events      *store.EventRepo
 	Pending     *store.PendingRepo
 	Hub         Broadcaster
@@ -99,8 +100,16 @@ func (m *Machine) RunTurn(ctx context.Context) error {
 	}
 
 	var agent harness.AgentSnapshot
-	if err := json.Unmarshal(sess.AgentSnapshot, &agent); err != nil {
+	agent, err = harness.AgentSnapshotFromRaw(sess.AgentSnapshot)
+	if err != nil {
 		return fmt.Errorf("parse agent snapshot: %w", err)
+	}
+
+	subAgents, err := harness.ResolveSubAgents(
+		ctx, m.Agents, m.TenantID, agent.CallableAgents,
+	)
+	if err != nil {
+		return m.failTurn(ctx, turnID, err)
 	}
 
 	modelCfg, err := m.resolveModel(ctx, agent.Model)
@@ -140,6 +149,7 @@ func (m *Machine) RunTurn(ctx context.Context) error {
 			SessionID:      m.SessionID,
 			TenantID:       m.TenantID,
 			Agent:          agent,
+			SubAgents:      subAgents,
 			Model:          modelCfg,
 			AuxModel:       auxCfg,
 			Environment:    envSnap,

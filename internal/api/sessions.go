@@ -38,6 +38,7 @@ type appendEventsRequest struct {
 
 type sessionHandlers struct {
 	sessions     *store.SessionRepo
+	agents       *store.AgentRepo
 	events       *store.EventRepo
 	pending      *store.PendingRepo
 	hub          *stream.Hub
@@ -57,6 +58,7 @@ func (h *sessionHandlers) registerMachine(sess *store.Session) {
 		TenantID:      sess.TenantID,
 		SessionID:     sess.ID,
 		Sessions:      h.sessions,
+		Agents:        h.agents,
 		Events:        h.events,
 		Pending:       h.pending,
 		Hub:           h.hub,

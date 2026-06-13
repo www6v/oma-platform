@@ -234,6 +234,7 @@ func NewRouter(deps Deps) http.Handler {
 // NewSessionHandlers builds session HTTP dependencies.
 func NewSessionHandlers(
 	sessions *store.SessionRepo,
+	agents *store.AgentRepo,
 	events *store.EventRepo,
 	pending *store.PendingRepo,
 	hub *stream.Hub,
@@ -249,6 +250,7 @@ func NewSessionHandlers(
 ) *sessionHandlers {
 	return &sessionHandlers{
 		sessions:     sessions,
+		agents:       agents,
 		events:       events,
 		pending:      pending,
 		hub:          hub,

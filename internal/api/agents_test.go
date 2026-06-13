@@ -56,7 +56,7 @@ func testRouterDeps(
 	runtimes := store.NewRuntimeRepo(db)
 	runtimeRooms := runtime.NewRegistry(runtimes)
 	sessionHandlers := api.NewSessionHandlers(
-		sessions, events, pending, hub, reg, workdirs,
+		sessions, agents, events, pending, hub, reg, workdirs,
 		outputs, client, models, "", "", "", "",
 	)
 	const testInternalSecret = "test-internal-secret"
@@ -174,7 +174,7 @@ func testRouterSharedDB(
 		EvalRuns:       store.NewEvalRunRepo(db),
 		AuthDisabled:   true,
 		Sessions: api.NewSessionHandlers(
-			sessions, events, pending, hub, reg, workdirs, outputs, client, models, "", "", "", "",
+			sessions, agents, events, pending, hub, reg, workdirs, outputs, client, models, "", "", "", "",
 		),
 	})
 	return handler, reg, sessions

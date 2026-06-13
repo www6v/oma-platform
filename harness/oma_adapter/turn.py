@@ -7,6 +7,16 @@ import os
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
+from oma_adapter.compaction import (
+    compact_events,
+    resolve_context_window_tokens,
+    should_compact,
+)
+from oma_adapter.call_agent.runtime import (
+    CallAgentRuntime,
+    clear_call_agent_runtime,
+    configure_call_agent,
+)
 from oma_adapter.emit import emit_oma_events
 from oma_adapter.platform_guidance import compose_system_prompt
 from oma_adapter.project import project_oma_events
@@ -89,6 +99,7 @@ async def _run_turn_core(
     session_id: str,
     tenant_id: str | None = None,
     agent: AgentSnapshot,
+    sub_agents: dict[str, AgentSnapshot] | None = None,
     model: ModelConfig | None,
     aux_model: ModelConfig | None = None,
     environment: dict[str, Any] | None = None,
@@ -102,7 +113,26 @@ async def _run_turn_core(
     on_event: EventCallback | None,
 ) -> TurnResponse:
 
-    prompt = project_oma_events(events)
+    working_events = list(events)
+    context_window = resolve_context_window_tokens(
+        model.model if model is not None else agent.model,
+    )
+    summarize_cfg = aux_model if aux_model is not None else model
+    if summarize_cfg is not None and should_compact(
+        working_events,
+        context_window_tokens=context_window,
+    ):
+        boundary = await compact_events(
+            working_events,
+            model_cfg=summarize_cfg,
+            context_window_tokens=context_window,
+        )
+        if boundary is not None:
+            working_events.append(boundary)
+            if on_event is not None:
+                await on_event(boundary)
+
+    prompt = project_oma_events(working_events)
     if not prompt:
         return TurnResponse(events=[])
 
@@ -140,6 +170,23 @@ async def _run_turn_core(
                 session_id=session_id,
             ),
         )
+        configure_call_agent(
+            CallAgentRuntime(
+                session_id=session_id,
+                tenant_id=tenant_id,
+                workdir=workdir,
+                parent_agent=agent,
+                sub_agents=sub_agents or {},
+                model=model,
+                aux_model=aux_model,
+                environment=environment,
+                emit_event=emit_aux if on_event is not None else None,
+                mcp_proxy_base=mcp_proxy_base,
+                mcp_proxy_api_key=mcp_proxy_api_key,
+                outbound_proxy_addr=outbound_proxy_addr,
+                outbound_proxy_api_key=outbound_proxy_api_key,
+            ),
+        )
         await setup_mcp_runtime_for_turn(
             mcp_servers=mcp_servers_from_agent(agent),
             session_id=session_id,
@@ -154,7 +201,7 @@ async def _run_turn_core(
                 result = await _default_create_session(
                     workdir=workdir,
                     model=resolved_model,
-                    system_prompt=compose_system_prompt(agent.system_prompt),
+                    system_prompt=compose_system_prompt(agent.resolved_system_prompt),
                     builtin_tools=tool_cfg.builtin_tools,
                     extension_paths=tool_cfg.extension_paths,
                 )
@@ -225,6 +272,7 @@ async def _run_turn_core(
             clear_outbound_proxy_for_turn(saved_proxy_env)
             clear_web_fetch_runtime()
             clear_mcp_runtime()
+            clear_call_agent_runtime()
 
 
 async def run_turn(
@@ -232,6 +280,7 @@ async def run_turn(
     session_id: str,
     tenant_id: str | None = None,
     agent: AgentSnapshot,
+    sub_agents: dict[str, AgentSnapshot] | None = None,
     model: ModelConfig | None = None,
     aux_model: ModelConfig | None = None,
     environment: dict[str, Any] | None = None,
@@ -247,6 +296,7 @@ async def run_turn(
         session_id=session_id,
         tenant_id=tenant_id,
         agent=agent,
+        sub_agents=sub_agents,
         model=model,
         aux_model=aux_model,
         environment=environment,
@@ -266,6 +316,7 @@ async def run_turn_stream(
     session_id: str,
     tenant_id: str | None = None,
     agent: AgentSnapshot,
+    sub_agents: dict[str, AgentSnapshot] | None = None,
     model: ModelConfig | None = None,
     aux_model: ModelConfig | None = None,
     environment: dict[str, Any] | None = None,
@@ -282,6 +333,7 @@ async def run_turn_stream(
         session_id=session_id,
         tenant_id=tenant_id,
         agent=agent,
+        sub_agents=sub_agents,
         model=model,
         aux_model=aux_model,
         environment=environment,

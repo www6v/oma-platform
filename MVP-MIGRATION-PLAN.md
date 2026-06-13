@@ -127,8 +127,8 @@ Console 全量 wire 验收：`scripts/console-integration.sh`
 
 | 功能域 | 源参考 | oma-platform 实现 | 状态 | 缺口 / 备注 |
 |--------|--------|-------------------|------|-------------|
-| call_agent / 子 Agent | `harness/tools.ts` | — | ❌ | P2-1 |
-| Compaction 上下文压缩 | `harness/compaction.ts` | — | ❌ | P2-2 |
+| call_agent / 子 Agent | `harness/tools.ts` | harness `call_agent/` | ✅ | P2-1 |
+| Compaction 上下文压缩 | `harness/compaction.ts` | `compaction.py` | ✅ | P2-2 |
 | Resource mounter | `runtime/resource-mounter.ts` | — | ❌ | memory/files/github（P2-3） |
 | Outcome evaluator | `harness/outcome-evaluator.ts` | — | ❌ | eval 依赖（P2-4） |
 | Dreams | `/v1/dreams`, `dreams-store` | — | ❌ | P2-5 |
@@ -273,7 +273,7 @@ Client / Console
 - [x] **T9 (P1)** — Memory blob + retention — store + cron
 - [x] **T10 (P1)** — Runtime WebSocket attach — `runtime_daemon.go`
 - [x] **T11 (P1)** — Session threads 从 event log 派生 — `session_aux.go`
-- [ ] **T12 (P2)** — call_agent + compaction — harness
+- [x] **T12 (P2)** — call_agent + compaction — harness
 - [ ] **T13 (P2)** — resource mounter + outcome evaluator — harness + eval worker
 - [ ] **T14 (P2)** — Dreams + cost_report API — 新 store + routes
 - [ ] **T15 (P2)** — `/v1/internal/*` — 供未来 integrations 拆分
