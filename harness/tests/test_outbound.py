@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from oma_adapter.outbound.setup import (
@@ -30,5 +31,24 @@ def test_setup_outbound_writes_curlrc_without_vault_token(tmp_path: Path) -> Non
         assert "X-OMA-Session-Id: sess-abc" in curlrc
         assert "platform-key" in curlrc
         assert "vault-secret" not in curlrc
+    finally:
+        clear_outbound_proxy_for_turn(saved)
+
+
+def test_setup_outbound_does_not_mutate_process_proxy_env(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("HTTP_PROXY", raising=False)
+    monkeypatch.delenv("HTTPS_PROXY", raising=False)
+    saved = setup_outbound_proxy_for_turn(
+        workdir=str(tmp_path),
+        session_id="sess-abc",
+        proxy_addr="127.0.0.1:8790",
+        proxy_api_key="platform-key",
+    )
+    try:
+        assert "HTTP_PROXY" not in os.environ
+        assert "HTTPS_PROXY" not in os.environ
     finally:
         clear_outbound_proxy_for_turn(saved)

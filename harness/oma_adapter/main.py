@@ -91,12 +91,27 @@ async def internal_turn_stream(body: TurnRequest) -> StreamingResponse:
 
         try:
             await task
-        except asyncio.TimeoutError as exc:
-            raise HTTPException(
-                status_code=504,
-                detail=f"harness turn timed out after {TURN_TIMEOUT_SEC:.0f}s",
-            ) from exc
+        except asyncio.TimeoutError:
+            yield json.dumps(
+                {
+                    "type": "session.error",
+                    "error": "harness_turn_failed",
+                    "message": (
+                        f"harness turn timed out after {TURN_TIMEOUT_SEC:.0f}s"
+                    ),
+                },
+                separators=(",", ":"),
+            ) + "\n"
+            return
         except RuntimeError as exc:
-            raise HTTPException(status_code=500, detail=str(exc)) from exc
+            yield json.dumps(
+                {
+                    "type": "session.error",
+                    "error": "harness_turn_failed",
+                    "message": str(exc),
+                },
+                separators=(",", ":"),
+            ) + "\n"
+            return
 
     return StreamingResponse(ndjson(), media_type="application/x-ndjson")

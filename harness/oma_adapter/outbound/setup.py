@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 
@@ -24,7 +23,12 @@ def setup_outbound_proxy_for_turn(
     proxy_addr: str | None,
     proxy_api_key: str | None,
 ) -> dict[str, str | None]:
-    """Configure HTTP proxy env + .curlrc; returns saved env for restore."""
+    """Write sandbox-local .curlrc for vault outbound proxy.
+
+    Do not set HTTP_PROXY on the harness process: piPy LLM clients would
+    route model API traffic through the outbound proxy and the turn would
+    fail with no assistant output. Bash/curl in the sandbox reads .curlrc.
+    """
     host = normalize_outbound_proxy_addr(proxy_addr)
     if not host or not proxy_api_key:
         return {}
@@ -47,22 +51,8 @@ def setup_outbound_proxy_for_turn(
         + "\n",
         encoding="utf-8",
     )
-
-    saved: dict[str, str | None] = {}
-    for key in (
-        "HTTP_PROXY",
-        "http_proxy",
-        "HTTPS_PROXY",
-        "https_proxy",
-    ):
-        saved[key] = os.environ.get(key)
-        os.environ[key] = proxy_url
-    return saved
+    return {}
 
 
 def clear_outbound_proxy_for_turn(saved: dict[str, str | None]) -> None:
-    for key, value in saved.items():
-        if value is None:
-            os.environ.pop(key, None)
-        else:
-            os.environ[key] = value
+    del saved
