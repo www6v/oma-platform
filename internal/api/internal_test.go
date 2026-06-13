@@ -2,12 +2,14 @@ package api_test
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/open-ma/oma-building/internal/api"
+	"github.com/open-ma/oma-building/internal/harness"
 	"github.com/open-ma/oma-building/internal/modelresolve"
 	"github.com/open-ma/oma-building/internal/store"
 )
@@ -16,16 +18,22 @@ const testInternalSecret = "test-internal-secret"
 
 func testRouterInternal(t *testing.T) http.Handler {
 	t.Helper()
+	handler, _ := testRouterInternalWithDB(t)
+	return handler
+}
+
+func testRouterInternalWithDB(t *testing.T) (http.Handler, *sql.DB) {
+	t.Helper()
 	db, err := store.Open(":memory:")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close(db) })
 
-	deps, _ := testRouterDeps(t, db, nil, "")
+	deps, _ := testRouterDeps(t, db, &harness.FakeClient{}, "")
 	deps.InternalSecret = testInternalSecret
 	deps.ModelResolver = &modelresolve.Resolver{Cards: deps.ModelCards}
-	return api.NewRouter(deps)
+	return api.NewRouter(deps), db
 }
 
 func TestInternalRoutes503WhenPlatformSecretUnset(t *testing.T) {

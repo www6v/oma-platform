@@ -121,7 +121,7 @@ Console 全量 wire 验收：`scripts/console-integration.sh`
 | Runtimes + ACP daemon | RuntimeRoom DO | `runtimes.go`, `runtime_daemon.go` | 🟡 | connect/exchange 有；**无 WS attach**（P1-6） |
 | Memory stores | R2 + FUSE + queue | `memory_stores.go` | 🟡 | SQLite 内联 content；无 retention cron（P1-5） |
 | OAuth (/v1/oauth/*) | `routes/oauth.ts` | — | ❌ | 通用 OAuth defer；Linear 用 `/linear/oauth/pub/{id}` |
-| Internal API (/v1/internal/*) | `routes/internal.ts` | `internal.go` | 🟡 | model_cards key/resolve + Linear mock bind；其余 P2-8 |
+| Internal API (/v1/internal/*) | `routes/internal.ts` | `internal.go` | ✅ | sessions/vaults + model_cards + mock bind + runtime attach（P2-8） |
 
 ### P2 — 平台 parity
 
@@ -276,7 +276,7 @@ Client / Console
 - [x] **T12 (P2)** — call_agent + compaction — harness
 - [x] **T13 (P2)** — resource mounter + outcome evaluator — harness + eval worker — Verify: `./scripts/smoke-t13-e2e.sh`
 - [x] **T14 (P2)** — Dreams + cost_report API — 新 store + routes — Verify: `go test ./internal/api/... -run 'Dream|CostReport'` + `./scripts/smoke-t14-e2e.sh`
-- [ ] **T15 (P2)** — `/v1/internal/*` — 供未来 integrations 拆分
+- [x] **T15 (P2)** — `/v1/internal/*` — 供未来 integrations 拆分 — Verify: `go test ./internal/api/... -run 'Internal|InjectMcp|AppendToAgent'` + `./scripts/smoke-t15-e2e.sh`
 
 ---
 

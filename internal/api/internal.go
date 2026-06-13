@@ -21,6 +21,10 @@ type internalDeps struct {
 	Secret        string
 	Cards         *store.ModelCardRepo
 	Resolver      *modelresolve.Resolver
+	Tenants       *store.TenantRepo
+	Sessions      *sessionHandlers
+	Vaults        *store.VaultRepo
+	Credentials   *store.CredentialRepo
 	LinearGateway *linear.Handler
 	GitHubGateway *github.Handler
 	SlackGateway  *slack.Handler
@@ -28,15 +32,33 @@ type internalDeps struct {
 }
 
 func mountInternalRoutes(r chi.Router, deps internalDeps) {
-	if deps.Cards == nil {
+	hasRoutes := deps.Cards != nil ||
+		deps.Sessions != nil ||
+		(deps.Vaults != nil && deps.Credentials != nil) ||
+		deps.LinearGateway != nil ||
+		deps.GitHubGateway != nil ||
+		deps.SlackGateway != nil ||
+		deps.RuntimeRooms != nil
+	if !hasRoutes {
 		return
 	}
 	r.Route("/v1/internal", func(r chi.Router) {
 		r.Use(internalSecretMiddleware(deps.Secret))
-		r.Route("/model_cards", func(r chi.Router) {
-			r.Get("/resolve", handleInternalModelResolve(deps))
-			r.Get("/{id}/key", handleInternalModelCardKey(deps))
-		})
+		if deps.Cards != nil {
+			r.Route("/model_cards", func(r chi.Router) {
+				r.Get("/resolve", handleInternalModelResolve(deps))
+				r.Get("/{id}/key", handleInternalModelCardKey(deps))
+			})
+		}
+		if deps.Sessions != nil {
+			r.Post("/sessions", handleInternalCreateSession(deps))
+			r.Get("/sessions/{id}", handleInternalGetSession(deps))
+			r.Post("/sessions/{id}/events", handleInternalSessionEvents(deps))
+		}
+		if deps.Vaults != nil && deps.Credentials != nil {
+			r.Post("/vaults", handleInternalCreateVault(deps))
+			r.Post("/vaults/rotate", handleInternalRotateVault(deps))
+		}
 		if deps.LinearGateway != nil {
 			r.Post(
 				"/linear/publications/{pubId}/bind-mock-install",

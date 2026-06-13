@@ -123,6 +123,42 @@ func (r *SessionRepo) Create(
 	return r.Get(ctx, tenantID, id)
 }
 
+// GetByID loads a session by id without scoping to a tenant.
+func (r *SessionRepo) GetByID(ctx context.Context, id string) (*Session, error) {
+	row := r.db.QueryRowContext(ctx, `
+		SELECT id, tenant_id, agent_id, agent_version, agent_snapshot,
+			environment_id, environment_snapshot,
+			title, status, turn_id, created_at, updated_at, archived_at
+		FROM sessions
+		WHERE id = ?`,
+		id,
+	)
+	return scanSession(row)
+}
+
+// UpdateAgentSnapshot replaces the frozen agent snapshot on a session row.
+func (r *SessionRepo) UpdateAgentSnapshot(
+	ctx context.Context,
+	tenantID, sessionID string,
+	snapshot json.RawMessage,
+) error {
+	now := time.Now().UnixMilli()
+	res, err := r.db.ExecContext(ctx, `
+		UPDATE sessions
+		SET agent_snapshot = ?, updated_at = ?
+		WHERE id = ? AND tenant_id = ?`,
+		string(snapshot), now, sessionID, tenantOrDefault(tenantID),
+	)
+	if err != nil {
+		return fmt.Errorf("update agent snapshot: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // Get loads a session by tenant and id.
 func (r *SessionRepo) Get(
 	ctx context.Context,
