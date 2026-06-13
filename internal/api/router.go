@@ -15,6 +15,7 @@ import (
 	"github.com/open-ma/oma-building/internal/harness"
 	"github.com/open-ma/oma-building/internal/mcpproxy"
 	"github.com/open-ma/oma-building/internal/modelresolve"
+	"github.com/open-ma/oma-building/internal/runtime"
 	"github.com/open-ma/oma-building/internal/session"
 	"github.com/open-ma/oma-building/internal/sessionoutputs"
 	"github.com/open-ma/oma-building/internal/store"
@@ -37,6 +38,7 @@ type Deps struct {
 	ApiKeys      *store.ApiKeyRepo
 	Tenants      *store.TenantRepo
 	Runtimes       *store.RuntimeRepo
+	RuntimeRooms   *runtime.Registry
 	Integrations   *store.IntegrationRepo
 	MemoryStores   *store.MemoryStoreRepo
 	EvalRuns       *store.EvalRunRepo
@@ -163,9 +165,11 @@ func NewRouter(deps Deps) http.Handler {
 
 	if deps.Runtimes != nil {
 		rtDeps := runtimesDeps{
-			Runtimes: deps.Runtimes,
-			ApiKeys:  deps.ApiKeys,
-			Tenants:  deps.Tenants,
+			Runtimes:       deps.Runtimes,
+			ApiKeys:        deps.ApiKeys,
+			Tenants:        deps.Tenants,
+			Rooms:          deps.RuntimeRooms,
+			InternalSecret: deps.InternalSecret,
 		}
 		r.Route("/v1/runtimes", func(r chi.Router) {
 			mountRuntimeRoutes(r, rtDeps)
@@ -210,6 +214,7 @@ func NewRouter(deps Deps) http.Handler {
 		LinearGateway: deps.LinearGateway,
 		GitHubGateway: deps.GitHubGateway,
 		SlackGateway:  deps.SlackGateway,
+		RuntimeRooms:  deps.RuntimeRooms,
 	})
 
 	mountConsoleStubRoutes(r, consoleStubDeps{

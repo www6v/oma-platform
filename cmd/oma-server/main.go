@@ -13,8 +13,11 @@ import (
 	"github.com/open-ma/oma-building/internal/eval"
 	"github.com/open-ma/oma-building/internal/fileblob"
 	"github.com/open-ma/oma-building/internal/harness"
+	"github.com/open-ma/oma-building/internal/memory"
+	"github.com/open-ma/oma-building/internal/memoryblob"
 	"github.com/open-ma/oma-building/internal/modelresolve"
 	"github.com/open-ma/oma-building/internal/outbound"
+	"github.com/open-ma/oma-building/internal/runtime"
 	"github.com/open-ma/oma-building/internal/session"
 	"github.com/open-ma/oma-building/internal/sessionoutputs"
 	"github.com/open-ma/oma-building/internal/store"
@@ -92,8 +95,14 @@ func main() {
 	apiKeys := store.NewApiKeyRepo(db)
 	tenants := store.NewTenantRepo(db)
 	runtimes := store.NewRuntimeRepo(db)
+	runtimeRooms := runtime.NewRegistry(runtimes)
 	integrations := store.NewIntegrationRepo(db)
-	memoryStores := store.NewMemoryStoreRepo(db)
+	memoryDataDir := envOrDefault("MEMORY_DATA_DIR", "./data/memory")
+	if err := os.MkdirAll(memoryDataDir, 0o755); err != nil {
+		log.Fatal(err)
+	}
+	memoryBlobs := memoryblob.NewStore(memoryDataDir)
+	memoryStores := store.NewMemoryStoreRepo(db, memoryBlobs)
 	evalRuns := store.NewEvalRunRepo(db)
 	modelResolver := &modelresolve.Resolver{Cards: modelCards}
 	sessions := store.NewSessionRepo(db, agents, environments)
@@ -154,6 +163,27 @@ func main() {
 		}()
 		log.Printf("eval worker enabled (interval=%s)", interval)
 	}
+	memoryRetention := &memory.RetentionWorker{
+		MemoryStores: memoryStores,
+	}
+	if os.Getenv("OMA_MEMORY_RETENTION_DISABLED") != "1" {
+		go func() {
+			ticker := time.NewTicker(time.Minute)
+			defer ticker.Stop()
+			for range ticker.C {
+				result, err := memoryRetention.Tick(context.Background())
+				if err != nil {
+					log.Printf("memory retention tick: %v", err)
+				} else if result.Ran && result.Removed > 0 {
+					log.Printf(
+						"memory retention pruned %d version rows",
+						result.Removed,
+					)
+				}
+			}
+		}()
+		log.Print("memory retention worker enabled (daily 03:00 UTC)")
+	}
 	linearGateway := api.NewLinearGatewayHandler(
 		integrations, sessionHandlers, publicURL, internalSecret,
 	)
@@ -177,6 +207,7 @@ func main() {
 		ApiKeys:        apiKeys,
 		Tenants:        tenants,
 		Runtimes:       runtimes,
+		RuntimeRooms:   runtimeRooms,
 		Integrations:   integrations,
 		MemoryStores:   memoryStores,
 		EvalRuns:       evalRuns,

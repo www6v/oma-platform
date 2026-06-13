@@ -3,12 +3,14 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/open-ma/oma-building/internal/runtime"
 	"github.com/open-ma/oma-building/internal/store"
 )
 
@@ -16,6 +18,27 @@ func mountRuntimeDaemonRoutes(r chi.Router, deps runtimesDeps) {
 	if deps.Runtimes == nil || deps.ApiKeys == nil {
 		return
 	}
+
+	r.Get("/_attach", func(w http.ResponseWriter, req *http.Request) {
+		if !websocketUpgrade(req) {
+			writeError(w, http.StatusBadRequest, "WebSocket only")
+			return
+		}
+		auth, ok := authenticateRuntimeBearer(w, req, deps.Runtimes)
+		if !ok {
+			return
+		}
+		if deps.Rooms == nil {
+			writeError(w, http.StatusServiceUnavailable, "runtime rooms not configured")
+			return
+		}
+		room := deps.Rooms.Room(auth.RuntimeID, auth.UserID)
+		if err := room.AttachDaemon(w, req); err != nil {
+			if errors.Is(err, runtime.ErrDaemonAlreadyAttached) {
+				writeError(w, http.StatusConflict, "daemon already attached")
+			}
+		}
+	})
 
 	r.Post("/exchange", func(w http.ResponseWriter, req *http.Request) {
 		handleRuntimeExchange(w, req, deps)
@@ -313,6 +336,10 @@ func handleRuntimeRefresh(
 			return
 		}
 	}
+	if deps.Rooms != nil {
+		_ = deps.Rooms.Room(auth.RuntimeID, auth.UserID).
+			RefreshAuthorizedTenants(req.Context())
+	}
 
 	var toRotate []store.TenantMembership
 	for _, m := range memberships {
@@ -429,4 +456,8 @@ func parseBearerToken(header string) string {
 		return strings.TrimSpace(header[7:])
 	}
 	return header
+}
+
+func websocketUpgrade(req *http.Request) bool {
+	return strings.EqualFold(req.Header.Get("Upgrade"), "websocket")
 }

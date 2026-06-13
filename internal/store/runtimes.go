@@ -523,3 +523,81 @@ func defaultStatus(status string) string {
 	}
 	return status
 }
+
+// MarkRuntimeOnline sets status online and heartbeat timestamp.
+func (r *RuntimeRepo) MarkRuntimeOnline(
+	ctx context.Context,
+	id string,
+	now int64,
+) error {
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE runtimes
+		SET status = 'online', last_heartbeat = ?
+		WHERE id = ?
+	`, now, id)
+	if err != nil {
+		return fmt.Errorf("mark runtime online: %w", err)
+	}
+	return nil
+}
+
+// MarkRuntimeOffline sets status offline.
+func (r *RuntimeRepo) MarkRuntimeOffline(
+	ctx context.Context,
+	id string,
+) error {
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE runtimes SET status = 'offline' WHERE id = ?
+	`, id)
+	if err != nil {
+		return fmt.Errorf("mark runtime offline: %w", err)
+	}
+	return nil
+}
+
+// TouchRuntimeHeartbeat updates last_heartbeat and online status.
+func (r *RuntimeRepo) TouchRuntimeHeartbeat(
+	ctx context.Context,
+	id string,
+	now int64,
+) error {
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE runtimes
+		SET status = 'online', last_heartbeat = ?
+		WHERE id = ?
+	`, now, id)
+	if err != nil {
+		return fmt.Errorf("touch runtime heartbeat: %w", err)
+	}
+	return nil
+}
+
+// UpdateRuntimeHello persists daemon hello metadata.
+func (r *RuntimeRepo) UpdateRuntimeHello(
+	ctx context.Context,
+	id, agentsJSON, version, localSkillsJSON string,
+	hostname, osName *string,
+	now int64,
+) error {
+	query := `
+		UPDATE runtimes
+		SET agents_json = ?, version = ?, local_skills_json = ?,
+		    status = 'online', last_heartbeat = ?
+	`
+	args := []any{agentsJSON, version, localSkillsJSON, now}
+	if hostname != nil {
+		query += `, hostname = ?`
+		args = append(args, *hostname)
+	}
+	if osName != nil {
+		query += `, os = ?`
+		args = append(args, *osName)
+	}
+	query += ` WHERE id = ?`
+	args = append(args, id)
+	_, err := r.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("update runtime hello: %w", err)
+	}
+	return nil
+}

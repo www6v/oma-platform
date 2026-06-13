@@ -51,6 +51,28 @@ func (s *Store) Read(key string) ([]byte, error) {
 	return os.ReadFile(path)
 }
 
+// WriteKey stores bytes at an arbitrary blob key.
+func (s *Store) WriteKey(key string, data []byte) error {
+	path, err := s.resolve(key)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o644)
+}
+
+// ReadKey loads bytes by key (alias for Read).
+func (s *Store) ReadKey(key string) ([]byte, error) {
+	return s.Read(key)
+}
+
+// DeleteKey removes a blob by key. Missing files are ignored.
+func (s *Store) DeleteKey(key string) error {
+	return s.Delete(key)
+}
+
 // Delete removes a blob by key. Missing files are ignored.
 func (s *Store) Delete(key string) error {
 	path, err := s.resolve(key)

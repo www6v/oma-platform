@@ -270,9 +270,9 @@ Client / Console
 - [x] **T6 (P1)** — Linear webhook + OAuth — `integrations.go` + `oauth.go` + `011_linear_gateway.sql` — Verify: `go test ./internal/api/...` + `scripts/smoke-linear-webhook.sh`（需重启 oma-server）
 - [x] **T7 (P1)** — GitHub/Slack webhook 最小 E2E — integrations 扩展
 - [x] **T8 (P1)** — Eval run background worker — `internal/eval/worker.go` — Verify: run pending→completed
-- [ ] **T9 (P1)** — Memory blob + retention — store + cron
-- [ ] **T10 (P1)** — Runtime WebSocket attach — `runtime_daemon.go`
-- [ ] **T11 (P1)** — Session threads 从 event log 派生 — `session_aux.go`
+- [x] **T9 (P1)** — Memory blob + retention — store + cron
+- [x] **T10 (P1)** — Runtime WebSocket attach — `runtime_daemon.go`
+- [x] **T11 (P1)** — Session threads 从 event log 派生 — `session_aux.go`
 - [ ] **T12 (P2)** — call_agent + compaction — harness
 - [ ] **T13 (P2)** — resource mounter + outcome evaluator — harness + eval worker
 - [ ] **T14 (P2)** — Dreams + cost_report API — 新 store + routes

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -12,6 +13,7 @@ import (
 	"github.com/open-ma/oma-building/internal/integrations/linear"
 	"github.com/open-ma/oma-building/internal/integrations/slack"
 	"github.com/open-ma/oma-building/internal/modelresolve"
+	"github.com/open-ma/oma-building/internal/runtime"
 	"github.com/open-ma/oma-building/internal/store"
 )
 
@@ -22,6 +24,7 @@ type internalDeps struct {
 	LinearGateway *linear.Handler
 	GitHubGateway *github.Handler
 	SlackGateway  *slack.Handler
+	RuntimeRooms  *runtime.Registry
 }
 
 func mountInternalRoutes(r chi.Router, deps internalDeps) {
@@ -50,6 +53,12 @@ func mountInternalRoutes(r chi.Router, deps internalDeps) {
 			r.Post(
 				"/slack/publications/{pubId}/bind-mock-install",
 				handleInternalSlackMockInstall(deps),
+			)
+		}
+		if deps.RuntimeRooms != nil {
+			r.Get(
+				"/runtimes/{id}/attach-harness",
+				handleInternalRuntimeAttachHarness(deps),
 			)
 		}
 	})
@@ -169,6 +178,29 @@ func handleInternalProviderMockInstall(bind mockInstallFn) http.HandlerFunc {
 
 func handleInternalLinearMockInstall(deps internalDeps) http.HandlerFunc {
 	return handleInternalProviderMockInstall(deps.LinearGateway.BindMockInstallation)
+}
+
+func handleInternalRuntimeAttachHarness(deps internalDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !websocketUpgrade(r) {
+			writeError(w, http.StatusBadRequest, "WebSocket only")
+			return
+		}
+		runtimeID := chi.URLParam(r, "id")
+		sessionID := r.Header.Get("x-session-id")
+		if sessionID == "" {
+			writeError(w, http.StatusBadRequest, "x-session-id required")
+			return
+		}
+		room := deps.RuntimeRooms.Room(runtimeID, "")
+		if err := room.AttachHarness(
+			w, r, sessionID, r.Header.Get("x-harness-tenant"),
+		); err != nil {
+			if errors.Is(err, runtime.ErrMissingSessionID) {
+				writeError(w, http.StatusBadRequest, err.Error())
+			}
+		}
+	}
 }
 
 func modelConfigResponse(cfg harness.ModelConfig) map[string]any {

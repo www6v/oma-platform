@@ -11,7 +11,19 @@ import (
 	"time"
 )
 
-const maxMemoryContentBytes = 100 * 1024
+const (
+	maxMemoryInlineBytes = 4 * 1024
+	maxMemoryInlineOnlyBytes = 100 * 1024
+	maxMemoryBlobBytes = 10 * 1024 * 1024
+	maxMemoryVersionInlineBytes = 100 * 1024
+)
+
+// MemoryBlobStore persists large memory payloads outside SQLite.
+type MemoryBlobStore interface {
+	Write(tenantID, storeID, memoryID string, data []byte) (key string, err error)
+	Read(key string) ([]byte, error)
+	Delete(key string) error
+}
 
 // MemoryStoreRow is one memory store record.
 type MemoryStoreRow struct {
@@ -24,12 +36,13 @@ type MemoryStoreRow struct {
 	ArchivedAt  sql.NullInt64
 }
 
-// MemoryRow is one memory entry (content stored inline for MVP).
+// MemoryRow is one memory entry (small content inline, large content in blob).
 type MemoryRow struct {
 	ID            string
 	StoreID       string
 	Path          string
 	Content       string
+	BlobKey       string
 	ContentSHA256 string
 	ETag          string
 	SizeBytes     int64
@@ -63,12 +76,13 @@ type MemoryStoreListOptions struct {
 
 // MemoryStoreRepo persists memory stores, memories, and versions.
 type MemoryStoreRepo struct {
-	db *sql.DB
+	db    *sql.DB
+	blobs MemoryBlobStore
 }
 
 // NewMemoryStoreRepo returns a SQLite-backed memory repository.
-func NewMemoryStoreRepo(db *sql.DB) *MemoryStoreRepo {
-	return &MemoryStoreRepo{db: db}
+func NewMemoryStoreRepo(db *sql.DB, blobs MemoryBlobStore) *MemoryStoreRepo {
+	return &MemoryStoreRepo{db: db, blobs: blobs}
 }
 
 // CreateStore inserts a new memory store.
@@ -245,6 +259,15 @@ func (r *MemoryStoreRepo) DeleteStore(
 	if store == nil {
 		return ErrMemoryStoreNotFound
 	}
+	if r.blobs != nil {
+		keys, err := r.ListMemoryBlobKeys(ctx, storeID)
+		if err != nil {
+			return err
+		}
+		for _, key := range keys {
+			_ = r.blobs.Delete(key)
+		}
+	}
 	_, err = r.db.ExecContext(ctx, `
 		DELETE FROM memory_stores WHERE tenant_id = ? AND id = ?
 	`, tenantOrDefault(tenantID), storeID)
@@ -263,7 +286,7 @@ func (r *MemoryStoreRepo) WriteMemory(
 	if path == "" {
 		return nil, errors.New("path is required")
 	}
-	if int64(len(content)) > maxMemoryContentBytes {
+	if int64(len(content)) > maxAllowedMemoryBytes(r.blobs != nil) {
 		return nil, ErrMemoryContentTooLarge
 	}
 	existing, err := r.getMemoryByPath(ctx, storeID, path)
@@ -275,14 +298,14 @@ func (r *MemoryStoreRepo) WriteMemory(
 			return nil, ErrMemoryPreconditionFailed
 		}
 		return r.insertMemory(
-			ctx, storeID, path, content, actorType, actorID, "create",
+			ctx, tenantID, storeID, path, content, actorType, actorID, "create",
 		)
 	}
 	if pre, ok := precondition["content_sha256"]; ok && pre != existing.ContentSHA256 {
 		return nil, ErrMemoryPreconditionFailed
 	}
 	return r.updateMemoryContent(
-		ctx, existing, content, actorType, actorID, "update",
+		ctx, tenantID, existing, content, actorType, actorID, "update",
 	)
 }
 
@@ -294,10 +317,7 @@ func (r *MemoryStoreRepo) ListMemories(
 	if err := r.requireStore(ctx, tenantID, storeID); err != nil {
 		return nil, err
 	}
-	query := `
-		SELECT id, store_id, path, content, content_sha256, etag,
-		       size_bytes, created_at, updated_at
-		FROM memories
+	query := memorySelectSQL + `
 		WHERE store_id = ?
 	`
 	args := []any{storeID}
@@ -331,7 +351,7 @@ func (r *MemoryStoreRepo) GetMemory(
 		return nil, err
 	}
 	row := r.db.QueryRowContext(ctx, `
-		SELECT id, store_id, path, content, content_sha256, etag,
+		SELECT id, store_id, path, content, blob_key, content_sha256, etag,
 		       size_bytes, created_at, updated_at
 		FROM memories
 		WHERE store_id = ? AND id = ?
@@ -340,7 +360,13 @@ func (r *MemoryStoreRepo) GetMemory(
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
-	return mem, err
+	if err != nil {
+		return nil, err
+	}
+	if err := r.hydrateMemory(mem); err != nil {
+		return nil, err
+	}
+	return mem, nil
 }
 
 // UpdateMemory updates path and/or content by id.
@@ -372,7 +398,7 @@ func (r *MemoryStoreRepo) UpdateMemory(
 	if content != nil {
 		newContent = *content
 	}
-	if int64(len(newContent)) > maxMemoryContentBytes {
+	if int64(len(newContent)) > maxAllowedMemoryBytes(r.blobs != nil) {
 		return nil, ErrMemoryContentTooLarge
 	}
 	if newPath != existing.Path {
@@ -384,25 +410,33 @@ func (r *MemoryStoreRepo) UpdateMemory(
 			return nil, ErrMemoryPreconditionFailed
 		}
 	}
+	inline, blobKey, err := r.persistContent(
+		tenantID, storeID, memoryID, newContent, existing.BlobKey,
+	)
+	if err != nil {
+		return nil, err
+	}
 	sha := hashContent(newContent)
 	etag := sha
 	now := time.Now().UnixMilli()
 	size := int64(len(newContent))
 	_, err = r.db.ExecContext(ctx, `
 		UPDATE memories
-		SET path = ?, content = ?, content_sha256 = ?, etag = ?,
+		SET path = ?, content = ?, blob_key = ?, content_sha256 = ?, etag = ?,
 		    size_bytes = ?, updated_at = ?
 		WHERE id = ? AND store_id = ?
-	`, newPath, newContent, sha, etag, size, now, memoryID, storeID)
+	`, newPath, inline, nullEmptyString(blobKey), sha, etag, size, now,
+		memoryID, storeID)
 	if err != nil {
 		return nil, err
 	}
+	versionContent := versionSnapshotContent(newContent)
 	if err := r.insertVersion(ctx, memoryVersionInput{
 		MemoryID:      memoryID,
 		StoreID:       storeID,
 		Operation:     "update",
 		Path:          &newPath,
-		Content:       &newContent,
+		Content:       versionContent,
 		ContentSHA256: &sha,
 		SizeBytes:     &size,
 		ActorType:     actorType,
@@ -445,6 +479,9 @@ func (r *MemoryStoreRepo) DeleteMemory(
 		ActorID:       actorID,
 	}); err != nil {
 		return err
+	}
+	if existing.BlobKey != "" && r.blobs != nil {
+		_ = r.blobs.Delete(existing.BlobKey)
 	}
 	_, err = r.db.ExecContext(ctx, `
 		DELETE FROM memories WHERE store_id = ? AND id = ?
@@ -580,10 +617,7 @@ func (r *MemoryStoreRepo) getMemoryByPath(
 	ctx context.Context,
 	storeID, path string,
 ) (*MemoryRow, error) {
-	row := r.db.QueryRowContext(ctx, `
-		SELECT id, store_id, path, content, content_sha256, etag,
-		       size_bytes, created_at, updated_at
-		FROM memories
+	row := r.db.QueryRowContext(ctx, memorySelectSQL+`
 		WHERE store_id = ? AND path = ?
 	`, storeID, path)
 	mem, err := scanMemory(row)
@@ -595,28 +629,39 @@ func (r *MemoryStoreRepo) getMemoryByPath(
 
 func (r *MemoryStoreRepo) insertMemory(
 	ctx context.Context,
-	storeID, path, content, actorType, actorID, operation string,
+	tenantID, storeID, path, content, actorType, actorID, operation string,
 ) (*MemoryRow, error) {
 	id := generateMemoryID()
+	inline, blobKey, err := r.persistContent(
+		tenantID, storeID, id, content, "",
+	)
+	if err != nil {
+		return nil, err
+	}
 	now := time.Now().UnixMilli()
 	sha := hashContent(content)
 	etag := sha
 	size := int64(len(content))
-	_, err := r.db.ExecContext(ctx, `
+	_, err = r.db.ExecContext(ctx, `
 		INSERT INTO memories (
-			id, store_id, path, content, content_sha256, etag,
+			id, store_id, path, content, blob_key, content_sha256, etag,
 			size_bytes, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, id, storeID, path, content, sha, etag, size, now, now)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id, storeID, path, inline, nullEmptyString(blobKey), sha, etag,
+		size, now, now)
 	if err != nil {
+		if blobKey != "" && r.blobs != nil {
+			_ = r.blobs.Delete(blobKey)
+		}
 		return nil, err
 	}
+	versionContent := versionSnapshotContent(content)
 	if err := r.insertVersion(ctx, memoryVersionInput{
 		MemoryID:      id,
 		StoreID:       storeID,
 		Operation:     operation,
 		Path:          &path,
-		Content:       &content,
+		Content:       versionContent,
 		ContentSHA256: &sha,
 		SizeBytes:     &size,
 		ActorType:     actorType,
@@ -624,39 +669,50 @@ func (r *MemoryStoreRepo) insertMemory(
 	}); err != nil {
 		return nil, err
 	}
-	row := r.db.QueryRowContext(ctx, `
-		SELECT id, store_id, path, content, content_sha256, etag,
-		       size_bytes, created_at, updated_at
-		FROM memories WHERE id = ?
-	`, id)
-	return scanMemory(row)
+	row := r.db.QueryRowContext(ctx, memorySelectSQL+` WHERE id = ?`, id)
+	mem, err := scanMemory(row)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.hydrateMemory(mem); err != nil {
+		return nil, err
+	}
+	return mem, nil
 }
 
 func (r *MemoryStoreRepo) updateMemoryContent(
 	ctx context.Context,
+	tenantID string,
 	existing *MemoryRow,
 	content, actorType, actorID, operation string,
 ) (*MemoryRow, error) {
+	inline, blobKey, err := r.persistContent(
+		tenantID, existing.StoreID, existing.ID, content, existing.BlobKey,
+	)
+	if err != nil {
+		return nil, err
+	}
 	sha := hashContent(content)
 	etag := sha
 	now := time.Now().UnixMilli()
 	size := int64(len(content))
-	_, err := r.db.ExecContext(ctx, `
+	_, err = r.db.ExecContext(ctx, `
 		UPDATE memories
-		SET content = ?, content_sha256 = ?, etag = ?,
+		SET content = ?, blob_key = ?, content_sha256 = ?, etag = ?,
 		    size_bytes = ?, updated_at = ?
 		WHERE id = ?
-	`, content, sha, etag, size, now, existing.ID)
+	`, inline, nullEmptyString(blobKey), sha, etag, size, now, existing.ID)
 	if err != nil {
 		return nil, err
 	}
 	path := existing.Path
+	versionContent := versionSnapshotContent(content)
 	if err := r.insertVersion(ctx, memoryVersionInput{
 		MemoryID:      existing.ID,
 		StoreID:       existing.StoreID,
 		Operation:     operation,
 		Path:          &path,
-		Content:       &content,
+		Content:       versionContent,
 		ContentSHA256: &sha,
 		SizeBytes:     &size,
 		ActorType:     actorType,
@@ -664,12 +720,15 @@ func (r *MemoryStoreRepo) updateMemoryContent(
 	}); err != nil {
 		return nil, err
 	}
-	row := r.db.QueryRowContext(ctx, `
-		SELECT id, store_id, path, content, content_sha256, etag,
-		       size_bytes, created_at, updated_at
-		FROM memories WHERE id = ?
-	`, existing.ID)
-	return scanMemory(row)
+	row := r.db.QueryRowContext(ctx, memorySelectSQL+` WHERE id = ?`, existing.ID)
+	mem, err := scanMemory(row)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.hydrateMemory(mem); err != nil {
+		return nil, err
+	}
+	return mem, nil
 }
 
 func (r *MemoryStoreRepo) insertVersion(
@@ -758,24 +817,32 @@ func scanMemoryStoreRows(rows *sql.Rows) (*MemoryStoreRow, error) {
 
 func scanMemory(row *sql.Row) (*MemoryRow, error) {
 	var m MemoryRow
+	var blobKey sql.NullString
 	err := row.Scan(
-		&m.ID, &m.StoreID, &m.Path, &m.Content, &m.ContentSHA256,
-		&m.ETag, &m.SizeBytes, &m.CreatedAt, &m.UpdatedAt,
+		&m.ID, &m.StoreID, &m.Path, &m.Content, &blobKey,
+		&m.ContentSHA256, &m.ETag, &m.SizeBytes, &m.CreatedAt, &m.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
+	}
+	if blobKey.Valid {
+		m.BlobKey = blobKey.String
 	}
 	return &m, nil
 }
 
 func scanMemoryRows(rows *sql.Rows) (*MemoryRow, error) {
 	var m MemoryRow
+	var blobKey sql.NullString
 	err := rows.Scan(
-		&m.ID, &m.StoreID, &m.Path, &m.Content, &m.ContentSHA256,
-		&m.ETag, &m.SizeBytes, &m.CreatedAt, &m.UpdatedAt,
+		&m.ID, &m.StoreID, &m.Path, &m.Content, &blobKey,
+		&m.ContentSHA256, &m.ETag, &m.SizeBytes, &m.CreatedAt, &m.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
+	}
+	if blobKey.Valid {
+		m.BlobKey = blobKey.String
 	}
 	return &m, nil
 }

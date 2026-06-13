@@ -41,18 +41,25 @@ func (h *sessionHandlers) handleSessionThreads(
 	w http.ResponseWriter,
 	req *http.Request,
 ) {
-	if _, ok := h.requireSession(w, req); !ok {
+	sess, ok := h.requireSession(w, req)
+	if !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"data": []map[string]any{
-			{
-				"id":                "sthr_primary",
-				"parent_thread_id":  nil,
-				"session_thread_id": "sthr_primary",
-			},
-		},
-	})
+
+	includeArchived := req.URL.Query().Get("include_archived") == "true"
+	events, err := h.events.ListEvents(
+		req.Context(), sess.ID, 0, 10000, true,
+	)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	data := deriveSessionThreads(sess, events, includeArchived)
+	if data == nil {
+		data = []map[string]any{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": data})
 }
 
 func (h *sessionHandlers) handleSessionPending(

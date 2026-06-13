@@ -13,14 +13,17 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/open-ma/oma-building/internal/store"
+	"github.com/open-ma/oma-building/internal/runtime"
 )
 
 const connectRuntimeCodeTTL = 5 * time.Minute
 
 type runtimesDeps struct {
-	Runtimes *store.RuntimeRepo
-	ApiKeys  *store.ApiKeyRepo
-	Tenants  *store.TenantRepo
+	Runtimes       *store.RuntimeRepo
+	ApiKeys        *store.ApiKeyRepo
+	Tenants        *store.TenantRepo
+	Rooms          *runtime.Registry
+	InternalSecret string
 }
 
 func mountRuntimeRoutes(r chi.Router, deps runtimesDeps) {

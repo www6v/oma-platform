@@ -13,6 +13,7 @@ import (
 	"github.com/open-ma/oma-building/internal/fileblob"
 	"github.com/open-ma/oma-building/internal/harness"
 	"github.com/open-ma/oma-building/internal/modelresolve"
+	"github.com/open-ma/oma-building/internal/runtime"
 	"github.com/open-ma/oma-building/internal/session"
 	"github.com/open-ma/oma-building/internal/sessionoutputs"
 	"github.com/open-ma/oma-building/internal/store"
@@ -52,6 +53,8 @@ func testRouterDeps(
 	outputs := sessionoutputs.NewStore(outputsDir)
 
 	integrations := store.NewIntegrationRepo(db)
+	runtimes := store.NewRuntimeRepo(db)
+	runtimeRooms := runtime.NewRegistry(runtimes)
 	sessionHandlers := api.NewSessionHandlers(
 		sessions, events, pending, hub, reg, workdirs,
 		outputs, client, models, "", "", "", "",
@@ -71,9 +74,10 @@ func testRouterDeps(
 		SessionOutputs: outputs,
 		ApiKeys:        store.NewApiKeyRepo(db),
 		Tenants:        store.NewTenantRepo(db),
-		Runtimes:       store.NewRuntimeRepo(db),
 		Integrations:   integrations,
-		MemoryStores:   store.NewMemoryStoreRepo(db),
+		Runtimes:       runtimes,
+		RuntimeRooms:   runtimeRooms,
+		MemoryStores:   store.NewMemoryStoreRepo(db, nil),
 		EvalRuns:       store.NewEvalRunRepo(db),
 		AuthDisabled:   true,
 		Sessions:       sessionHandlers,
@@ -166,7 +170,7 @@ func testRouterSharedDB(
 		Tenants:        store.NewTenantRepo(db),
 		Runtimes:       store.NewRuntimeRepo(db),
 		Integrations:   store.NewIntegrationRepo(db),
-		MemoryStores:   store.NewMemoryStoreRepo(db),
+		MemoryStores:   store.NewMemoryStoreRepo(db, nil),
 		EvalRuns:       store.NewEvalRunRepo(db),
 		AuthDisabled:   true,
 		Sessions: api.NewSessionHandlers(
