@@ -52,6 +52,8 @@ type TurnRequest struct {
 	Workdir               string                     `json:"workdir"`
 	McpProxyBase          string                     `json:"mcp_proxy_base,omitempty"`
 	McpProxyAPIKey        string                     `json:"mcp_proxy_api_key,omitempty"`
+	PlatformBase          string                     `json:"platform_base,omitempty"`
+	InternalSecret        string                     `json:"internal_secret,omitempty"`
 	OutboundProxyAddr     string                     `json:"outbound_proxy_addr,omitempty"`
 	OutboundProxyAPIKey   string                     `json:"outbound_proxy_api_key,omitempty"`
 }

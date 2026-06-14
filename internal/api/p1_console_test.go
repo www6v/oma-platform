@@ -215,7 +215,8 @@ func testRouterWithApiKeys(t *testing.T) http.Handler {
 			sessions, agents, events, pending, hub, reg, workdirs,
 			outputs, &harness.FakeClient{}, models,
 			&harness.ResourceResolver{},
-			"", "", "", "",
+			store.NewWakeupRepo(db),
+			"", "", "", "", "", "",
 		),
 	})
 }

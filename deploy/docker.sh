@@ -43,7 +43,7 @@ Commands:
   restart     Restart all services
   logs        Tail logs (optional service: oma-platform | oma-harness)
   ps          Show container status
-  smoke       Run scripts/smoke-test.sh against the running stack
+  smoke       Run scripts/e2e/smoke-test.sh against the running stack
 
 Examples:
   $(basename "$0")
@@ -105,7 +105,7 @@ case "${cmd}" in
       exit 1
     fi
     export HARNESS_URL="${HARNESS_URL:-http://127.0.0.1:8090}"
-    "${ROOT_DIR}/scripts/smoke-test.sh"
+    "${ROOT_DIR}/scripts/e2e/smoke-test.sh"
     ;;
   *)
     echo "error: unknown command: ${cmd}" >&2

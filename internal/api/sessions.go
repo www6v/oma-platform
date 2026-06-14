@@ -48,8 +48,11 @@ type sessionHandlers struct {
 	harness      harness.Client
 	models       *modelresolve.Resolver
 	resources    *harness.ResourceResolver
+	wakeups      *store.WakeupRepo
 	mcpProxyBase string
 	mcpProxyKey  string
+	platformBase string
+	internalSecret string
 	outboundProxyAddr string
 	outboundProxyKey  string
 }
@@ -69,6 +72,8 @@ func (h *sessionHandlers) registerMachine(sess *store.Session) {
 		Resources:     h.resources,
 		McpProxyBase:  h.mcpProxyBase,
 		McpProxyAPIKey: h.mcpProxyKey,
+		PlatformBase: h.platformBase,
+		InternalSecret: h.internalSecret,
 		OutboundProxyAddr: h.outboundProxyAddr,
 		OutboundProxyAPIKey: h.outboundProxyKey,
 	})

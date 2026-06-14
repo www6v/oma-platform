@@ -65,6 +65,8 @@ class TurnRequest(BaseModel):
     mcp_proxy_api_key: str | None = None
     outbound_proxy_addr: str | None = None
     outbound_proxy_api_key: str | None = None
+    platform_base: str | None = None
+    internal_secret: str | None = None
 
 
 class TurnResponse(BaseModel):

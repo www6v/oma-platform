@@ -18,6 +18,9 @@ OMA_DEFAULT_TOOLS = [
     "grep",
     "web_fetch",
     "web_search",
+    "schedule",
+    "cancel_schedule",
+    "list_schedules",
 ]
 
 # OMA name -> piPy builtin (glob has no piPy equivalent; find covers it).
@@ -35,7 +38,13 @@ OMA_TO_PIPY: dict[str, str] = {
 }
 
 PIPY_BUILTIN_ORDER = ["bash", "read", "write", "edit", "grep", "find", "ls"]
-PIPY_EXTENSION_ORDER = ["web_fetch", "web_search"]
+PIPY_EXTENSION_ORDER = [
+    "web_fetch",
+    "web_search",
+    "schedule",
+    "cancel_schedule",
+    "list_schedules",
+]
 PIPY_TOOL_ORDER = [*PIPY_BUILTIN_ORDER, *PIPY_EXTENSION_ORDER]
 
 WEB_FETCH_EXTENSION_PATH = (
@@ -44,6 +53,9 @@ WEB_FETCH_EXTENSION_PATH = (
 WEB_SEARCH_EXTENSION_PATH = (
     Path(__file__).resolve().parent / "extensions" / "web_search.py"
 )
+SCHEDULE_EXTENSION_PATH = (
+    Path(__file__).resolve().parent / "extensions" / "schedule.py"
+)
 MCP_LOADER_EXTENSION_PATH = (
     Path(__file__).resolve().parent / "extensions" / "mcp_loader.py"
 )
@@ -51,7 +63,18 @@ CALL_AGENT_EXTENSION_PATH = (
     Path(__file__).resolve().parent / "extensions" / "call_agent.py"
 )
 
-OMA_EXTENSION_TOOLS = frozenset({"web_fetch", "web_search"})
+OMA_EXTENSION_TOOLS = frozenset(
+    {
+        "web_fetch",
+        "web_search",
+        "schedule",
+        "cancel_schedule",
+        "list_schedules",
+    }
+)
+SCHEDULE_TOOL_NAMES = frozenset(
+    {"schedule", "cancel_schedule", "list_schedules"}
+)
 PIPY_BUILTIN_NAMES = frozenset(PIPY_BUILTIN_ORDER)
 
 _DEFAULT_OMA_SET = {OMA_TO_PIPY[name] for name in OMA_DEFAULT_TOOLS if name in OMA_TO_PIPY}
@@ -75,6 +98,8 @@ def _extension_paths_for_names(names: set[str]) -> list[str]:
         paths.append(str(WEB_FETCH_EXTENSION_PATH))
     if "web_search" in names and WEB_SEARCH_EXTENSION_PATH.is_file():
         paths.append(str(WEB_SEARCH_EXTENSION_PATH))
+    if names.intersection(SCHEDULE_TOOL_NAMES) and SCHEDULE_EXTENSION_PATH.is_file():
+        paths.append(str(SCHEDULE_EXTENSION_PATH))
     return paths
 
 
@@ -187,6 +212,11 @@ def _resolved_tool_names(agent: AgentSnapshot) -> set[str]:
         return pipy_names
 
     return set(DEFAULT_PIPY_TOOLS)
+
+
+def enabled_schedule_tools(agent: AgentSnapshot) -> frozenset[str]:
+    """Schedule tool names enabled for this agent snapshot."""
+    return frozenset(_resolved_tool_names(agent)).intersection(SCHEDULE_TOOL_NAMES)
 
 
 def pypi_tools_from_agent(agent: AgentSnapshot) -> list[str]:

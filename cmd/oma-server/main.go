@@ -142,12 +142,37 @@ func main() {
 		FileBlobs:    fileBlobs,
 		MemoryStores: memoryStores,
 	}
+	wakeups := store.NewWakeupRepo(db)
 	sessionHandlers := api.NewSessionHandlers(
 		sessions, agents, events, pending, hub, registry, workdirs,
 		sessionOutputs, harnessClient, modelResolver, resourceResolver,
+		wakeups,
 		publicURL, apiKey,
+		publicURL, internalSecret,
 		outbound.HostForHarness(outboundAddr), apiKey,
 	)
+	if os.Getenv("OMA_WAKEUP_WORKER_DISABLED") != "1" {
+		wakeupWorker := &api.WakeupWorker{
+			Wakeups:  wakeups,
+			Sessions: sessionHandlers,
+		}
+		interval := 5 * time.Second
+		if raw := os.Getenv("OMA_WAKEUP_WORKER_INTERVAL"); raw != "" {
+			if d, err := time.ParseDuration(raw); err == nil && d > 0 {
+				interval = d
+			}
+		}
+		go func() {
+			ticker := time.NewTicker(interval)
+			defer ticker.Stop()
+			for range ticker.C {
+				if _, err := wakeupWorker.Tick(context.Background()); err != nil {
+					log.Printf("wakeup worker tick: %v", err)
+				}
+			}
+		}()
+		log.Printf("wakeup worker enabled (interval=%s)", interval)
+	}
 	evalWorker := &eval.Worker{
 		EvalRuns:  evalRuns,
 		Sessions:  api.NewEvalSessionRunner(sessionHandlers),

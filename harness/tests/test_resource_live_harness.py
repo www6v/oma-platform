@@ -4,7 +4,7 @@
 - ``test_resource_mounter_platform_live_harness``: real oma-server session +
   real harness sidecar; creates persistent agent + session visible in Console.
 
-Platform live test prerequisites (same as ``scripts/smoke-resource-live-e2e.sh``):
+Platform live test prerequisites (same as ``scripts/e2e/smoke-resource-live-e2e.sh``):
 
   - oma-server on ``OMA_LISTEN_ADDR`` (default ``:8787``) with ``OMA_FAKE_HARNESS=0``
   - harness sidecar on ``HARNESS_URL`` (default ``http://127.0.0.1:8090``)

@@ -30,7 +30,10 @@ from oma_adapter.outbound.setup import (
 from oma_adapter.resource_mounter import mount_resources
 from oma_adapter.mcp.runtime import clear_mcp_runtime
 from oma_adapter.mcp.setup import mcp_servers_from_agent, setup_mcp_runtime_for_turn
-from oma_adapter.tools import session_tool_config_from_agent
+from oma_adapter.tools import (
+    enabled_schedule_tools,
+    session_tool_config_from_agent,
+)
 from oma_adapter.types import AgentSnapshot, ModelConfig, TurnResponse
 from oma_adapter.web_fetch.runtime import WebFetchRuntime, clear_web_fetch_runtime, configure_web_fetch
 from oma_adapter.web_search.runtime import (
@@ -38,6 +41,11 @@ from oma_adapter.web_search.runtime import (
     clear_web_search_runtime,
     configure_web_search,
     resolve_search_backend,
+)
+from oma_adapter.schedule.runtime import (
+    ScheduleRuntime,
+    clear_schedule_runtime,
+    configure_schedule,
 )
 
 CreateSessionFn = Callable[[Any], Awaitable[Any]]
@@ -117,6 +125,8 @@ async def _run_turn_core(
     mcp_proxy_api_key: str | None = None,
     outbound_proxy_addr: str | None = None,
     outbound_proxy_api_key: str | None = None,
+    platform_base: str | None = None,
+    internal_secret: str | None = None,
     create_session: CreateSessionFn | None,
     on_event: EventCallback | None,
 ) -> TurnResponse:
@@ -189,6 +199,18 @@ async def _run_turn_core(
                 tavily_api_key=os.environ.get("TAVILY_API_KEY"),
             ),
         )
+        schedule_enabled = enabled_schedule_tools(agent)
+        if schedule_enabled:
+            configure_schedule(
+                ScheduleRuntime(
+                    session_id=session_id,
+                    platform_base=platform_base,
+                    internal_secret=internal_secret or os.environ.get(
+                        "OMA_INTERNAL_SECRET"
+                    ),
+                    enabled_tools=schedule_enabled,
+                ),
+            )
         configure_call_agent(
             CallAgentRuntime(
                 session_id=session_id,
@@ -293,6 +315,7 @@ async def _run_turn_core(
             clear_outbound_proxy_for_turn(saved_proxy_env)
             clear_web_fetch_runtime()
             clear_web_search_runtime()
+            clear_schedule_runtime()
             clear_mcp_runtime()
             clear_call_agent_runtime()
 
@@ -313,6 +336,8 @@ async def run_turn(
     mcp_proxy_api_key: str | None = None,
     outbound_proxy_addr: str | None = None,
     outbound_proxy_api_key: str | None = None,
+    platform_base: str | None = None,
+    internal_secret: str | None = None,
     create_session: CreateSessionFn | None = None,
 ) -> TurnResponse:
     return await _run_turn_core(
@@ -330,6 +355,8 @@ async def run_turn(
         mcp_proxy_api_key=mcp_proxy_api_key,
         outbound_proxy_addr=outbound_proxy_addr,
         outbound_proxy_api_key=outbound_proxy_api_key,
+        platform_base=platform_base,
+        internal_secret=internal_secret,
         create_session=create_session,
         on_event=None,
     )
@@ -351,6 +378,8 @@ async def run_turn_stream(
     mcp_proxy_api_key: str | None = None,
     outbound_proxy_addr: str | None = None,
     outbound_proxy_api_key: str | None = None,
+    platform_base: str | None = None,
+    internal_secret: str | None = None,
     create_session: CreateSessionFn | None = None,
     on_event: EventCallback,
 ) -> TurnResponse:
@@ -369,6 +398,8 @@ async def run_turn_stream(
         mcp_proxy_api_key=mcp_proxy_api_key,
         outbound_proxy_addr=outbound_proxy_addr,
         outbound_proxy_api_key=outbound_proxy_api_key,
+        platform_base=platform_base,
+        internal_secret=internal_secret,
         create_session=create_session,
         on_event=on_event,
     )

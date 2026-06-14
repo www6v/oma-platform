@@ -42,7 +42,7 @@
 - **认证** — API Key（`x-api-key` / `Authorization: Bearer`）或 better-auth Cookie 会话。
 - **Docker Compose** — 双服务栈（`oma-platform` + `oma-harness`），含健康检查。
 - **Fake Harness 模式** — `OMA_FAKE_HARNESS=1` 可在无 LLM API Key 时本地开发与 CI 运行。
-- **冒烟与集成脚本** — `scripts/smoke-test.sh`、`scripts/console-integration.sh`、各 provider webhook、MCP、runtime、子 Agent E2E。
+- **冒烟与集成脚本** — `scripts/e2e/smoke-test.sh`、`scripts/e2e/console-integration.sh`、各 provider webhook、MCP、runtime、子 Agent E2E。
 
 ## 系统架构
 
@@ -198,10 +198,10 @@ go run ./cmd/oma-server/
 
 ```bash
 # 需 platform + harness 运行（真实 LLM 时设 OMA_FAKE_HARNESS=0）
-./scripts/smoke-test.sh
+./scripts/e2e/smoke-test.sh
 
 # 仅 API，无需 harness / LLM
-SMOKE_SKIP_LLM=1 ./scripts/smoke-test.sh
+SMOKE_SKIP_LLM=1 ./scripts/e2e/smoke-test.sh
 ```
 
 在 `.env` 中设置 `ANTHROPIC_API_KEY`，或通过 `~/.pi/agent/{settings,models,auth}.json` 配置 piPy，即可进行真实模型调用。
@@ -210,13 +210,13 @@ SMOKE_SKIP_LLM=1 ./scripts/smoke-test.sh
 
 | 脚本 | 用途 |
 |------|------|
-| `scripts/console-integration.sh` | Console 线型契约集成测试 |
-| `scripts/smoke-mcp-e2e.sh` | MCP proxy + harness MCP loader |
-| `scripts/smoke-subagent-e2e.sh` | 子 Agent 委派 E2E |
-| `scripts/smoke-runtime-e2e.sh` | Runtime / ACP daemon |
-| `scripts/smoke-linear-webhook.sh` | Linear webhook 分发 |
-| `scripts/smoke-github-webhook.sh` | GitHub webhook 分发 |
-| `scripts/smoke-slack-webhook.sh` | Slack webhook 分发 |
+| `scripts/e2e/console-integration.sh` | Console 线型契约集成测试 |
+| `scripts/e2e/smoke-mcp-e2e.sh` | MCP proxy + harness MCP loader |
+| `scripts/e2e/smoke-subagent-e2e.sh` | 子 Agent 委派 E2E |
+| `scripts/e2e/smoke-runtime-e2e.sh` | Runtime / ACP daemon |
+| `scripts/e2e/smoke-linear-webhook.sh` | Linear webhook 分发 |
+| `scripts/e2e/smoke-github-webhook.sh` | GitHub webhook 分发 |
+| `scripts/e2e/smoke-slack-webhook.sh` | Slack webhook 分发 |
 
 ## Console 控制台
 

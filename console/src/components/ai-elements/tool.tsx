@@ -13,6 +13,8 @@ import {
   ChevronDownIcon,
   CircleIcon,
   ClockIcon,
+  GlobeIcon,
+  SearchIcon,
   WrenchIcon,
   XCircleIcon,
 } from "lucide-react";
@@ -71,6 +73,23 @@ export const getStatusBadge = (status: ToolPart["state"]) => (
   </Badge>
 );
 
+const toolHeaderIcon = (toolName?: string) => {
+  if (toolName === "web_search") {
+    return <SearchIcon className="size-3.5 text-fg-subtle shrink-0" />;
+  }
+  if (toolName === "web_fetch") {
+    return <GlobeIcon className="size-3.5 text-fg-subtle shrink-0" />;
+  }
+  if (
+    toolName === "schedule"
+    || toolName === "cancel_schedule"
+    || toolName === "list_schedules"
+  ) {
+    return <ClockIcon className="size-3.5 text-fg-subtle shrink-0" />;
+  }
+  return <WrenchIcon className="size-3.5 text-fg-subtle shrink-0" />;
+};
+
 export const ToolHeader = ({
   className,
   title,
@@ -91,7 +110,7 @@ export const ToolHeader = ({
       {...props}
     >
       <div className="flex items-center gap-2 min-w-0">
-        <WrenchIcon className="size-3.5 text-fg-subtle shrink-0" />
+        {toolHeaderIcon(toolName)}
         <span className="font-medium text-[13px] text-fg truncate">{title ?? derivedName}</span>
         {getStatusBadge(state)}
       </div>

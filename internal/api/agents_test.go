@@ -64,7 +64,8 @@ func testRouterDeps(
 			FileBlobs:    fileBlobs,
 			MemoryStores: store.NewMemoryStoreRepo(db, nil),
 		},
-		"", "", "", "",
+		store.NewWakeupRepo(db),
+		"", "", gatewayOrigin, testInternalSecret, "", "",
 	)
 	const testInternalSecret = "test-internal-secret"
 	gatewayOrigin := "http://test"
@@ -202,7 +203,8 @@ func testRouterSharedDB(
 		Sessions: api.NewSessionHandlers(
 			sessions, agents, events, pending, hub, reg, workdirs, outputs, client, models,
 			&harness.ResourceResolver{Files: files, FileBlobs: fileBlobs},
-			"", "", "", "",
+			store.NewWakeupRepo(db),
+			"", "", "", "", "", "",
 		),
 	})
 	return handler, reg, sessions

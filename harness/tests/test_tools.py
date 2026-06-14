@@ -86,11 +86,17 @@ def test_unsupported_oma_tools_are_skipped() -> None:
             }
         ],
     )
-    assert pypi_tools_from_agent(agent) == ["read", "web_fetch", "web_search"]
+    assert pypi_tools_from_agent(agent) == [
+        "read",
+        "web_fetch",
+        "web_search",
+        "schedule",
+    ]
 
 
 def test_session_tool_config_loads_web_fetch_extension() -> None:
     from oma_adapter.tools import (
+        SCHEDULE_EXTENSION_PATH,
         WEB_FETCH_EXTENSION_PATH,
         WEB_SEARCH_EXTENSION_PATH,
         session_tool_config_from_agent,
@@ -105,9 +111,11 @@ def test_session_tool_config_loads_web_fetch_extension() -> None:
     cfg = session_tool_config_from_agent(agent)
     assert "web_fetch" in pypi_tools_from_agent(agent)
     assert "web_search" in pypi_tools_from_agent(agent)
+    assert "schedule" in pypi_tools_from_agent(agent)
     assert cfg.extension_paths == [
         str(WEB_FETCH_EXTENSION_PATH),
         str(WEB_SEARCH_EXTENSION_PATH),
+        str(SCHEDULE_EXTENSION_PATH),
     ]
     assert "bash" in cfg.builtin_tools
 

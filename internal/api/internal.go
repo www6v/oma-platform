@@ -54,6 +54,7 @@ func mountInternalRoutes(r chi.Router, deps internalDeps) {
 			r.Post("/sessions", handleInternalCreateSession(deps))
 			r.Get("/sessions/{id}", handleInternalGetSession(deps))
 			r.Post("/sessions/{id}/events", handleInternalSessionEvents(deps))
+			mountWakeupInternalRoutes(r, deps.Sessions)
 		}
 		if deps.Vaults != nil && deps.Credentials != nil {
 			r.Post("/vaults", handleInternalCreateVault(deps))

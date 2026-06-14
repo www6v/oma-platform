@@ -36,9 +36,11 @@ type Machine struct {
 	Harness      harness.Client
 	Models       *modelresolve.Resolver
 	Resources    *harness.ResourceResolver
-	McpProxyBase string
-	McpProxyAPIKey string
-	OutboundProxyAddr string
+	McpProxyBase        string
+	McpProxyAPIKey      string
+	PlatformBase        string
+	InternalSecret      string
+	OutboundProxyAddr   string
 	OutboundProxyAPIKey string
 	appendLocker sync.Locker
 	activeTurn   string
@@ -50,6 +52,13 @@ type Machine struct {
 // SetAppendLocker serializes event appends with EnqueueEvents (per-session).
 func (m *Machine) SetAppendLocker(locker sync.Locker) {
 	m.appendLocker = locker
+}
+
+// IsTurnActive reports whether a harness turn is currently running.
+func (m *Machine) IsTurnActive() bool {
+	m.activeTurnM.Lock()
+	defer m.activeTurnM.Unlock()
+	return m.activeTurn != ""
 }
 
 // RunTurn executes a harness turn using persisted session history.
@@ -163,19 +172,21 @@ func (m *Machine) RunTurn(ctx context.Context) error {
 		turnCtx,
 		m.Harness,
 		harness.TurnRequest{
-			SessionID:      m.SessionID,
-			TenantID:       m.TenantID,
-			Agent:          agent,
-			SubAgents:      subAgents,
-			Model:          modelCfg,
-			AuxModel:       auxCfg,
-			Environment:    envSnap,
-			Resources:      resources,
-			Events:         eventPayloads,
-			Workdir:        workdirPath,
-			McpProxyBase:   m.McpProxyBase,
-			McpProxyAPIKey: m.McpProxyAPIKey,
-			OutboundProxyAddr: m.OutboundProxyAddr,
+			SessionID:           m.SessionID,
+			TenantID:            m.TenantID,
+			Agent:               agent,
+			SubAgents:           subAgents,
+			Model:               modelCfg,
+			AuxModel:            auxCfg,
+			Environment:         envSnap,
+			Resources:           resources,
+			Events:              eventPayloads,
+			Workdir:             workdirPath,
+			McpProxyBase:        m.McpProxyBase,
+			McpProxyAPIKey:      m.McpProxyAPIKey,
+			PlatformBase:        m.PlatformBase,
+			InternalSecret:      m.InternalSecret,
+			OutboundProxyAddr:   m.OutboundProxyAddr,
 			OutboundProxyAPIKey: m.OutboundProxyAPIKey,
 		},
 		func(ev json.RawMessage) error {

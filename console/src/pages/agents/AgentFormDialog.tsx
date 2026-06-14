@@ -52,6 +52,9 @@ const BUILTIN_TOOLS: Array<{ name: string; label: string; description: string }>
   { name: "grep", label: "grep", description: "Search file contents" },
   { name: "web_fetch", label: "web_fetch", description: "Fetch a URL → markdown. Default for any web read." },
   { name: "web_search", label: "web_search", description: "Web search via DuckDuckGo. Default for lookups." },
+  { name: "schedule", label: "schedule", description: "Schedule this session to wake up later (delay, ISO time, or cron)." },
+  { name: "cancel_schedule", label: "cancel_schedule", description: "Cancel a pending scheduled wakeup by id." },
+  { name: "list_schedules", label: "list_schedules", description: "List pending wakeup schedules for this session." },
   { name: "browser", label: "browser (opt-in)", description: "Heavy multi-step browser session (navigate / click / screenshot). Off by default — LLMs over-reach for it on simple lookups. Enable only when you need interactive navigation, JS-rendered SPAs, or auth flows." },
 ];
 

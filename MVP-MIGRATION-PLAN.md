@@ -9,7 +9,7 @@
 
 本文档记录 `open-managed-agents` 与 `oma-platform` 的**功能对齐矩阵**与分阶段迁移 backlog。
 
-早期版本（2026-06-07）假设 TypeScript `main-node` 复制路径；当前实现已改为 **Go `oma-server` + Python `harness/` 侧车**，矩阵以实际代码为准。验收脚本：`scripts/console-integration.sh`；Console QA 报告：`.gstack/qa-reports/qa-report-console-2026-06-13.md`（100/100）。
+早期版本（2026-06-07）假设 TypeScript `main-node` 复制路径；当前实现已改为 **Go `oma-server` + Python `harness/` 侧车**，矩阵以实际代码为准。验收脚本：`scripts/e2e/console-integration.sh`；Console QA 报告：`.gstack/qa-reports/qa-report-console-2026-06-13.md`（100/100）。
 
 ---
 
@@ -38,7 +38,7 @@ curl -s -X POST localhost:8787/v1/sessions/$SID/events -H 'content-type: applica
   -d '{"events":[{"type":"user.message","content":[{"type":"text","text":"Run: uname -a"}]}]}'
 ```
 
-Console 全量 wire 验收：`scripts/console-integration.sh`
+Console 全量 wire 验收：`scripts/e2e/console-integration.sh`
 
 ---
 
@@ -97,7 +97,7 @@ Console 全量 wire 验收：`scripts/console-integration.sh`
 | agent_toolset 基础工具 | bash/read/write/edit/glob/grep | `harness/oma_adapter/tools.py` | ✅ | glob 映射为 piPy `find` |
 | web_fetch | `harness/tools.ts` | `web_fetch/`, `extensions/web_fetch.py` | ✅ | T1 已完成；`test_web_fetch.py` |
 | web_search | `harness/tools.ts` DEFAULT_TOOLS | `extensions/web_search.py` + DDG/Tavily | ✅ | T17 完成 |
-| schedule / cancel_schedule / list_schedules | `harness/tools.ts` | — | ❌ | T18 可选；源仓默认 tool |
+| schedule / cancel_schedule / list_schedules | `harness/tools.ts` | harness + SQLite worker | ✅ | T18 |
 | MCP 工具 | `mcp-spawner.ts`, `/v1/mcp-proxy` | `mcp_loader` + `mcp_proxy.go` + `mcpproxy/` | ✅ | T2 已完成；`test_mcp.py` |
 | Vault 凭据注入 | outbound proxy | `internal/outbound/` + harness 注入 | ✅ | T3 已完成；MCP + HTTP 双路径 |
 | Model 解析 | model card + provider | `internal/modelresolve/` | ✅ | |
@@ -262,7 +262,7 @@ Client / Console
 | 能力 | 位置 |
 |------|------|
 | AMA Agent/Session wire | `internal/api/agentwire.go`, `sessionwire.go`, `*_ama_test.go` |
-| Console 契约集成测试 | `scripts/console-integration.sh`, `p1_console_test.go`, QA 100/100 |
+| Console 契约集成测试 | `scripts/e2e/console-integration.sh`, `p1_console_test.go`, QA 100/100 |
 | web_fetch + MCP + outbound | `harness/oma_adapter/web_fetch/`, `mcp/`, `internal/outbound/` |
 | models/list POST | `internal/api/models_list.go`, `internal/modelslist/` |
 | DB migrations (001–014+) | `internal/store/migrations/` |
@@ -297,22 +297,22 @@ Client / Console
 - [x] **T3 (P0)** — Vault outbound HTTP 代理 — `internal/outbound/` — Verify: `internal/outbound/*_test.go`
 - [x] **T4 (P0)** — 真实 `POST /v1/models/list` — `internal/api/models_list.go`
 - [x] **T5 (P0)** — model card internal key — `internal.go` + turn payload
-- [x] **T6 (P1)** — Linear webhook + OAuth — Verify: `scripts/smoke-linear-webhook.sh`
+- [x] **T6 (P1)** — Linear webhook + OAuth — Verify: `scripts/e2e/smoke-linear-webhook.sh`
 - [x] **T7 (P1)** — GitHub/Slack webhook 最小 E2E
 - [x] **T8 (P1)** — Eval run background worker — `internal/eval/worker.go`
 - [x] **T9 (P1)** — Memory blob + retention
 - [x] **T10 (P1)** — Runtime WebSocket attach — `runtime_daemon.go`
 - [x] **T11 (P1)** — Session threads 从 event log 派生 — `session_threads.go`
 - [x] **T12 (P2)** — call_agent + compaction — harness
-- [x] **T13 (P2)** — resource mounter + outcome evaluator — Verify: `./scripts/smoke-t13-e2e.sh`
-- [x] **T14 (P2)** — Dreams + cost_report — Verify: `./scripts/smoke-t14-e2e.sh`
-- [x] **T15 (P2)** — `/v1/internal/*` — Verify: `./scripts/smoke-t15-e2e.sh`
+- [x] **T13 (P2)** — resource mounter + outcome evaluator — Verify: `./scripts/e2e/smoke-t13-e2e.sh`
+- [x] **T14 (P2)** — Dreams + cost_report — Verify: `./scripts/e2e/smoke-t14-e2e.sh`
+- [x] **T15 (P2)** — `/v1/internal/*` — Verify: `./scripts/e2e/smoke-t15-e2e.sh`
 
 ### 当前 backlog（T16–T22）
 
 - [⏭] **T16 (P2)** — `browser_*` 工具 — Playwright sidecar — **明确 defer**（源仓 opt-in；`web_fetch` 已覆盖只读）
-- [x] **T17 (P2)** — `web_search` — harness tool + provider 选型 — Verify: `harness/tests/test_web_search.py` ✅
-- [ ] **T18 (P2)** — `schedule` / `cancel_schedule` / `list_schedules` — 若需与源默认 toolset 一致
+- [x] **T17 (P2)** — `web_search` — harness tool + provider 选型 — Verify: `harness/tests/test_web_search.py` ✅, `scripts/e2e/smoke-web-search-e2e.sh`, `scripts/e2e/web-search-console.spec.ts`
+- [x] **T18 (P2)** — `schedule` / `cancel_schedule` / `list_schedules` — SQLite + worker + harness extension — Verify: `harness/tests/test_schedule.py`, `internal/store/wakeups_test.go`
 - [ ] **T19 (P3)** — `/v1/oma/*` 路由别名 — `router.go`
 - [ ] **T20 (P3)** — Rate limiting middleware
 - [ ] **T21 (P3)** — 通用 `/v1/oauth` + clawhub
@@ -325,7 +325,7 @@ Client / Console
 ### 已有覆盖
 
 - Go API 单测/集成：`internal/api/*_test.go`
-- Console wire + QA 100/100：`scripts/console-integration.sh`, `.gstack/qa-reports/qa-report-console-2026-06-13.md`
+- Console wire + QA 100/100：`scripts/e2e/console-integration.sh`, `.gstack/qa-reports/qa-report-console-2026-06-13.md`
 - Harness：`test_oma_contract.py`, `test_turn.py`, `test_web_fetch.py`, `test_mcp.py`
 - Smoke：T13–T15、`smoke-resource-live-e2e.sh`、`subagent_e2e_test.go`
 
@@ -334,7 +334,8 @@ Client / Console
 | 测试 | 位置 | 优先级 |
 |------|------|--------|
 | web_search unit | `harness/tests/test_web_search.py` | P2 |
-| web_search turn smoke | `scripts/smoke-web-search-e2e.sh`（新建） | P2 |
+| web_search turn smoke | `scripts/e2e/smoke-web-search-e2e.sh`, `scripts/e2e/web-search-smoke.ts` | P2 |
+| web_search console E2E | `scripts/e2e/web-search-console.spec.ts` | P2 |
 | Agent 默认 toolset parity | 对照源 `DEFAULT_TOOLS` | P2 |
 
 ### 仍缺的 harness 路径（T17 后）

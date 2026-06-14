@@ -42,7 +42,7 @@ This repo implements a large slice of the [open-managed-agents](https://github.c
 - **Auth** — API key (`x-api-key` / `Authorization: Bearer`) or better-auth cookie session.
 - **Docker Compose** — Two-service stack (`oma-platform` + `oma-harness`) with health checks.
 - **Fake harness mode** — `OMA_FAKE_HARNESS=1` for local dev and CI without LLM API keys.
-- **Smoke & integration scripts** — `scripts/smoke-test.sh`, `scripts/console-integration.sh`, provider webhooks, MCP, runtime, sub-agent E2E.
+- **Smoke & integration scripts** — `scripts/e2e/smoke-test.sh`, `scripts/e2e/console-integration.sh`, provider webhooks, MCP, runtime, sub-agent E2E.
 
 ## Architecture
 
@@ -198,10 +198,10 @@ Open http://localhost:8787
 
 ```bash
 # With platform + harness running (OMA_FAKE_HARNESS=0 for real LLM)
-./scripts/smoke-test.sh
+./scripts/e2e/smoke-test.sh
 
 # API-only, no harness / no LLM
-SMOKE_SKIP_LLM=1 ./scripts/smoke-test.sh
+SMOKE_SKIP_LLM=1 ./scripts/e2e/smoke-test.sh
 ```
 
 Set `ANTHROPIC_API_KEY` in `.env` or configure piPy via `~/.pi/agent/{settings,models,auth}.json` for real model calls.
@@ -210,13 +210,13 @@ Set `ANTHROPIC_API_KEY` in `.env` or configure piPy via `~/.pi/agent/{settings,m
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/console-integration.sh` | Console wire-shape integration tests |
-| `scripts/smoke-mcp-e2e.sh` | MCP proxy + harness MCP loader |
-| `scripts/smoke-subagent-e2e.sh` | Sub-agent delegation E2E |
-| `scripts/smoke-runtime-e2e.sh` | Runtime / ACP daemon |
-| `scripts/smoke-linear-webhook.sh` | Linear webhook dispatch |
-| `scripts/smoke-github-webhook.sh` | GitHub webhook dispatch |
-| `scripts/smoke-slack-webhook.sh` | Slack webhook dispatch |
+| `scripts/e2e/console-integration.sh` | Console wire-shape integration tests |
+| `scripts/e2e/smoke-mcp-e2e.sh` | MCP proxy + harness MCP loader |
+| `scripts/e2e/smoke-subagent-e2e.sh` | Sub-agent delegation E2E |
+| `scripts/e2e/smoke-runtime-e2e.sh` | Runtime / ACP daemon |
+| `scripts/e2e/smoke-linear-webhook.sh` | Linear webhook dispatch |
+| `scripts/e2e/smoke-github-webhook.sh` | GitHub webhook dispatch |
+| `scripts/e2e/smoke-slack-webhook.sh` | Slack webhook dispatch |
 
 ## Console UI
 

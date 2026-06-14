@@ -129,7 +129,7 @@ await setup_mcp_runtime_for_turn(
 
 ## 5. 一次完整调用链
 
-以 `scripts/smoke-mcp-e2e.sh` 为例：
+以 `scripts/e2e/smoke-mcp-e2e.sh` 为例：
 
 ```
 用户消息 → Session Machine → Harness turn
@@ -144,7 +144,7 @@ await setup_mcp_runtime_for_turn(
     → 结果返回 Harness → 写入 turn events
 ```
 
-本地开发可用 `scripts/mock-mcp-server.py` 作为上游 mock。
+本地开发可用 `scripts/e2e/mock-mcp-server.py` 作为上游 mock。
 
 ## 6. 与 `open-managed-agents` 的关系
 
@@ -170,8 +170,8 @@ await setup_mcp_runtime_for_turn(
 | 客户端 | `harness/oma_adapter/mcp/client.py` | JSON-RPC MCP 客户端 |
 | 发现 | `harness/oma_adapter/mcp/setup.py` | 发现工具、包装为 AgentTool |
 | 注册 | `harness/oma_adapter/extensions/mcp_loader.py` | 扩展加载 MCP 工具 |
-| 测试 | `scripts/smoke-mcp-e2e.sh` | 端到端冒烟 |
-| Mock | `scripts/mock-mcp-server.py` | 本地 mock 上游 MCP |
+| 测试 | `scripts/e2e/smoke-mcp-e2e.sh` | 端到端冒烟 |
+| Mock | `scripts/e2e/mock-mcp-server.py` | 本地 mock 上游 MCP |
 
 ## 相关文档
 

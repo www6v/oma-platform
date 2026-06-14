@@ -30,16 +30,16 @@ async def test_search_duckduckgo_parses_results(
 ) -> None:
     calls: list[str] = []
 
-    async def fake_fetch(url: str, runtime: WebSearchRuntime) -> tuple[str, str | None]:
+    async def fake_get(url: str, runtime: WebSearchRuntime) -> tuple[str, str | None]:
         del runtime
         calls.append(url)
-        if "duckduckgo.com/?" in url:
+        if "://duckduckgo.com/?" in url:
             return VQD_HTML, None
         return DDG_BODY, None
 
     monkeypatch.setattr(
-        "oma_adapter.web_search.core._fetch_text",
-        fake_fetch,
+        "oma_adapter.web_search.core._http_get",
+        fake_get,
     )
     configure_web_search(WebSearchRuntime())
     try:
@@ -61,23 +61,35 @@ def get_runtime() -> WebSearchRuntime:
 
 
 @pytest.mark.asyncio
-async def test_search_duckduckgo_rate_limited(
+async def test_search_duckduckgo_falls_back_when_djs_rate_limited(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    async def fake_fetch(url: str, runtime: WebSearchRuntime) -> tuple[str, str | None]:
+    instant_json = json.dumps(
+        {
+            "Heading": "Python",
+            "AbstractURL": "https://www.python.org/",
+            "AbstractText": "Official site",
+        }
+    )
+
+    async def fake_get(url: str, runtime: WebSearchRuntime) -> tuple[str, str | None]:
         del runtime
-        if "duckduckgo.com/?" in url:
+        if "api.duckduckgo.com" in url:
+            return instant_json, None
+        if "://duckduckgo.com/?" in url:
             return VQD_HTML, None
         return "DDG.deep.anomalyDetectionBlock", None
 
     monkeypatch.setattr(
-        "oma_adapter.web_search.core._fetch_text",
-        fake_fetch,
+        "oma_adapter.web_search.core._http_get",
+        fake_get,
     )
     configure_web_search(WebSearchRuntime())
     try:
-        text = await search_duckduckgo("test", 5, get_runtime())
-        assert "rate limited" in text.lower()
+        raw = await search_duckduckgo("Python", 5, get_runtime())
+        data = json.loads(raw)
+        assert len(data) >= 1
+        assert data[0]["url"] == "https://www.python.org/"
     finally:
         clear_web_search_runtime()
 

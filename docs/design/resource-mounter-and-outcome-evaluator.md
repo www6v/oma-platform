@@ -303,7 +303,7 @@ cd harness && uv run pytest tests/test_resource_mounter.py tests/test_outcome_ev
 go test ./internal/harness/... ./internal/eval/...
 ```
 
-端到端冒烟脚本 `scripts/smoke-t13-e2e.sh` 包含上述 Python 测试。
+端到端冒烟脚本 `scripts/e2e/smoke-t13-e2e.sh` 包含上述 Python 测试。
 
 ---
 

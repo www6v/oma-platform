@@ -91,6 +91,14 @@ func (r *Registry) EnqueueEvents(
 		return nil
 	}
 	if runTurn {
+		// When idle, promote synchronously so queue-input events (including
+		// schedule wakeups fired from the background worker) appear in the
+		// session log before the async turn worker runs.
+		if !lane.machine.IsTurnActive() {
+			if _, err := lane.promoteAllPending(ctx, defaultThreadID); err != nil {
+				return err
+			}
+		}
 		lane.scheduleTurn(onDone)
 		return nil
 	}
