@@ -14,8 +14,8 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-pi-coding-agent = { path = "../../../piPy-env/piPy/packages/pi_coding_agent", editable = true }
-pi-ai = { path = "../../../piPy-env/piPy/packages/pi_ai", editable = true }
+pi-coding-agent = { git = "https://gitee.com/www6v6v/piPy.git", branch = "v0.2.0", subdirectory = "packages/pi_coding_agent" }
+pi-ai = { git = "https://gitee.com/www6v6v/piPy.git", branch = "v0.2.0", subdirectory = "packages/pi_ai" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

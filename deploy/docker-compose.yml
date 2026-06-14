@@ -27,8 +27,8 @@ services:
 
   oma-harness:
     build:
-      context: ../..
-      dockerfile: oma-platform/deploy/Dockerfile.harness
+      context: ..
+      dockerfile: deploy/Dockerfile.harness
     ports:
       - "8090:8090"
     environment:
