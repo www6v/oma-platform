@@ -1,12 +1,19 @@
 FROM python:3.12-slim
 
-RUN apt-get update \
+ARG APT_MIRROR=mirrors.aliyun.com
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+ARG UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+
+RUN sed -i "s|deb.debian.org|${APT_MIRROR}|g; s|security.debian.org|${APT_MIRROR}|g" \
+      /etc/apt/sources.list.d/debian.sources \
+  && apt-get update \
   && apt-get install -y --no-install-recommends git \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app/harness
 
-RUN pip install --no-cache-dir uv
+ENV UV_INDEX_URL=${UV_INDEX_URL}
+RUN pip install --no-cache-dir -i "${PIP_INDEX_URL}" uv
 
 COPY harness/pyproject.toml harness/uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project

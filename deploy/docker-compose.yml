@@ -3,6 +3,10 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.platform
+      args:
+        GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
+        GOSUMDB: ${GOSUMDB:-sum.golang.google.cn}
+        APT_MIRROR: ${APT_MIRROR:-mirrors.aliyun.com}
     ports:
       - "8787:8787"
     environment:
@@ -29,6 +33,10 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.harness
+      args:
+        APT_MIRROR: ${APT_MIRROR:-mirrors.aliyun.com}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
+        UV_INDEX_URL: ${UV_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
     ports:
       - "8090:8090"
     environment:
