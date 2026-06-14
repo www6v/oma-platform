@@ -3,7 +3,7 @@
 > Engineering review by `/plan-eng-review` — 2026-06-13（矩阵同步代码实况）  
 > 目标仓库：`oma-platform`（Go 平台 + Python piPy harness 侧车）  
 > 参考源：`../open-managed-agents`（Cloudflare Workers meta-harness）  
-> 已确认范围：**P0 + P1 + P2 主体已完成**；剩余为外围能力与生产硬化（T17+）
+> 已确认范围：**P0 + P1 + P2 主体已完成**；T17 web_search ✅；剩余为外围能力与生产硬化（T18+）
 
 ## 文档说明
 
@@ -96,7 +96,7 @@ Console 全量 wire 验收：`scripts/console-integration.sh`
 | Harness turn | `harness/default-loop.ts` | `harness/oma_adapter/turn.py` | ✅ | HTTP 侧车，无状态 |
 | agent_toolset 基础工具 | bash/read/write/edit/glob/grep | `harness/oma_adapter/tools.py` | ✅ | glob 映射为 piPy `find` |
 | web_fetch | `harness/tools.ts` | `web_fetch/`, `extensions/web_fetch.py` | ✅ | T1 已完成；`test_web_fetch.py` |
-| web_search | `harness/tools.ts` DEFAULT_TOOLS | — | ❌ | **T17 待做** |
+| web_search | `harness/tools.ts` DEFAULT_TOOLS | `extensions/web_search.py` + DDG/Tavily | ✅ | T17 完成 |
 | schedule / cancel_schedule / list_schedules | `harness/tools.ts` | — | ❌ | T18 可选；源仓默认 tool |
 | MCP 工具 | `mcp-spawner.ts`, `/v1/mcp-proxy` | `mcp_loader` + `mcp_proxy.go` + `mcpproxy/` | ✅ | T2 已完成；`test_mcp.py` |
 | Vault 凭据注入 | outbound proxy | `internal/outbound/` + harness 注入 | ✅ | T3 已完成；MCP + HTTP 双路径 |
@@ -167,10 +167,10 @@ Console 全量 wire 验收：`scripts/console-integration.sh`
 |------|------|------|
 | ✅ 已对齐 | ~35 域 | Agent 闭环、web_fetch/MCP/outbound、Console、集成、eval、runtime、memory、P2 高级能力 |
 | 🟡 部分 | ~5 域 | GET models/list stub、目录沙箱、集成路由形态、单库多租户 |
-| ❌ 待迁 | ~7 域 | web_search（T17）、schedule 工具（T18）、oma 别名、限流、oauth 通用、clawhub、SDK |
+| ❌ 待迁 | ~6 域 | schedule 工具（T18）、oma 别名、限流、oauth 通用、clawhub、SDK |
 | ⏭ defer | ~9 域 | SessionDO、Container、RL、browser（T16）、完整计费栈等 |
 
-**VERDICT：** 自托管栈已达 open-managed-agents **日常可用 parity**；下一步 T17（web_search）+ 可选 T18–T22。
+**VERDICT：** 自托管栈已达 open-managed-agents **日常可用 parity**；T17 web_search 已落地；下一步可选 T18–T22。
 
 ---
 
@@ -208,7 +208,7 @@ Console 全量 wire 验收：`scripts/console-integration.sh`
 | P2-4 | Outcome evaluator | `outcome-evaluator.ts` | `outcome_evaluator.py` | ✅ T13 |
 | P2-5 | Dreams API | `dreams-store` | `dreams.go` + worker | ✅ T14 |
 | P2-6 | Cost report | `cf-billing` | `cost_report.go` | ✅ T14 |
-| P2-7 | web_search | `harness/tools.ts` | harness tool + provider | ❌ **T17** |
+| P2-7 | web_search | `harness/tools.ts` | harness tool + provider | ✅ T17 |
 | P2-8 | /v1/internal/* | `internal.ts` | `internal.go` | ✅ T15 |
 | P2-9 | browser tools | `browser-tools.ts` | — | ⏭ **T16 defer** |
 
@@ -217,7 +217,7 @@ Console 全量 wire 验收：`scripts/console-integration.sh`
 | ID | 任务 | 源参考 | oma 落点 | 决策 |
 |----|------|--------|----------|------|
 | T16 | browser_* 工具 | `browser-tools.ts` | Playwright sidecar | **⏭ 明确 defer** |
-| T17 | web_search | `harness/tools.ts` | harness + provider 选型 | **要做** |
+| T17 | web_search | `harness/tools.ts` | harness + provider 选型 | ✅ 完成 |
 | T18 | schedule 三件套 | `harness/tools.ts` | harness cron/queue | 可选 |
 | T19 | `/v1/oma/*` 别名 | main index | `router.go` 重挂载 | P3 |
 | T20 | Rate limiting | CF RL | Go middleware | P3 |
@@ -245,7 +245,7 @@ Client / Console
 │  harness (Python piPy)                │
 │  bash/file + web_fetch + MCP          │
 │  call_agent · compaction              │
-│  (+ web_search @ T17)                 │
+│  (+ web_search ✅ T17)                │
 └──────────────┬───────────────────────┘
                │ tools in workdir
                ▼
@@ -311,7 +311,7 @@ Client / Console
 ### 当前 backlog（T16–T22）
 
 - [⏭] **T16 (P2)** — `browser_*` 工具 — Playwright sidecar — **明确 defer**（源仓 opt-in；`web_fetch` 已覆盖只读）
-- [ ] **T17 (P2)** — `web_search` — harness tool + provider 选型 — Verify: `harness/tests/test_web_search.py` + agent turn smoke
+- [x] **T17 (P2)** — `web_search` — harness tool + provider 选型 — Verify: `harness/tests/test_web_search.py` ✅
 - [ ] **T18 (P2)** — `schedule` / `cancel_schedule` / `list_schedules` — 若需与源默认 toolset 一致
 - [ ] **T19 (P3)** — `/v1/oma/*` 路由别名 — `router.go`
 - [ ] **T20 (P3)** — Rate limiting middleware
@@ -343,7 +343,7 @@ Client / Console
 [+] POST /v1/sessions/:id/events
   ├── [★★★] uname -a / fake harness
   ├── [★★★] web_fetch + MCP tool loop
-  ├── [GAP] web_search（T17）
+  ├── web_search ✅（T17）
   └── [GAP] schedule 三件套（T18 可选）
 
 [+] browser_*（T16 defer — 不纳入当前 sprint）
@@ -368,7 +368,7 @@ Client / Console
 
 | Lane | 内容 | 依赖 |
 |------|------|------|
-| A | **T17 web_search**（harness + provider） | — |
+| A | T18 schedule 工具（可选） | T17 ✅ |
 | B | T18 schedule 工具（可选） | — |
 | C | T19–T21 平台边缘（别名、限流、oauth） | 独立 |
 | D | T22 SDK/CLI | 产品发布节奏 |
@@ -386,8 +386,8 @@ Lane A 为当前最高优先级；T16 browser 已 defer，不占用 lane。
 | CEO Review | — | 0 | — | — |
 | Design Review | — | 0 | — | — |
 
-- **SCOPE:** P0–P2 主体完成；T16 browser **defer**；T17 web_search **要做**
-- **VERDICT:** 核心迁移完成 — 按 T17 实施 web_search，其余 T18–T22 按优先级排期
+- **SCOPE:** P0–P2 主体完成；T16 browser **defer**；T17 web_search **✅**
+- **VERDICT:** 核心迁移完成 — T17 已落地；其余 T18–T22 按优先级排期
 
 ---
 
@@ -397,4 +397,5 @@ Lane A 为当前最高优先级；T16 browser 已 defer，不占用 lane。
 |------|------|
 | 2026-06-07 | 初版：TypeScript main-node MVP 计划 |
 | 2026-06-11 | 重写：Go+Python 现状、P0/P1/P2 对齐矩阵、Implementation Tasks T1–T15 |
+| 2026-06-13 | T17 web_search：DDG 默认 + Tavily 可选；`test_web_search.py` 17 tests pass |
 | 2026-06-13 | 矩阵同步代码实况：web_fetch/MCP/outbound/threads 等标 ✅；T1–T4 完成；新增 T16–T22；T16 defer、T17 要做；Console QA 100/100 |

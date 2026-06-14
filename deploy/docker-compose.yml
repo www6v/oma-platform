@@ -15,12 +15,15 @@ services:
       HARNESS_URL: http://oma-harness:8090
       OMA_API_KEY: ${OMA_API_KEY:-dev-key}
       OMA_FAKE_HARNESS: ${OMA_FAKE_HARNESS:-1}
-      # Optional console: run ./scripts/build-console.sh, then set:
-      # CONSOLE_DIR=/app/console and uncomment the volume below.
-      CONSOLE_DIR: ${CONSOLE_DIR:-}
-      AUTH_DISABLED: ${AUTH_DISABLED:-0}
+      # Console SPA is baked into the platform image at /app/console.
+      # Override with a host mount for local UI dev:
+      #   CONSOLE_DIST=../console/dist docker compose up -d --build
+      CONSOLE_DIR: ${CONSOLE_DIR:-/app/console}
+      # Docker stack has no auth sidecar; use API-key / stub session mode.
+      AUTH_DISABLED: ${AUTH_DISABLED:-1}
       AUTH_UPSTREAM_URL: ${AUTH_UPSTREAM_URL:-http://host.docker.internal:8788}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
+      # Remote deploy: set PUBLIC_BASE_URL=http://<your-host>:8787 in .env
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8787}
     volumes:
       - ../data:/data
@@ -37,6 +40,7 @@ services:
         APT_MIRROR: ${APT_MIRROR:-mirrors.aliyun.com}
         PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
         UV_INDEX_URL: ${UV_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
+        PYPI_MIRROR_PACKAGES: ${PYPI_MIRROR_PACKAGES:-https://pypi.tuna.tsinghua.edu.cn/packages}
     ports:
       - "8090:8090"
     environment:

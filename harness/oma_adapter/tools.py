@@ -17,6 +17,7 @@ OMA_DEFAULT_TOOLS = [
     "glob",
     "grep",
     "web_fetch",
+    "web_search",
 ]
 
 # OMA name -> piPy builtin (glob has no piPy equivalent; find covers it).
@@ -28,16 +29,20 @@ OMA_TO_PIPY: dict[str, str] = {
     "glob": "find",
     "grep": "grep",
     "web_fetch": "web_fetch",
+    "web_search": "web_search",
     "ls": "ls",
     "find": "find",
 }
 
 PIPY_BUILTIN_ORDER = ["bash", "read", "write", "edit", "grep", "find", "ls"]
-PIPY_EXTENSION_ORDER = ["web_fetch"]
+PIPY_EXTENSION_ORDER = ["web_fetch", "web_search"]
 PIPY_TOOL_ORDER = [*PIPY_BUILTIN_ORDER, *PIPY_EXTENSION_ORDER]
 
 WEB_FETCH_EXTENSION_PATH = (
     Path(__file__).resolve().parent / "extensions" / "web_fetch.py"
+)
+WEB_SEARCH_EXTENSION_PATH = (
+    Path(__file__).resolve().parent / "extensions" / "web_search.py"
 )
 MCP_LOADER_EXTENSION_PATH = (
     Path(__file__).resolve().parent / "extensions" / "mcp_loader.py"
@@ -46,7 +51,7 @@ CALL_AGENT_EXTENSION_PATH = (
     Path(__file__).resolve().parent / "extensions" / "call_agent.py"
 )
 
-OMA_EXTENSION_TOOLS = frozenset({"web_fetch"})
+OMA_EXTENSION_TOOLS = frozenset({"web_fetch", "web_search"})
 PIPY_BUILTIN_NAMES = frozenset(PIPY_BUILTIN_ORDER)
 
 _DEFAULT_OMA_SET = {OMA_TO_PIPY[name] for name in OMA_DEFAULT_TOOLS if name in OMA_TO_PIPY}
@@ -68,7 +73,21 @@ def _extension_paths_for_names(names: set[str]) -> list[str]:
     paths: list[str] = []
     if "web_fetch" in names and WEB_FETCH_EXTENSION_PATH.is_file():
         paths.append(str(WEB_FETCH_EXTENSION_PATH))
+    if "web_search" in names and WEB_SEARCH_EXTENSION_PATH.is_file():
+        paths.append(str(WEB_SEARCH_EXTENSION_PATH))
     return paths
+
+
+def _web_search_type_tools(agent: AgentSnapshot) -> set[str]:
+    """Tool types that imply web_search (harness/tools.ts parity)."""
+    types: set[str] = set()
+    for item in agent.tools or []:
+        if not isinstance(item, dict):
+            continue
+        tool_type = item.get("type")
+        if tool_type in ("web_search_tavily", "web_search_ddg"):
+            types.add("web_search")
+    return types
 
 
 def _extension_paths_for_agent(agent: AgentSnapshot) -> list[str]:
@@ -160,6 +179,11 @@ def _resolved_tool_names(agent: AgentSnapshot) -> set[str]:
                 pipy_names.add(pipy)
 
     if saw_toolset or pipy_names:
+        pipy_names.update(_web_search_type_tools(agent))
+        return pipy_names
+
+    pipy_names.update(_web_search_type_tools(agent))
+    if pipy_names:
         return pipy_names
 
     return set(DEFAULT_PIPY_TOOLS)

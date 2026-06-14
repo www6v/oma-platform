@@ -1,0 +1,12 @@
+.git
+data
+.env
+**/.pytest_cache
+**/__pycache__
+**/*.py[cod]
+**/.venv
+console/node_modules
+console/dist
+docs
+*.md
+!harness/**/*.md

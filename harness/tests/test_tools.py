@@ -86,12 +86,13 @@ def test_unsupported_oma_tools_are_skipped() -> None:
             }
         ],
     )
-    assert pypi_tools_from_agent(agent) == ["read", "web_fetch"]
+    assert pypi_tools_from_agent(agent) == ["read", "web_fetch", "web_search"]
 
 
 def test_session_tool_config_loads_web_fetch_extension() -> None:
     from oma_adapter.tools import (
         WEB_FETCH_EXTENSION_PATH,
+        WEB_SEARCH_EXTENSION_PATH,
         session_tool_config_from_agent,
     )
 
@@ -103,8 +104,29 @@ def test_session_tool_config_loads_web_fetch_extension() -> None:
     )
     cfg = session_tool_config_from_agent(agent)
     assert "web_fetch" in pypi_tools_from_agent(agent)
-    assert cfg.extension_paths == [str(WEB_FETCH_EXTENSION_PATH)]
+    assert "web_search" in pypi_tools_from_agent(agent)
+    assert cfg.extension_paths == [
+        str(WEB_FETCH_EXTENSION_PATH),
+        str(WEB_SEARCH_EXTENSION_PATH),
+    ]
     assert "bash" in cfg.builtin_tools
+
+
+def test_web_search_tavily_type_enables_tool() -> None:
+    agent = AgentSnapshot(
+        id="a",
+        name="n",
+        model="m",
+        tools=[
+            {
+                "type": "agent_toolset_20260401",
+                "default_config": {"enabled": False},
+                "configs": [],
+            },
+            {"type": "web_search_tavily"},
+        ],
+    )
+    assert "web_search" in pypi_tools_from_agent(agent)
 
 
 def test_legacy_name_item() -> None:

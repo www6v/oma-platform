@@ -6,6 +6,9 @@ DEPLOY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${DEPLOY_DIR}/.." && pwd)"
 COMPOSE_FILE="${DEPLOY_DIR}/docker-compose.yml"
 
+export DOCKER_BUILDKIT=1
+export COMPOSE_DOCKER_CLI_BUILD=1
+
 load_env() {
   if [[ -f "${ROOT_DIR}/.env" ]]; then
     set -a
@@ -56,7 +59,7 @@ EOF
 }
 
 print_endpoints() {
-  echo "oma-platform: http://localhost:8787"
+  echo "oma-platform: http://localhost:8787  (Console UI + /health)"
   echo "oma-harness:  http://localhost:8090"
 }
 

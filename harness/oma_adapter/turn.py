@@ -33,6 +33,12 @@ from oma_adapter.mcp.setup import mcp_servers_from_agent, setup_mcp_runtime_for_
 from oma_adapter.tools import session_tool_config_from_agent
 from oma_adapter.types import AgentSnapshot, ModelConfig, TurnResponse
 from oma_adapter.web_fetch.runtime import WebFetchRuntime, clear_web_fetch_runtime, configure_web_fetch
+from oma_adapter.web_search.runtime import (
+    WebSearchRuntime,
+    clear_web_search_runtime,
+    configure_web_search,
+    resolve_search_backend,
+)
 
 CreateSessionFn = Callable[[Any], Awaitable[Any]]
 EventCallback = Callable[[dict[str, Any]], Awaitable[None]]
@@ -173,6 +179,16 @@ async def _run_turn_core(
                 session_id=session_id,
             ),
         )
+        configure_web_search(
+            WebSearchRuntime(
+                environment=environment,
+                outbound_proxy_url=outbound_proxy_url,
+                outbound_proxy_api_key=outbound_proxy_api_key,
+                session_id=session_id,
+                backend=resolve_search_backend(agent),
+                tavily_api_key=os.environ.get("TAVILY_API_KEY"),
+            ),
+        )
         configure_call_agent(
             CallAgentRuntime(
                 session_id=session_id,
@@ -276,6 +292,7 @@ async def _run_turn_core(
                 os.environ.pop(key, None)
             clear_outbound_proxy_for_turn(saved_proxy_env)
             clear_web_fetch_runtime()
+            clear_web_search_runtime()
             clear_mcp_runtime()
             clear_call_agent_runtime()
 

@@ -1,8 +1,12 @@
+# syntax=docker/dockerfile:1
+
 FROM python:3.12-slim
 
 ARG APT_MIRROR=mirrors.aliyun.com
 ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 ARG UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+# Rewrite uv.lock wheel URLs (files.pythonhosted.org) for CN mirrors.
+ARG PYPI_MIRROR_PACKAGES=https://pypi.tuna.tsinghua.edu.cn/packages
 
 RUN sed -i "s|deb.debian.org|${APT_MIRROR}|g; s|security.debian.org|${APT_MIRROR}|g" \
       /etc/apt/sources.list.d/debian.sources \
@@ -12,14 +16,30 @@ RUN sed -i "s|deb.debian.org|${APT_MIRROR}|g; s|security.debian.org|${APT_MIRROR
 
 WORKDIR /app/harness
 
-ENV UV_INDEX_URL=${UV_INDEX_URL}
+ENV UV_INDEX_URL=${UV_INDEX_URL} \
+    UV_LINK_MODE=copy \
+    UV_COMPILE_BYTECODE=1 \
+    UV_HTTP_TIMEOUT=600 \
+    UV_CONCURRENT_DOWNLOADS=10
+
 RUN pip install --no-cache-dir -i "${PIP_INDEX_URL}" uv
 
 COPY harness/pyproject.toml harness/uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project
+
+RUN if [ -n "${PYPI_MIRROR_PACKAGES}" ]; then \
+      sed -i \
+        -e "s|https://files.pythonhosted.org/packages|${PYPI_MIRROR_PACKAGES}|g" \
+        -e "s|https://pypi.org/simple|${UV_INDEX_URL}|g" \
+        uv.lock; \
+    fi
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --no-install-project
 
 COPY harness/ ./
-RUN uv sync --frozen --no-dev
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev
 
 ENV PATH="/app/harness/.venv/bin:${PATH}"
 ENV PYTHONPATH=/app/harness
