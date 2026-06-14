@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+"""Minimal jq shim for e2e bash scripts when jq is not installed."""
+import json
+import re
+import sys
+
+
+def parse_literal(raw: str):
+    raw = raw.strip()
+    if raw == "empty":
+        return ""
+    if raw == "null":
+        return None
+    if (raw.startswith('"') and raw.endswith('"')) or (
+        raw.startswith("'") and raw.endswith("'")
+    ):
+        return raw[1:-1]
+    if raw in ("true", "false"):
+        return raw == "true"
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return raw
+
+
+def eval_path(data, path: str):
+    if path == "":
+        return data
+    if path == "length":
+        if isinstance(data, (list, dict, str)):
+            return len(data)
+        return 0
+    cur = data
+    for segment in re.findall(r"[^.\[\]]+|\[\d+\]", path):
+        if segment.startswith("[") and segment.endswith("]"):
+            idx = int(segment[1:-1])
+            if not isinstance(cur, list) or idx >= len(cur):
+                return None
+            cur = cur[idx]
+            continue
+        if not isinstance(cur, dict):
+            return None
+        if segment not in cur:
+            return None
+        cur = cur[segment]
+    return cur
+
+
+def eval_expr(data, expr: str):
+    expr = expr.strip()
+    if " // " in expr:
+        left, right = expr.split(" // ", 1)
+        val = eval_expr(data, left)
+        if val is None or val == "":
+            return parse_literal(right.strip())
+        return val
+    if " | " in expr:
+        left, right = expr.split(" | ", 1)
+        mid = eval_expr(data, left.strip())
+        return eval_path(mid, right.strip())
+    if expr.startswith("."):
+        expr = expr[1:]
+    return eval_path(data, expr)
+
+
+def main() -> None:
+    args = sys.argv[1:]
+    raw = False
+    if args and args[0] == "-r":
+        raw = True
+        args = args[1:]
+    data = json.load(sys.stdin)
+    if not args:
+        print(json.dumps(data))
+        return
+    val = eval_expr(data, args[0])
+    if raw:
+        if val is None:
+            print("")
+        else:
+            print(val)
+    else:
+        print(json.dumps(val))
+
+
+if __name__ == "__main__":
+    main()

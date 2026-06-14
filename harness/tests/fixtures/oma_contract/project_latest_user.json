@@ -29,5 +29,5 @@
       ]
     }
   ],
-  "expected_prompt": "q2"
+  "expected_prompt": "<conversation-history>\nUSER: q1\nASSISTANT: a1\n</conversation-history>\n\nq2"
 }

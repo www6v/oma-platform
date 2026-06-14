@@ -149,7 +149,13 @@ func (m *Machine) RunTurn(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := m.publishEvents(ctx, []json.RawMessage{lifecycleStart}); err != nil {
+	runningEvent, err := json.Marshal(map[string]any{
+		"type": "session.status_running",
+	})
+	if err != nil {
+		return err
+	}
+	if err := m.publishEvents(ctx, []json.RawMessage{lifecycleStart, runningEvent}); err != nil {
 		return err
 	}
 
@@ -191,7 +197,10 @@ func (m *Machine) RunTurn(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return m.publishEvents(ctx, []json.RawMessage{lifecycleEnd})
+	if err := m.publishEvents(ctx, []json.RawMessage{lifecycleEnd}); err != nil {
+		return err
+	}
+	return m.PublishStatusIdle(ctx)
 }
 
 // CancelActiveTurn aborts the in-flight harness turn, if any.

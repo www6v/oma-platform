@@ -199,7 +199,7 @@ func mountCredentialRoutes(r chi.Router, deps vaultDeps) {
 			return
 		}
 		if err == store.ErrDuplicate {
-			writeError(w, http.StatusConflict, err.Error())
+			writeError(w, http.StatusConflict, "already exists")
 			return
 		}
 		if err != nil {

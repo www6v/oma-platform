@@ -121,6 +121,18 @@ async def internal_turn_stream(body: TurnRequest) -> StreamingResponse:
                 separators=(",", ":"),
             ) + "\n"
             return
+        except Exception as exc:
+            # ValueError (unknown model), provider errors, etc. must not
+            # abort the NDJSON stream without a line — Go sees that as EOF.
+            yield json.dumps(
+                {
+                    "type": "session.error",
+                    "error": "harness_turn_failed",
+                    "message": str(exc),
+                },
+                separators=(",", ":"),
+            ) + "\n"
+            return
 
     return StreamingResponse(ndjson(), media_type="application/x-ndjson")
 
