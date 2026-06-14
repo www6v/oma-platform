@@ -21,7 +21,7 @@ func mountCostReportRoutes(r chi.Router, deps costReportDeps) {
 		return
 	}
 
-	r.Get("/v1/cost_report", func(w http.ResponseWriter, req *http.Request) {
+	r.Get("/", func(w http.ResponseWriter, req *http.Request) {
 		days := 30
 		if raw := req.URL.Query().Get("days"); raw != "" {
 			parsed, err := strconv.Atoi(raw)

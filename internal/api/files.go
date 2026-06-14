@@ -12,14 +12,16 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/open-ma/oma-building/internal/fileblob"
+	"github.com/open-ma/oma-building/internal/ratelimit"
 	"github.com/open-ma/oma-building/internal/sessionoutputs"
 	"github.com/open-ma/oma-building/internal/store"
 )
 
 type filesDeps struct {
-	Files   *store.FileRepo
-	Blobs   *fileblob.Store
-	Outputs *sessionoutputs.Store
+	Files     *store.FileRepo
+	Blobs     *fileblob.Store
+	Outputs   *sessionoutputs.Store
+	RateLimit *ratelimit.Gates
 }
 
 func mountFileRoutes(r chi.Router, deps filesDeps) {
@@ -60,6 +62,14 @@ func handleFileUpload(
 	req *http.Request,
 	deps filesDeps,
 ) {
+	if deps.RateLimit != nil && !deps.RateLimit.AllowUpload(tenantID(req)) {
+		writeError(
+			w,
+			http.StatusTooManyRequests,
+			"Too many uploads — please wait a minute",
+		)
+		return
+	}
 	tenant := tenantID(req)
 	var (
 		filename     string

@@ -14,6 +14,7 @@ import (
 	"github.com/open-ma/oma-building/internal/fileblob"
 	"github.com/open-ma/oma-building/internal/harness"
 	"github.com/open-ma/oma-building/internal/modelresolve"
+	"github.com/open-ma/oma-building/internal/oauthflow"
 	"github.com/open-ma/oma-building/internal/runtime"
 	"github.com/open-ma/oma-building/internal/session"
 	"github.com/open-ma/oma-building/internal/sessionoutputs"
@@ -56,6 +57,8 @@ func testRouterDeps(
 	integrations := store.NewIntegrationRepo(db)
 	runtimes := store.NewRuntimeRepo(db)
 	runtimeRooms := runtime.NewRegistry(runtimes)
+	const testInternalSecret = "test-internal-secret"
+	gatewayOrigin := "http://test"
 	sessionHandlers := api.NewSessionHandlers(
 		sessions, agents, events, pending, hub, reg, workdirs,
 		outputs, client, models,
@@ -67,8 +70,6 @@ func testRouterDeps(
 		store.NewWakeupRepo(db),
 		"", "", gatewayOrigin, testInternalSecret, "", "",
 	)
-	const testInternalSecret = "test-internal-secret"
-	gatewayOrigin := "http://test"
 	memoryStores := store.NewMemoryStoreRepo(db, nil)
 	dreams := store.NewDreamRepo(db)
 	deps := api.Deps{
@@ -109,6 +110,8 @@ func testRouterDeps(
 		SlackGateway: api.NewSlackGatewayHandler(
 			integrations, sessionHandlers, gatewayOrigin,
 		),
+		OAuthState: oauthflow.NewStateStore(),
+		PublicURL:  gatewayOrigin,
 	}
 	return deps, reg
 }

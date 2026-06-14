@@ -16,6 +16,8 @@ import (
 	"github.com/open-ma/oma-building/internal/harness"
 	"github.com/open-ma/oma-building/internal/mcpproxy"
 	"github.com/open-ma/oma-building/internal/modelresolve"
+	"github.com/open-ma/oma-building/internal/oauthflow"
+	"github.com/open-ma/oma-building/internal/ratelimit"
 	"github.com/open-ma/oma-building/internal/runtime"
 	"github.com/open-ma/oma-building/internal/session"
 	"github.com/open-ma/oma-building/internal/sessionoutputs"
@@ -60,6 +62,9 @@ type Deps struct {
 	LinearGateway     *linear.Handler
 	GitHubGateway     *github.Handler
 	SlackGateway      *slack.Handler
+	RateLimit           *ratelimit.Gates
+	OAuthState          *oauthflow.StateStore
+	PublicURL           string
 }
 
 // NewRouter returns the platform HTTP handler.
@@ -77,6 +82,9 @@ func NewRouter(deps Deps) http.Handler {
 		authCfg.Session = &auth.SessionResolver{Upstream: deps.AuthUpstream}
 	}
 	r.Use(auth.Middleware(authCfg))
+	if deps.RateLimit != nil {
+		r.Use(ratelimit.Middleware(deps.RateLimit, deps.AuthDisabled))
+	}
 
 	r.Get("/health", handleHealth)
 
@@ -106,7 +114,7 @@ func NewRouter(deps Deps) http.Handler {
 
 	if deps.Sessions != nil {
 		r.Route("/v1/sessions", func(r chi.Router) {
-			mountSessionRoutes(r, deps.Sessions)
+			mountSessionRoutes(r, deps.Sessions, deps.RateLimit)
 		})
 	}
 
@@ -133,6 +141,25 @@ func NewRouter(deps Deps) http.Handler {
 		})
 	}
 
+	oauthDeps := oauthV1Deps{
+		Vaults:      deps.Vaults,
+		Credentials: deps.Credentials,
+		State:       deps.OAuthState,
+		PublicURL:   deps.PublicURL,
+	}
+	r.Route("/v1/oauth", func(r chi.Router) {
+		mountOAuthV1Routes(r, oauthDeps)
+	})
+
+	if deps.Skills != nil && deps.SkillFiles != nil {
+		r.Route("/v1/clawhub", func(r chi.Router) {
+			mountClawhubRoutes(r, clawhubDeps{
+				Skills:     deps.Skills,
+				SkillFiles: deps.SkillFiles,
+			})
+		})
+	}
+
 	if deps.Sessions != nil && deps.Credentials != nil {
 		mountMcpProxyRoutes(r, mcpProxyDeps{
 			Resolver: &mcpproxy.Resolver{
@@ -147,8 +174,9 @@ func NewRouter(deps Deps) http.Handler {
 	if deps.Skills != nil && deps.SkillFiles != nil {
 		r.Route("/v1/skills", func(r chi.Router) {
 			mountSkillRoutes(r, skillsDeps{
-				Skills: deps.Skills,
-				Files:  deps.SkillFiles,
+				Skills:    deps.Skills,
+				Files:     deps.SkillFiles,
+				RateLimit: deps.RateLimit,
 			})
 		})
 	}
@@ -160,6 +188,12 @@ func NewRouter(deps Deps) http.Handler {
 			Tenants:      deps.Tenants,
 		})
 	})
+
+	if deps.Tenants != nil {
+		r.Route("/v1/tenants", func(r chi.Router) {
+			mountTenantRoutes(r, tenantDeps{Tenants: deps.Tenants})
+		})
+	}
 
 	if deps.ApiKeys != nil {
 		r.Route("/v1/api_keys", func(r chi.Router) {
@@ -184,10 +218,13 @@ func NewRouter(deps Deps) http.Handler {
 	}
 
 	gatewayOrigin := integrationsGatewayOrigin()
-	mountIntegrationRoutes(r, integrationsDeps{
+	integrationDeps := integrationsDeps{
 		Integrations:  deps.Integrations,
 		GatewayOrigin: gatewayOrigin,
 		Linear:        deps.LinearGateway,
+	}
+	r.Route("/v1/integrations", func(r chi.Router) {
+		mountIntegrationRoutes(r, integrationDeps)
 	})
 
 	if deps.LinearGateway != nil {
@@ -204,10 +241,13 @@ func NewRouter(deps Deps) http.Handler {
 		MemoryStores: deps.MemoryStores,
 		Dreams:       deps.Dreams,
 	})
-	mountEvalRunRoutes(r, evalRunsDeps{
+	evalDeps := evalRunsDeps{
 		EvalRuns:     deps.EvalRuns,
 		Agents:       deps.Agents,
 		Environments: deps.Environments,
+	}
+	r.Route("/v1/evals", func(r chi.Router) {
+		mountEvalRunRoutes(r, evalDeps)
 	})
 	mountDreamRoutes(r, dreamsDeps{
 		Dreams:       deps.Dreams,
@@ -215,9 +255,12 @@ func NewRouter(deps Deps) http.Handler {
 		Sessions:     sessionRepoFromHandlers(deps.Sessions),
 		Worker:       deps.DreamWorker,
 	})
-	mountCostReportRoutes(r, costReportDeps{
+	costDeps := costReportDeps{
 		Events:   deps.Events,
 		Sessions: sessionRepoFromHandlers(deps.Sessions),
+	}
+	r.Route("/v1/cost_report", func(r chi.Router) {
+		mountCostReportRoutes(r, costDeps)
 	})
 
 	mountModelsListRoutes(r, modelsListDeps{})
@@ -236,10 +279,13 @@ func NewRouter(deps Deps) http.Handler {
 		RuntimeRooms:  deps.RuntimeRooms,
 	})
 
+	mountOmaAliasRoutes(r, deps)
+
 	mountConsoleStubRoutes(r, consoleStubDeps{
 		SessionOutputs: deps.SessionOutputs,
 		Files:          deps.Files,
 		FileBlobs:      deps.FileBlobs,
+		RateLimit:      deps.RateLimit,
 	})
 
 	if deps.ConsoleDir != "" {

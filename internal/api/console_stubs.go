@@ -6,6 +6,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/open-ma/oma-building/internal/fileblob"
+	"github.com/open-ma/oma-building/internal/ratelimit"
 	"github.com/open-ma/oma-building/internal/sessionoutputs"
 	"github.com/open-ma/oma-building/internal/store"
 )
@@ -14,6 +15,7 @@ type consoleStubDeps struct {
 	SessionOutputs *sessionoutputs.Store
 	Files          *store.FileRepo
 	FileBlobs      *fileblob.Store
+	RateLimit      *ratelimit.Gates
 }
 
 // mountConsoleStubRoutes registers empty-list stubs for Console pages that
@@ -26,45 +28,44 @@ func mountConsoleStubRoutes(
 ) {
 	r.Route("/v1/files", func(r chi.Router) {
 		mountFileRoutes(r, filesDeps{
-			Files:   deps.Files,
-			Blobs:   deps.FileBlobs,
-			Outputs: deps.SessionOutputs,
+			Files:     deps.Files,
+			Blobs:     deps.FileBlobs,
+			Outputs:   deps.SessionOutputs,
+			RateLimit: deps.RateLimit,
 		})
 	})
 }
 
 func mountIntegrationStubRoutes(r chi.Router) {
-	r.Route("/v1/integrations", func(r chi.Router) {
-		for _, provider := range []string{"linear", "github", "slack"} {
-			r.Route("/"+provider, func(r chi.Router) {
-				r.Get("/installations", writeEmptyDataList)
-				r.Get("/publications", writeEmptyDataList)
-				r.Get("/agents/{agentId}/publications", writeEmptyDataList)
-				r.Get(
-					"/installations/{installationId}/publications",
-					writeEmptyDataList,
-				)
-				r.Post("/start-a1", handleStubNotImplemented)
-				r.Post("/credentials", handleStubNotImplemented)
-				r.Post("/handoff-link", handleStubNotImplemented)
-				r.Post("/personal-token", handleStubNotImplemented)
-				r.Post("/publications", handleStubNotImplemented)
-				r.Route("/publications/{publicationId}", func(r chi.Router) {
-					r.Get("/", handleStubNotFound)
+	for _, provider := range []string{"linear", "github", "slack"} {
+		r.Route("/"+provider, func(r chi.Router) {
+			r.Get("/installations", writeEmptyDataList)
+			r.Get("/publications", writeEmptyDataList)
+			r.Get("/agents/{agentId}/publications", writeEmptyDataList)
+			r.Get(
+				"/installations/{installationId}/publications",
+				writeEmptyDataList,
+			)
+			r.Post("/start-a1", handleStubNotImplemented)
+			r.Post("/credentials", handleStubNotImplemented)
+			r.Post("/handoff-link", handleStubNotImplemented)
+			r.Post("/personal-token", handleStubNotImplemented)
+			r.Post("/publications", handleStubNotImplemented)
+			r.Route("/publications/{publicationId}", func(r chi.Router) {
+				r.Get("/", handleStubNotFound)
+				r.Patch("/", handleStubNotImplemented)
+				r.Delete("/", handleStubNotImplemented)
+				r.Post("/form-token", handleStubNotImplemented)
+				r.Patch("/credentials", handleStubNotImplemented)
+				r.Get("/dispatch-rules", writeEmptyRulesList)
+				r.Post("/dispatch-rules", handleStubNotImplemented)
+				r.Route("/dispatch-rules/{ruleId}", func(r chi.Router) {
 					r.Patch("/", handleStubNotImplemented)
 					r.Delete("/", handleStubNotImplemented)
-					r.Post("/form-token", handleStubNotImplemented)
-					r.Patch("/credentials", handleStubNotImplemented)
-					r.Get("/dispatch-rules", writeEmptyRulesList)
-					r.Post("/dispatch-rules", handleStubNotImplemented)
-					r.Route("/dispatch-rules/{ruleId}", func(r chi.Router) {
-						r.Patch("/", handleStubNotImplemented)
-						r.Delete("/", handleStubNotImplemented)
-					})
 				})
 			})
-		}
-	})
+		})
+	}
 }
 
 func handleRuntimesListStub(w http.ResponseWriter, _ *http.Request) {

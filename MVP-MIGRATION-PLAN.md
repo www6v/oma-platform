@@ -124,8 +124,8 @@ Console 全量 wire 验收：`scripts/e2e/console-integration.sh`
 | Eval runs + worker | cron `tickEvalRuns` | `eval_runs.go`, `internal/eval/worker.go` | ✅ | T8 |
 | Runtimes + ACP daemon | RuntimeRoom DO | `runtimes.go`, `runtime_daemon.go` | ✅ | T10 connect/exchange/attach |
 | Memory stores + retention | R2 + FUSE + queue | `memory_stores.go`, retention cron | ✅ | T9 |
-| OAuth (/v1/oauth/*) 通用 | `routes/oauth.ts` | 仅 Linear 专用 OAuth | ❌ | T21 defer；Linear 用 gateway 路径 |
-| /v1/cap-cli/oauth | `routes/cap-cli-oauth.ts` | — | ❌ | T21 defer |
+| OAuth (/v1/oauth/*) 通用 | `routes/oauth.ts` | `oauth_v1.go`, `oauthflow/` | ✅ | T21；`/v1/cap-cli/oauth` 仍 defer |
+| /v1/cap-cli/oauth | `routes/cap-cli-oauth.ts` | — | ❌ | defer |
 | Internal API (/v1/internal/*) | `routes/internal.ts` | `internal.go` + sessions/vaults | ✅ | T15 |
 | /v1/integrations 聚合路由 | `routes/integrations.ts` | 分散 gateway 路由 | 🟡 | 能力有，路径形态不完全一致 |
 
@@ -140,9 +140,9 @@ Console 全量 wire 验收：`scripts/e2e/console-integration.sh`
 | Dreams | `/v1/dreams`, `dreams-store` | `dreams.go`, `dream/worker.go` | ✅ | T14 |
 | Cost report | `/v1/cost_report`, `cf-billing` | `cost_report.go`, `internal/usage/` | ✅ | T14 |
 | browser tools | `harness/browser-tools.ts` OPT_IN | — | ⏭ | **T16 明确 defer** |
-| clawhub | `routes/clawhub.ts` | — | ❌ | T21 Phase 3 |
-| /v1/oma/* 路由别名 | main index | — | ❌ | T19 低优先级兼容 |
-| Rate limiting | CF RL namespaces | — | ❌ | T20 Go middleware |
+| clawhub | `routes/clawhub.ts` | `clawhub.go` | ✅ | T21 |
+| /v1/oma/* 路由别名 | main index | `oma_aliases.go` + `router.go` | ✅ | T19 + T21 oauth/clawhub |
+| Rate limiting | CF RL namespaces | `internal/ratelimit/` | ✅ | T20 Go middleware |
 | Multi-tenant D1 分片 | `tenant-db` | 单 SQLite `tenant_id` | 🟡 | 够用至多 replica |
 | SDK / CLI | `packages/sdk`, `packages/cli` | — | ❌ | T22 Phase 3 |
 | RL 子系统 | `rl/` | — | ⏭ | 独立产品线 |
@@ -219,9 +219,9 @@ Console 全量 wire 验收：`scripts/e2e/console-integration.sh`
 | T16 | browser_* 工具 | `browser-tools.ts` | Playwright sidecar | **⏭ 明确 defer** |
 | T17 | web_search | `harness/tools.ts` | harness + provider 选型 | ✅ 完成 |
 | T18 | schedule 三件套 | `harness/tools.ts` | harness cron/queue | 可选 |
-| T19 | `/v1/oma/*` 别名 | main index | `router.go` 重挂载 | P3 |
+| T19 | `/v1/oma/*` 别名 | main index | `oma_aliases.go` | ✅ |
 | T20 | Rate limiting | CF RL | Go middleware | P3 |
-| T21 | 通用 oauth + clawhub | `oauth.ts`, `clawhub.ts` | 新 routes | P3 |
+| T21 | 通用 oauth + clawhub | `oauth.ts`, `clawhub.ts` | `oauth_v1.go`, `clawhub.go`, `oauthflow/` | ✅ |
 | T22 | SDK / CLI | `packages/sdk`, `cli` | 独立发布 | Phase 3 |
 
 ---
@@ -313,9 +313,9 @@ Client / Console
 - [⏭] **T16 (P2)** — `browser_*` 工具 — Playwright sidecar — **明确 defer**（源仓 opt-in；`web_fetch` 已覆盖只读）
 - [x] **T17 (P2)** — `web_search` — harness tool + provider 选型 — Verify: `harness/tests/test_web_search.py` ✅, `scripts/e2e/smoke-web-search-e2e.sh`, `scripts/e2e/web-search-console.spec.ts`
 - [x] **T18 (P2)** — `schedule` / `cancel_schedule` / `list_schedules` — SQLite + worker + harness extension — Verify: `harness/tests/test_schedule.py`, `internal/store/wakeups_test.go`
-- [ ] **T19 (P3)** — `/v1/oma/*` 路由别名 — `router.go`
-- [ ] **T20 (P3)** — Rate limiting middleware
-- [ ] **T21 (P3)** — 通用 `/v1/oauth` + clawhub
+- [x] **T19 (P3)** — `/v1/oma/*` 路由别名 — `oma_aliases.go` + `oma_aliases_test.go`
+- [x] **T20 (P3)** — Rate limiting middleware — `internal/ratelimit/` + session/upload gates — Verify: `go test ./internal/ratelimit/...`
+- [x] **T21 (P3)** — 通用 `/v1/oauth` + clawhub — `oauthflow/`, `oauth_v1.go`, `clawhub.go` — Verify: `go test ./internal/oauthflow/... ./internal/api/ -run 'OAuth|Clawhub'`
 - [ ] **T22 (P3)** — SDK/CLI 发布
 
 ---

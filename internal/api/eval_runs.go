@@ -22,8 +22,7 @@ func mountEvalRunRoutes(r chi.Router, deps evalRunsDeps) {
 		return
 	}
 
-	r.Route("/v1/evals", func(r chi.Router) {
-		r.Post("/runs", func(w http.ResponseWriter, req *http.Request) {
+	r.Post("/runs", func(w http.ResponseWriter, req *http.Request) {
 			var body struct {
 				AgentID       string            `json:"agent_id"`
 				EnvironmentID string            `json:"environment_id"`
@@ -206,7 +205,6 @@ func mountEvalRunRoutes(r chi.Router, deps evalRunsDeps) {
 				})
 			})
 		})
-	})
 }
 
 type evalTaskSpec struct {

@@ -17,7 +17,9 @@ import (
 	"github.com/open-ma/oma-building/internal/memory"
 	"github.com/open-ma/oma-building/internal/memoryblob"
 	"github.com/open-ma/oma-building/internal/modelresolve"
+	"github.com/open-ma/oma-building/internal/oauthflow"
 	"github.com/open-ma/oma-building/internal/outbound"
+	"github.com/open-ma/oma-building/internal/ratelimit"
 	"github.com/open-ma/oma-building/internal/runtime"
 	"github.com/open-ma/oma-building/internal/session"
 	"github.com/open-ma/oma-building/internal/sessionoutputs"
@@ -252,6 +254,9 @@ func main() {
 	slackGateway := api.NewSlackGatewayHandler(
 		integrations, sessionHandlers, publicURL,
 	)
+	rateGates := ratelimit.FromEnv()
+	oauthState := oauthflow.NewStateStore()
+
 	handler := api.NewRouter(api.Deps{
 		Agents:       agents,
 		Environments: environments,
@@ -287,6 +292,9 @@ func main() {
 		LinearGateway:     linearGateway,
 		GitHubGateway:     githubGateway,
 		SlackGateway:      slackGateway,
+		RateLimit:         rateGates,
+		OAuthState:        oauthState,
+		PublicURL:         publicURL,
 	})
 
 	log.Printf("oma-server listening on %s", addr)

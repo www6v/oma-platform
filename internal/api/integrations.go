@@ -32,20 +32,18 @@ func mountIntegrationRoutes(r chi.Router, deps integrationsDeps) {
 		origin = "http://127.0.0.1:8787"
 	}
 
-	r.Route("/v1/integrations", func(r chi.Router) {
-		for _, provider := range []store.IntegrationProvider{
-			store.ProviderLinear,
-			store.ProviderGitHub,
-			store.ProviderSlack,
-		} {
-			p := provider
-			r.Route("/"+string(p), func(r chi.Router) {
-				mountProviderIntegrationRoutes(
-					r, p, deps.Integrations, origin, deps.Linear,
-				)
-			})
-		}
-	})
+	for _, provider := range []store.IntegrationProvider{
+		store.ProviderLinear,
+		store.ProviderGitHub,
+		store.ProviderSlack,
+	} {
+		p := provider
+		r.Route("/"+string(p), func(r chi.Router) {
+			mountProviderIntegrationRoutes(
+				r, p, deps.Integrations, origin, deps.Linear,
+			)
+		})
+	}
 }
 
 func mountProviderIntegrationRoutes(

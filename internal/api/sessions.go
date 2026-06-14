@@ -11,6 +11,7 @@ import (
 
 	"github.com/open-ma/oma-building/internal/harness"
 	"github.com/open-ma/oma-building/internal/modelresolve"
+	"github.com/open-ma/oma-building/internal/ratelimit"
 	"github.com/open-ma/oma-building/internal/session"
 	"github.com/open-ma/oma-building/internal/sessionoutputs"
 	"github.com/open-ma/oma-building/internal/store"
@@ -79,8 +80,20 @@ func (h *sessionHandlers) registerMachine(sess *store.Session) {
 	})
 }
 
-func mountSessionRoutes(r chi.Router, h *sessionHandlers) {
+func mountSessionRoutes(
+	r chi.Router,
+	h *sessionHandlers,
+	gates *ratelimit.Gates,
+) {
 	r.Post("/", func(w http.ResponseWriter, req *http.Request) {
+		if gates != nil && !gates.AllowSessionCreate(tenantID(req)) {
+			writeError(
+				w,
+				http.StatusTooManyRequests,
+				"Too many session creations — wait a minute",
+			)
+			return
+		}
 		var body createSessionRequest
 		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid json")

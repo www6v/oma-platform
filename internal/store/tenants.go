@@ -129,6 +129,56 @@ func (r *TenantRepo) EnsureTenant(
 	return tenantID, nil
 }
 
+// CreateTenant inserts a new workspace and owner membership for a user.
+func (r *TenantRepo) CreateTenant(
+	ctx context.Context,
+	userID string,
+	name string,
+) (TenantMembership, error) {
+	display := strings.TrimSpace(name)
+	if display == "" {
+		return TenantMembership{}, fmt.Errorf("name is required")
+	}
+	if len(display) > 80 {
+		display = display[:80]
+	}
+	if strings.TrimSpace(userID) == "" {
+		return TenantMembership{}, fmt.Errorf("user id required")
+	}
+
+	tenantID := "tn_" + randomHex(16)
+	now := time.Now().UnixMilli()
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return TenantMembership{}, fmt.Errorf("create tenant begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO tenant (id, name, "createdAt", "updatedAt")
+		VALUES (?, ?, ?, ?)
+	`, tenantID, display, now, now); err != nil {
+		return TenantMembership{}, fmt.Errorf("insert tenant: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO membership (user_id, tenant_id, role, created_at)
+		VALUES (?, ?, 'owner', ?)
+		ON CONFLICT (user_id, tenant_id) DO NOTHING
+	`, userID, tenantID, now); err != nil {
+		return TenantMembership{}, fmt.Errorf("insert membership: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return TenantMembership{}, fmt.Errorf("create tenant commit: %w", err)
+	}
+
+	return TenantMembership{
+		TenantID: tenantID,
+		Name:     display,
+		Role:     "owner",
+	}, nil
+}
+
 // ListForUser returns all tenant memberships for a user.
 func (r *TenantRepo) ListForUser(
 	ctx context.Context,

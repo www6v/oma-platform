@@ -10,13 +10,15 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/open-ma/oma-building/internal/ratelimit"
 	"github.com/open-ma/oma-building/internal/skillzip"
 	"github.com/open-ma/oma-building/internal/store"
 )
 
 type skillsDeps struct {
-	Skills *store.SkillRepo
-	Files  *store.SkillFileStore
+	Skills    *store.SkillRepo
+	Files     *store.SkillFileStore
+	RateLimit *ratelimit.Gates
 }
 
 func mountSkillRoutes(r chi.Router, deps skillsDeps) {
@@ -90,6 +92,14 @@ func mountSkillRoutes(r chi.Router, deps skillsDeps) {
 	})
 
 	r.Post("/upload", func(w http.ResponseWriter, req *http.Request) {
+		if deps.RateLimit != nil && !deps.RateLimit.AllowUpload(tenantID(req)) {
+			writeError(
+				w,
+				http.StatusTooManyRequests,
+				"Too many uploads — please wait a minute",
+			)
+			return
+		}
 		parsed, displayTitle, err := parseSkillUploadMultipart(req)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
@@ -219,6 +229,14 @@ func mountSkillRoutes(r chi.Router, deps skillsDeps) {
 		})
 
 		r.Post("/versions/upload", func(w http.ResponseWriter, req *http.Request) {
+			if deps.RateLimit != nil && !deps.RateLimit.AllowUpload(tenantID(req)) {
+				writeError(
+					w,
+					http.StatusTooManyRequests,
+					"Too many uploads — please wait a minute",
+				)
+				return
+			}
 			id := chi.URLParam(req, "id")
 			parsed, displayTitle, err := parseSkillUploadMultipart(req)
 			if err != nil {
