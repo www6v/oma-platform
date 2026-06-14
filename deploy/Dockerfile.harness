@@ -6,7 +6,7 @@ RUN apt-get update \
 
 WORKDIR /app/harness
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+RUN pip install --no-cache-dir uv
 
 COPY harness/pyproject.toml harness/uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
