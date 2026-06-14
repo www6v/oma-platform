@@ -176,6 +176,9 @@ export function DataTable<T>({
   });
 
   const showCreate = !!onCreate && !!createLabel;
+  const isEmpty = !loading && data.length === 0;
+  // When the empty state renders its own CTA, hide the toolbar duplicate.
+  const showToolbarCreate = showCreate && !(isEmpty && emptyAction);
 
   // Single-row toolbar: [+ New X] on far left, page-specific filter
   // chips next, then a flex spacer pushes [search] + [Columns] to the
@@ -186,7 +189,7 @@ export function DataTable<T>({
   const toolbar = (
     <>
       {headerActions}
-      {showCreate && <Button onClick={onCreate}>{createLabel}</Button>}
+      {showToolbarCreate && <Button onClick={onCreate}>{createLabel}</Button>}
       {filters}
       <div className="flex-1" />
       {onSearchChange && (
@@ -209,7 +212,6 @@ export function DataTable<T>({
   );
 
   const filteredRows = table.getRowModel().rows;
-  const isEmpty = !loading && filteredRows.length === 0;
   const visibleColumns = table.getAllColumns().filter((c) => c.getIsVisible());
   const visibleColumnCount = visibleColumns.length;
 

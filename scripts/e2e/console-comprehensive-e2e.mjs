@@ -31,6 +31,10 @@ function log(step, ok, detail = '') {
   console.log(`[${mark}] ${step}${detail ? `: ${detail}` : ''}`);
 }
 
+async function clickCreateButton(page, label) {
+  await page.getByRole('button', { name: label }).first().click();
+}
+
 function recordIssue({ title, severity, category, route, detail }) {
   issueSeq += 1;
   issues.push({
@@ -172,7 +176,7 @@ try {
   }
 
   await page.goto(`${base}/agents`, { waitUntil: 'networkidle', timeout: 60000 });
-  await page.getByRole('button', { name: '+ New agent' }).click();
+  await clickCreateButton(page, '+ New agent');
   await page.getByRole('button', { name: 'Blank agent config' }).click();
   await page.locator('#agent-name').fill(agentName);
   await page.locator('#agent-description').fill('comprehensive qa agent');
@@ -195,7 +199,7 @@ try {
   }
 
   await page.goto(`${base}/sessions`, { waitUntil: 'networkidle', timeout: 60000 });
-  await page.getByRole('button', { name: '+ New session' }).click();
+  await clickCreateButton(page, '+ New session');
   await page.waitForSelector('text=New Session');
 
   const agentCombo = page.getByRole('combobox').first();
@@ -351,7 +355,7 @@ try {
         waitUntil: 'networkidle',
         timeout: 60000,
       });
-      await page.getByRole('button', { name: '+ New skill' }).click();
+      await clickCreateButton(page, '+ New skill');
       await page.waitForSelector('text=Upload Custom Skill');
       const fileInput = page.locator('input[type="file"]').first();
       await fileInput.setInputFiles(qaSkillZip);
@@ -478,67 +482,71 @@ try {
   });
 }
 
-try {
-  if (evalId) {
-    await api('DELETE', `/v1/evals/runs/${evalId}`);
-    log('cleanup eval', true);
+if (process.env.QA_SKIP_CLEANUP !== '1') {
+  try {
+    if (evalId) {
+      await api('DELETE', `/v1/evals/runs/${evalId}`);
+      log('cleanup eval', true);
+    }
+  } catch (err) {
+    log('cleanup eval', false, err.message);
   }
-} catch (err) {
-  log('cleanup eval', false, err.message);
-}
 
-try {
-  if (fileId) {
-    await api('DELETE', `/v1/files/${fileId}`);
-    log('cleanup file', true);
+  try {
+    if (fileId) {
+      await api('DELETE', `/v1/files/${fileId}`);
+      log('cleanup file', true);
+    }
+  } catch (err) {
+    log('cleanup file', false, err.message);
   }
-} catch (err) {
-  log('cleanup file', false, err.message);
-}
 
-try {
-  if (skillId) {
-    await api('DELETE', `/v1/skills/${skillId}`);
-    log('cleanup skill', true);
+  try {
+    if (skillId) {
+      await api('DELETE', `/v1/skills/${skillId}`);
+      log('cleanup skill', true);
+    }
+  } catch (err) {
+    log('cleanup skill', false, err.message);
   }
-} catch (err) {
-  log('cleanup skill', false, err.message);
-}
 
-try {
-  if (sessionId) {
-    await api('DELETE', `/v1/sessions/${sessionId}`);
-    log('cleanup session', true);
+  try {
+    if (sessionId) {
+      await api('DELETE', `/v1/sessions/${sessionId}`);
+      log('cleanup session', true);
+    }
+  } catch (err) {
+    log('cleanup session', false, err.message);
   }
-} catch (err) {
-  log('cleanup session', false, err.message);
-}
 
-try {
-  if (agentId) {
-    const purgeAgent = async () => {
-      await api('DELETE', `/v1/agents/${agentId}`);
-    };
-    try {
-      await purgeAgent();
-      log('cleanup agent', true);
-    } catch (err) {
+  try {
+    if (agentId) {
+      const purgeAgent = async () => {
+        await api('DELETE', `/v1/agents/${agentId}`);
+      };
       try {
-        const sessList = await api('GET', `/v1/sessions?limit=100`);
-        for (const s of sessList?.data || []) {
-          if (s.agent?.id === agentId || s.agent_id === agentId) {
-            await api('DELETE', `/v1/sessions/${s.id}`).catch(() => {});
-          }
-        }
         await purgeAgent();
-        log('cleanup agent', true, 'after session purge');
-      } catch (retryErr) {
-        log('cleanup agent', false, retryErr.message);
+        log('cleanup agent', true);
+      } catch (err) {
+        try {
+          const sessList = await api('GET', `/v1/sessions?limit=100`);
+          for (const s of sessList?.data || []) {
+            if (s.agent?.id === agentId || s.agent_id === agentId) {
+              await api('DELETE', `/v1/sessions/${s.id}`).catch(() => {});
+            }
+          }
+          await purgeAgent();
+          log('cleanup agent', true, 'after session purge');
+        } catch (retryErr) {
+          log('cleanup agent', false, retryErr.message);
+        }
       }
     }
+  } catch (err) {
+    log('cleanup agent', false, err.message);
   }
-} catch (err) {
-  log('cleanup agent', false, err.message);
+} else {
+  log('cleanup', true, 'skipped (QA_SKIP_CLEANUP=1)');
 }
 
 await browser.close();
