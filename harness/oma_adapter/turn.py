@@ -34,6 +34,7 @@ from oma_adapter.tools import (
     enabled_schedule_tools,
     session_tool_config_from_agent,
 )
+from oma_adapter.pi_model import resolve_session_model_pattern
 from oma_adapter.types import AgentSnapshot, ModelConfig, TurnResponse
 from oma_adapter.web_fetch.runtime import WebFetchRuntime, clear_web_fetch_runtime, configure_web_fetch
 from oma_adapter.web_search.runtime import (
@@ -92,6 +93,8 @@ async def _default_create_session(
     *,
     workdir: str,
     model: str,
+    pi_provider: str | None = None,
+    api_key: str | None = None,
     system_prompt: str | None,
     builtin_tools: list[str],
     extension_paths: list[str],
@@ -101,6 +104,8 @@ async def _default_create_session(
     opts = CreateAgentSessionOptions(
         cwd=Path(workdir),
         model=model,
+        provider=pi_provider,
+        api_key=api_key,
         system_prompt=system_prompt,
         tools=builtin_tools,
         extension_paths=extension_paths or None,
@@ -154,9 +159,13 @@ async def _run_turn_core(
     if not prompt:
         return TurnResponse(events=[])
 
-    resolved_model = model.model if model is not None else agent.model
-    if not resolved_model.startswith("faux/") and os.environ.get("OMA_FAKE_HARNESS") == "1":
-        resolved_model = "faux/test"
+    wire_model = model.model if model is not None else agent.model
+    if not wire_model.startswith("faux/") and os.environ.get("OMA_FAKE_HARNESS") == "1":
+        wire_model = "faux/test"
+    session_model, pi_provider = resolve_session_model_pattern(
+        wire_model=wire_model,
+        oma_provider=model.provider if model is not None else None,
+    )
 
     patch_path_utils(workdir)
     saved_env = mount_resources(workdir, resources)
@@ -241,7 +250,9 @@ async def _run_turn_core(
                 tool_cfg = session_tool_config_from_agent(agent)
                 result = await _default_create_session(
                     workdir=workdir,
-                    model=resolved_model,
+                    model=session_model,
+                    pi_provider=pi_provider,
+                    api_key=model.api_key if model is not None else None,
                     system_prompt=compose_system_prompt(agent.resolved_system_prompt),
                     builtin_tools=tool_cfg.builtin_tools,
                     extension_paths=tool_cfg.extension_paths,

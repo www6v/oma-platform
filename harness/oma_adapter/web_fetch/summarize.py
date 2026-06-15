@@ -40,10 +40,15 @@ def _assistant_text(message: AssistantMessage) -> str:
 def resolve_pi_model(cfg: ModelConfig) -> Any:
     from pi_ai.models import get_model
 
-    provider = (cfg.provider or "").strip()
+    from oma_adapter.pi_model import normalize_pi_provider
+
     model_id = cfg.model.strip()
-    if not provider and "/" in model_id:
-        provider, model_id = model_id.split("/", 1)
+    provider = normalize_pi_provider(cfg.provider)
+    if "/" in model_id:
+        prefix, _, suffix = model_id.partition("/")
+        if suffix and not provider:
+            provider = normalize_pi_provider(prefix)
+            model_id = suffix
     if not provider:
         provider = "anthropic"
     return get_model(provider, model_id)
