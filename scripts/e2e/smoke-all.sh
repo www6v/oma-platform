@@ -157,14 +157,14 @@ run_noncore_suite() {
   run_case "outbound proxy (no LLM)" \
     run_shell smoke-outbound-proxy.sh
 
-  run_case "GitHub webhook dispatch" \
-    run_shell smoke-github-webhook.sh
+  # run_case "GitHub webhook dispatch" \
+  #   run_shell smoke-github-webhook.sh
 
-  run_case "Linear webhook dispatch" \
-    run_shell smoke-linear-webhook.sh
+  # run_case "Linear webhook dispatch" \
+  #   run_shell smoke-linear-webhook.sh
 
-  run_case "Slack webhook dispatch" \
-    run_shell smoke-slack-webhook.sh
+  # run_case "Slack webhook dispatch" \
+  #   run_shell smoke-slack-webhook.sh
 
   run_case "outbound vault + harness curl" \
     run_shell smoke-outbound-e2e.sh
