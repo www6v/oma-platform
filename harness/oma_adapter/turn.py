@@ -89,6 +89,21 @@ def _make_event_listener(
     return listener
 
 
+def _should_use_fake_harness(
+    *,
+    model: ModelConfig | None,
+    wire_model: str,
+) -> bool:
+    """Use faux/test only when fake mode is on and no real credentials arrived."""
+    if os.environ.get("OMA_FAKE_HARNESS") != "1":
+        return False
+    if wire_model.startswith("faux/"):
+        return False
+    if model is not None and model.api_key:
+        return False
+    return True
+
+
 async def _default_create_session(
     *,
     workdir: str,
@@ -160,7 +175,7 @@ async def _run_turn_core(
         return TurnResponse(events=[])
 
     wire_model = model.model if model is not None else agent.model
-    if not wire_model.startswith("faux/") and os.environ.get("OMA_FAKE_HARNESS") == "1":
+    if _should_use_fake_harness(model=model, wire_model=wire_model):
         wire_model = "faux/test"
     session_model, pi_provider = resolve_session_model_pattern(
         wire_model=wire_model,

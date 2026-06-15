@@ -7,6 +7,8 @@ services:
         GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
         GOSUMDB: ${GOSUMDB:-sum.golang.google.cn}
         APT_MIRROR: ${APT_MIRROR:-mirrors.aliyun.com}
+    env_file:
+      - ../.env
     ports:
       - "8787:8787"
     environment:
@@ -15,6 +17,7 @@ services:
       HARNESS_URL: http://oma-harness:8090
       OMA_API_KEY: ${OMA_API_KEY:-dev-key}
       OMA_FAKE_HARNESS: ${OMA_FAKE_HARNESS:-1}
+      OMA_INTERNAL_SECRET: ${OMA_INTERNAL_SECRET:-}
       # Console SPA is baked into the platform image at /app/console.
       # Override with a host mount for local UI dev:
       #   CONSOLE_DIST=../console/dist docker compose up -d --build
@@ -41,10 +44,14 @@ services:
         PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
         UV_INDEX_URL: ${UV_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
         PYPI_MIRROR_PACKAGES: ${PYPI_MIRROR_PACKAGES:-https://pypi.tuna.tsinghua.edu.cn/packages}
+    env_file:
+      - ../.env
     ports:
       - "8090:8090"
     environment:
       OMA_FAKE_HARNESS: ${OMA_FAKE_HARNESS:-1}
+      OMA_INTERNAL_SECRET: ${OMA_INTERNAL_SECRET:-}
+      OMA_PLATFORM_URL: http://oma-platform:8787
     volumes:
       - ${HOME}/.pi/agent:/root/.pi/agent:ro
     healthcheck:
