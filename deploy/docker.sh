@@ -24,7 +24,11 @@ load_env() {
 }
 
 compose() {
-  docker compose -f "${COMPOSE_FILE}" "$@"
+  local env_args=()
+  if [[ -f "${ROOT_DIR}/.env" ]]; then
+    env_args=(--env-file "${ROOT_DIR}/.env")
+  fi
+  docker compose -f "${COMPOSE_FILE}" "${env_args[@]}" "$@"
 }
 
 ensure_data_dir() {
@@ -51,8 +55,11 @@ Examples:
   $(basename "$0") logs oma-platform
   $(basename "$0") down
 
+  # Or without docker.sh (must pass parent .env for build-arg substitution):
+  docker compose --env-file ../.env up -d --build
+
 Environment:
-  Loads ${ROOT_DIR}/.env when present.
+  Loads ${ROOT_DIR}/.env when present (via --env-file and service env_file).
   Platform API: http://localhost:8787
   Harness API:  http://localhost:8090
 EOF
