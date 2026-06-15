@@ -145,16 +145,18 @@ def _ordered_pipy_names(names: set[str]) -> list[str]:
 def _enabled_oma_tools(toolset: dict[str, Any]) -> set[str]:
     """Mirror OMA getEnabledTools() for agent_toolset_20260401."""
     default_set = set(OMA_DEFAULT_TOOLS)
-    configs = toolset.get("configs")
-    if not isinstance(configs, list):
-        return default_set
-
-    enabled: set[str] = set()
     default_cfg = toolset.get("default_config")
     default_enabled = True
     if isinstance(default_cfg, dict) and "enabled" in default_cfg:
         default_enabled = bool(default_cfg["enabled"])
 
+    configs = toolset.get("configs")
+    if not isinstance(configs, list):
+        if default_enabled:
+            return default_set
+        return set()
+
+    enabled: set[str] = set()
     if default_enabled:
         enabled.update(default_set)
 

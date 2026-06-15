@@ -9,6 +9,16 @@ AUTH_PORT="${QA_AUTH_UPSTREAM_PORT:-8788}"
 QA_DB="${ROOT_DIR}/data/qa-auth-e2e.db"
 QA_AUTH_DB="${ROOT_DIR}/data/qa-auth-sidecar.db"
 
+if command -v lsof >/dev/null 2>&1; then
+  stale_pids="$(lsof -ti ":${QA_PORT}" 2>/dev/null || true)"
+  if [[ -n "${stale_pids}" ]]; then
+    echo "[qa-auth] stopping stale listener(s) on :${QA_PORT}"
+    # shellcheck disable=SC2086
+    kill ${stale_pids} 2>/dev/null || true
+    sleep 1
+  fi
+fi
+
 # shellcheck disable=SC1091
 source "${ROOT_DIR}/scripts/go-env.sh"
 
@@ -56,6 +66,7 @@ echo "[qa-auth] starting oma-server on :${QA_PORT} (AUTH_DISABLED=0)"
   cd "${ROOT_DIR}"
   OMA_LISTEN_ADDR=":${QA_PORT}" \
   AUTH_DISABLED=0 \
+  OMA_RATE_LIMIT_DISABLED=1 \
   CONSOLE_DIR="${CONSOLE_DIST}" \
   HARNESS_URL="${HARNESS_URL:-http://127.0.0.1:8090}" \
   OMA_FAKE_HARNESS="${OMA_FAKE_HARNESS:-1}" \

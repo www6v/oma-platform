@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 
@@ -51,8 +52,10 @@ def setup_outbound_proxy_for_turn(
         + "\n",
         encoding="utf-8",
     )
-    return {}
+    # curl reads $CURL_HOME/.curlrc, not cwd/.curlrc.
+    return {"CURL_HOME": str(workdir_path.resolve())}
 
 
 def clear_outbound_proxy_for_turn(saved: dict[str, str | None]) -> None:
-    del saved
+    for key in saved:
+        os.environ.pop(key, None)

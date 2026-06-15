@@ -1,1 +1,8 @@
-{"private":true,"type":"module","dependencies":{"playwright":"^1.52.0"}}
+{
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@playwright/test": "^1.52.0",
+    "playwright": "^1.52.0"
+  }
+}

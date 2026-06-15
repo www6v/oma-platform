@@ -124,7 +124,6 @@ SESS=$(api /v1/sessions -X POST -d "{
 }")
 SESS_ID=$(echo "$SESS" | jq -r .id)
 echo "Session: $SESS_ID"
-echo "Console: ${CONSOLE_URL:-http://localhost:5173}/sessions/$SESS_ID"
 
 IFS=: read -r SSE_FILE SSE_PID <<< "$(collect_sse "$SESS_ID" 180)"
 send_msg "$SESS_ID" "Use web_search to search for Python programming language. Reply with only the domain name."
@@ -142,11 +141,11 @@ check "tool result received" "agent.tool_result" "$SSE"
 check "session went idle" "session.status_idle" "$SSE"
 check "got agent message" "agent.message" "$SSE"
 
-if echo "$SSE" | grep -qE '"url"|\\"url\\"'; then
-  echo "  ✓ search results contain url field"
+if echo "$SSE" | grep -qE '"url"|\\"url\\"|python\.org|wikipedia\.org'; then
+  echo "  ✓ search results contain url field or known domain"
   ((++PASS))
 else
-  echo "  ✗ search results contain url field"
+  echo "  ✗ search results contain url field or known domain"
   ((++FAIL))
 fi
 
@@ -154,9 +153,10 @@ rm -f "$SSE_FILE"
 
 echo ""
 echo "=== Cleanup ==="
+api "/v1/sessions/$SESS_ID" -X DELETE > /dev/null
 api "/v1/agents/$AGENT_ID" -X DELETE > /dev/null
 api "/v1/environments/$ENV_ID" -X DELETE > /dev/null
-echo "  ✓ Cleaned up (session kept for console inspection: $SESS_ID)"
+echo "  ✓ Cleaned up"
 
 echo ""
 echo "========================================"

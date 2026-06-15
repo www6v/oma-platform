@@ -180,14 +180,29 @@ try {
   }
 
   await page.goto(`${base}/agents`, { waitUntil: 'networkidle', timeout: 60000 });
+  await page.waitForResponse(
+    (r) => r.url().includes('/v1/model_cards') && r.ok(),
+    { timeout: 30000 },
+  ).catch(() => {});
   await clickCreateButton(page, '+ New agent');
   await page.getByRole('button', { name: 'Blank agent config' }).click();
   await page.locator('#agent-name').fill(agentName);
   await page.locator('#agent-description').fill('comprehensive qa agent');
 
-  const modelCombo = page.getByRole('combobox').first();
-  await modelCombo.click();
-  await page.getByRole('option').first().click({ timeout: 15000 });
+  await page.waitForFunction(
+    () => {
+      const combo = document.querySelector('[role="combobox"]');
+      return combo && !combo.textContent?.includes('Select a model card');
+    },
+    { timeout: 20000 },
+  ).catch(async () => {
+    const modelCombo = page.getByRole('combobox').first();
+    await modelCombo.click();
+    await page
+      .getByRole('option', { name: /smoke-claude|claude-sonnet/i })
+      .first()
+      .click({ timeout: 15000 });
+  });
 
   await page.getByRole('button', { name: 'Create Agent' }).click();
   await page.waitForURL(/\/agents\//, { timeout: 30000 });

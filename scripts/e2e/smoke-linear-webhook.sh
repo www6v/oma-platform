@@ -135,7 +135,9 @@ print("user.message event ok")' "${EVENTS}"
 curl -sf -X DELETE \
   "${PLATFORM_URL}/v1/integrations/linear/publications/${PUB_ID}" \
   -H "x-api-key: ${API_KEY}" >/dev/null
+curl -sf -X DELETE "${PLATFORM_URL}/v1/sessions/${SESSION_ID}" \
+  -H "x-api-key: ${API_KEY}" >/dev/null || true
 curl -sf -X DELETE "${PLATFORM_URL}/v1/agents/${AGENT_ID}" \
-  -H "x-api-key: ${API_KEY}" >/dev/null
+  -H "x-api-key: ${API_KEY}" >/dev/null || true
 
 echo "smoke-linear-webhook passed"

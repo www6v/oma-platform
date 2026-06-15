@@ -70,9 +70,10 @@ curl -sf -X POST \
   >/dev/null
 echo "mock install bound"
 
-PAYLOAD="$(python3 -c 'import json; print(json.dumps({
+EVENT_ID="Ev_slack_smoke_$(date +%s)"
+PAYLOAD="$(python3 -c 'import json,sys; print(json.dumps({
     "type": "event_callback",
-    "event_id": "Ev_slack_smoke",
+    "event_id": sys.argv[1],
     "team_id": "T_smoke",
     "event": {
         "type": "app_mention",
@@ -81,7 +82,7 @@ PAYLOAD="$(python3 -c 'import json; print(json.dumps({
         "channel": "C_smoke",
         "ts": "1710000000.000100"
     }
-}))')"
+}))' "${EVENT_ID}")"
 
 TS="$(date +%s)"
 SIG="$(python3 -c 'import hashlib,hmac,os,sys; secret=sys.argv[1].encode(); ts=sys.argv[2]; body=sys.argv[3].encode(); base=f"v0:{ts}:".encode()+body; print("v0="+hmac.new(secret, base, hashlib.sha256).hexdigest())' "${SIGNING_SECRET}" "${TS}" "${PAYLOAD}")"

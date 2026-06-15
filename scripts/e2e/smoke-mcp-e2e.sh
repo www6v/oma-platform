@@ -15,6 +15,8 @@ fi
 # shellcheck disable=SC1091
 source "${ROOT_DIR}/scripts/e2e/common.sh"
 
+_e2e_ensure_model_card
+
 export OMA_API_KEY="${OMA_API_KEY:-dev-key}"
 export OMA_FAKE_HARNESS="${OMA_FAKE_HARNESS:-0}"
 export SMOKE_MODEL="${SMOKE_MODEL:-claude-sonnet-4-6}"

@@ -19,17 +19,21 @@ from oma_adapter.call_agent.runtime import (
 )
 from oma_adapter.emit import emit_oma_events
 from oma_adapter.platform_guidance import compose_system_prompt
-from oma_adapter.project import project_oma_events
+from oma_adapter.project import latest_user_text, project_oma_events
 from oma_adapter.provider_env import provider_env
 from oma_adapter.sandbox_paths import patch_path_utils
+from oma_adapter.outbound.bash_ops import OutboundBashOperations
 from oma_adapter.outbound.setup import (
     clear_outbound_proxy_for_turn,
     normalize_outbound_proxy_addr,
     setup_outbound_proxy_for_turn,
 )
 from oma_adapter.resource_mounter import mount_resources
-from oma_adapter.mcp.runtime import clear_mcp_runtime
-from oma_adapter.mcp.setup import mcp_servers_from_agent, setup_mcp_runtime_for_turn
+from oma_adapter.mcp.runtime import McpRuntime, clear_mcp_runtime, configure_mcp_runtime
+from oma_adapter.mcp.setup import (
+    discover_mcp_tools,
+    mcp_servers_from_agent,
+)
 from oma_adapter.tools import (
     enabled_schedule_tools,
     session_tool_config_from_agent,
@@ -47,6 +51,11 @@ from oma_adapter.schedule.runtime import (
     ScheduleRuntime,
     clear_schedule_runtime,
     configure_schedule,
+)
+from oma_adapter.text_tools import (
+    execute_prompted_mcp_tools,
+    execute_text_tool_calls,
+    mcp_tools_named_in_text,
 )
 
 CreateSessionFn = Callable[[Any], Awaitable[Any]]
@@ -104,6 +113,52 @@ def _should_use_fake_harness(
     return True
 
 
+def _register_mcp_tools_on_session(
+    session: Any,
+    mcp_runtime: McpRuntime,
+) -> None:
+    """Attach MCP tools after session creation (avoids extension load races)."""
+    if not mcp_runtime.tools:
+        return
+    existing = {getattr(tool, "name", "") for tool in session._agent._tools}
+    new_tools = [
+        tool
+        for tool in mcp_runtime.tools
+        if getattr(tool, "name", "") not in existing
+    ]
+    if not new_tools:
+        return
+    session._agent._tools = [*session._agent._tools, *new_tools]
+    resources = getattr(session, "_resources", None)
+    if resources is not None and hasattr(resources, "extension_runtime"):
+        resources.extension_runtime.tools.extend(new_tools)
+
+
+def _events_include_tool_result(
+    events: list[dict[str, Any]],
+    tool_names: set[str],
+) -> bool:
+    """True when any listed tool already has a tool_result event."""
+    if not tool_names:
+        return False
+    saw_use: set[str] = set()
+    for item in events:
+        kind = item.get("type")
+        if kind == "agent.tool_use":
+            name = item.get("name")
+            if isinstance(name, str) and name in tool_names:
+                saw_use.add(name)
+        if kind != "agent.tool_result":
+            continue
+        for block in item.get("content") or []:
+            text = (block.get("text") or "").strip()
+            if not text or text.startswith("Error:"):
+                continue
+            if saw_use.intersection(tool_names):
+                return True
+    return False
+
+
 async def _default_create_session(
     *,
     workdir: str,
@@ -127,6 +182,25 @@ async def _default_create_session(
         in_memory=True,
     )
     return await create_agent_session(opts)
+
+
+def _wire_outbound_bash_proxy(session: Any, workdir: str) -> None:
+    """Ensure bash subprocesses read sandbox .curlrc via CURL_HOME."""
+    curlrc = Path(workdir) / ".curlrc"
+    if not curlrc.is_file():
+        return
+    agent = getattr(session, "_agent", None)
+    if agent is None:
+        return
+    tools = getattr(agent, "_tools", None)
+    if not tools:
+        return
+    curl_home = str(Path(workdir).resolve())
+    for tool in tools:
+        if getattr(tool, "name", None) != "bash":
+            continue
+        tool.operations = OutboundBashOperations(curl_home=curl_home)
+        break
 
 
 async def _run_turn_core(
@@ -195,6 +269,10 @@ async def _run_turn_core(
         proxy_addr=outbound_proxy_addr,
         proxy_api_key=outbound_proxy_api_key,
     )
+    if saved_proxy_env:
+        os.environ.update(
+            {key: value for key, value in saved_proxy_env.items() if value}
+        )
 
     with provider_env(model):
         queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
@@ -252,12 +330,14 @@ async def _run_turn_core(
                 outbound_proxy_api_key=outbound_proxy_api_key,
             ),
         )
-        await setup_mcp_runtime_for_turn(
-            mcp_servers=mcp_servers_from_agent(agent),
+        mcp_servers = mcp_servers_from_agent(agent)
+        mcp_runtime = await discover_mcp_tools(
+            mcp_servers=mcp_servers,
             session_id=session_id,
             proxy_base=mcp_proxy_base,
             proxy_api_key=mcp_proxy_api_key,
         )
+        configure_mcp_runtime(mcp_runtime if mcp_runtime.tools else None)
         try:
             if create_session is not None:
                 result = await create_session(None)
@@ -273,6 +353,7 @@ async def _run_turn_core(
                     extension_paths=tool_cfg.extension_paths,
                 )
             session = result.session
+            _register_mcp_tools_on_session(session, mcp_runtime)
 
             buffer: list[dict[str, Any]] = []
             raw_cursor = 0
@@ -306,9 +387,49 @@ async def _run_turn_core(
             elif hasattr(session, "on"):
                 session.on("event", listener)
 
+            _wire_outbound_bash_proxy(session, workdir)
+
             await session.prompt(prompt)
             if hasattr(session, "wait_for_idle"):
                 await session.wait_for_idle()
+
+            assistant_text = _assistant_text_from_session(session)
+            user_text = latest_user_text(working_events)
+            requested_mcp = set(mcp_tools_named_in_text(user_text))
+            streamed_oma = emit_oma_events(
+                buffer,
+                seen_agent_text=seen_agent_text,
+            )
+            fallback_tool_events: list[dict[str, Any]] = []
+            pending_mcp = requested_mcp & {
+                getattr(tool, "name", "")
+                for tool in mcp_runtime.tools
+                if getattr(tool, "name", "")
+            }
+            need_mcp_fallback = bool(pending_mcp) and not _events_include_tool_result(
+                streamed_oma,
+                pending_mcp,
+            )
+
+            if assistant_text and "$$" in assistant_text:
+                fallback_tool_events = await execute_text_tool_calls(
+                    session,
+                    assistant_text=assistant_text,
+                    fallback_tools=mcp_runtime.tools,
+                )
+                for ev in fallback_tool_events:
+                    queue.put_nowait(ev)
+
+            if need_mcp_fallback and not _events_include_tool_result(
+                fallback_tool_events,
+                pending_mcp,
+            ):
+                for ev in await execute_prompted_mcp_tools(
+                    session,
+                    prompt_text=user_text or prompt,
+                    mcp_runtime=mcp_runtime,
+                ):
+                    queue.put_nowait(ev)
 
             if not oma_events:
                 fallback = emit_oma_events(
