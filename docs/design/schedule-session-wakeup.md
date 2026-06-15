@@ -247,7 +247,8 @@ sequenceDiagram
 | 变量 | 说明 |
 |------|------|
 | `OMA_INTERNAL_SECRET` | Internal API 与 harness schedule client 共享密钥 |
-| `OMA_PUBLIC_URL` | 传给 harness 的 `platform_base`（internal 路由同源） |
+| `OMA_HARNESS_PLATFORM_BASE` | 传给 harness 的 `platform_base` / `mcp_proxy_base`（Docker 内用 `http://oma-platform:8787`） |
+| `OMA_PUBLIC_URL` | 对外 URL（webhook/OAuth）；未设时回退 `PUBLIC_BASE_URL` |
 | `OMA_WAKEUP_WORKER_DISABLED` | 设为 `1` 关闭 Worker（仅可手动/API 测存储，不会自动触发） |
 | `OMA_WAKEUP_WORKER_INTERVAL` | Worker tick 间隔，如 `2s`、`10s` |
 

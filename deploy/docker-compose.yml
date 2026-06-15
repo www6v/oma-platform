@@ -18,6 +18,8 @@ services:
       DATABASE_PATH: /data/oma.db
       SANDBOX_WORKDIR: /data/sandboxes
       HARNESS_URL: http://oma-harness:8090
+      # Harness schedule/MCP tools call oma-server from the sidecar container.
+      OMA_HARNESS_PLATFORM_BASE: http://oma-platform:8787
       CONSOLE_DIR: /app/console
       AUTH_UPSTREAM_URL: http://host.docker.internal:8788
     volumes:

@@ -136,7 +136,17 @@ func main() {
 		harnessClient = &harness.FakeClient{}
 	}
 
-	publicURL := envOrDefault("OMA_PUBLIC_URL", "http://127.0.0.1:8787")
+	publicURL := envOrDefault(
+		"OMA_PUBLIC_URL",
+		envOrDefault("PUBLIC_BASE_URL", "http://127.0.0.1:8787"),
+	)
+	// Harness-side tools (schedule, MCP proxy) call back into oma-server over
+	// HTTP. In Docker the sidecar cannot reach localhost on the host; use the
+	// in-compose service name (see deploy/docker-compose.yml).
+	harnessPlatformBase := envOrDefault(
+		"OMA_HARNESS_PLATFORM_BASE",
+		publicURL,
+	)
 	outboundAddr := envOrDefault("OMA_OUTBOUND_PROXY_ADDR", ":8790")
 	internalSecret := os.Getenv("OMA_INTERNAL_SECRET")
 	resourceResolver := &harness.ResourceResolver{
@@ -149,8 +159,8 @@ func main() {
 		sessions, agents, events, pending, hub, registry, workdirs,
 		sessionOutputs, harnessClient, modelResolver, resourceResolver,
 		wakeups,
-		publicURL, apiKey,
-		publicURL, internalSecret,
+		harnessPlatformBase, apiKey,
+		harnessPlatformBase, internalSecret,
 		outbound.HostForHarness(outboundAddr), apiKey,
 	)
 	if os.Getenv("OMA_WAKEUP_WORKER_DISABLED") != "1" {
