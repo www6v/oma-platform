@@ -176,8 +176,6 @@ sys.exit(2)' <<<"${events}"
 
 wait_for_bash_uname_chain() {
   local sid="$1"
-  local uname_s="$2"
-  local uname_m="$3"
   local deadline=$((SECONDS + SMOKE_TOOL_TIMEOUT_SEC))
   local events=""
   local status=0
@@ -190,12 +188,12 @@ wait_for_bash_uname_chain() {
     )"
     status=0
     chain_err="$(
-      python3 -c 'import json,sys
-uname_s=sys.argv[1]
-uname_m=sys.argv[2]
+      python3 -c 'import json,re,sys
 events=json.load(sys.stdin)["data"]
 bash_use=False
 tool_ok=False
+uname_cmd=re.compile(r"uname\b", re.I)
+kernel_re=re.compile(r"(Linux|Darwin|FreeBSD|OpenBSD|NetBSD|GNU)")
 for evt in events:
     if evt.get("type") == "session.error":
         msg=evt.get("message") or evt.get("error") or "session.error"
@@ -204,7 +202,9 @@ for evt in events:
     if evt.get("id") == "evt_fake":
         sys.exit(1)
     if evt.get("type") == "agent.tool_use" and evt.get("name") == "bash":
-        bash_use=True
+        cmd=str((evt.get("input") or {}).get("command") or "")
+        if uname_cmd.search(cmd):
+            bash_use=True
     if evt.get("type") != "agent.tool_result":
         continue
     text=""
@@ -214,11 +214,13 @@ for evt in events:
     if "Working directory does not exist" in text:
         print("bash workdir missing — restart platform after SANDBOX_WORKDIR abs fix")
         sys.exit(4)
-    if uname_s in text and uname_m in text:
+    # Harness runs on the remote stack when PLATFORM_URL is remote; match
+    # uname -a shape instead of this machine'\''s uname -s / uname -m.
+    if len(text.strip()) >= 16 and kernel_re.search(text):
         tool_ok=True
 if bash_use and tool_ok:
     sys.exit(0)
-sys.exit(2)' "${uname_s}" "${uname_m}" <<<"${events}"
+sys.exit(2)' <<<"${events}"
     )" || status=$?
 
     if [[ "${status}" -eq 0 ]]; then
@@ -649,9 +651,11 @@ if [[ "${SMOKE_SKIP_TOOLS}" == "1" ]]; then
 fi
 
 UNAME_LINE="$(uname -a)"
-UNAME_SYS="$(uname -s)"
-UNAME_MACHINE="$(uname -m)"
-echo "==> tool chain smoke: bash + uname (local=${UNAME_LINE})"
+if _e2e_is_local_target; then
+  echo "==> tool chain smoke: bash + uname (local=${UNAME_LINE})"
+else
+  echo "==> tool chain smoke: bash + uname (remote harness; local=${UNAME_LINE})"
+fi
 
 echo "==> send message (Run: uname -a)"
 TOOL_RESP="$(
@@ -661,7 +665,7 @@ TOOL_RESP="$(
 echo "${TOOL_RESP}"
 
 echo "==> wait for bash tool_use + uname output (timeout=${SMOKE_TOOL_TIMEOUT_SEC}s)"
-TOOL_EVENTS="$(wait_for_bash_uname_chain "${SID}" "${UNAME_SYS}" "${UNAME_MACHINE}")"
+TOOL_EVENTS="$(wait_for_bash_uname_chain "${SID}")"
 echo "${TOOL_EVENTS}"
 echo ""
 

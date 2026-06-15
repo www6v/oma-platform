@@ -15,6 +15,11 @@ fi
 # shellcheck disable=SC1091
 source "${ROOT_DIR}/scripts/e2e/common.sh"
 
+if ! _e2e_is_local_target; then
+  echo "SKIP: mock MCP upstream binds 127.0.0.1; remote ${PLATFORM_URL} cannot reach it"
+  exit 0
+fi
+
 _e2e_ensure_model_card
 
 export OMA_API_KEY="${OMA_API_KEY:-dev-key}"

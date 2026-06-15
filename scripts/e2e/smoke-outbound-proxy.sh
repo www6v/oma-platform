@@ -15,17 +15,14 @@ fi
 # shellcheck disable=SC1091
 source "${ROOT_DIR}/scripts/e2e/common.sh"
 
+_e2e_pin_local_outbound_stack
+
 export OMA_API_KEY="${OMA_API_KEY:-dev-key}"
 export OUTBOUND_MOCK_PORT="${OUTBOUND_MOCK_PORT:-9888}"
 export MOCK_OUTBOUND_TOKEN="${MOCK_OUTBOUND_TOKEN:-outbound-smoke-token}"
 export OUTBOUND_MOCK_URL="http://127.0.0.1:${OUTBOUND_MOCK_PORT}"
 
-OUTBOUND_ADDR="${OMA_OUTBOUND_PROXY_ADDR:-:8790}"
-if [[ "${OUTBOUND_ADDR}" == :* ]]; then
-  OUTBOUND_HOST="127.0.0.1${OUTBOUND_ADDR}"
-else
-  OUTBOUND_HOST="${OUTBOUND_ADDR}"
-fi
+OUTBOUND_HOST="$(_e2e_outbound_host)"
 
 API_HEADERS=(-H "x-api-key: ${OMA_API_KEY}")
 
@@ -55,9 +52,7 @@ echo "==> preflight: platform + outbound proxy on ${OUTBOUND_HOST}"
 curl -sf "${PLATFORM_URL}/health" >/dev/null
 
 echo "==> mock upstream ${OUTBOUND_MOCK_URL}"
-python3 "${ROOT_DIR}/scripts/e2e/mock-outbound-server.py" &
-MOCK_PID=$!
-sleep 0.5
+_e2e_start_outbound_mock "${ROOT_DIR}"
 
 echo "==> vault + credential"
 VAULT_ID="$(

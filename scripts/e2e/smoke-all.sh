@@ -139,8 +139,13 @@ run_core_suite() {
 
   _e2e_ensure_model_card
 
-  run_case "MCP proxy + harness tools" \
-    run_shell smoke-mcp-e2e.sh
+  if is_local_target; then
+    run_case "MCP proxy + harness tools" \
+      run_shell smoke-mcp-e2e.sh
+  else
+    skip_case "MCP proxy + harness tools" \
+      "mock MCP binds 127.0.0.1; remote ${PLATFORM_URL} cannot reach it"
+  fi
 
   run_case "sub-agent live harness" \
     run_shell smoke-subagent-live-e2e.sh
