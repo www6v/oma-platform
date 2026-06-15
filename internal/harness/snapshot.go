@@ -71,7 +71,7 @@ func ResolveSubAgents(
 			return nil, err
 		}
 		if agent == nil {
-			continue
+			return nil, fmt.Errorf("callable agent %q not found", ref.ID)
 		}
 		out[ref.ID] = AgentSnapshotFromConfig(agent.AgentConfig)
 	}

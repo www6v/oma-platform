@@ -61,6 +61,33 @@ def test_setup_outbound_does_not_mutate_process_proxy_env(
         assert "CURL_HOME" not in os.environ
 
 
+def test_wire_outbound_bash_proxy_sets_bash_operations(tmp_path: Path) -> None:
+    from pi_coding_agent.tools.registry import create_tools_for_names
+
+    saved = setup_outbound_proxy_for_turn(
+        workdir=str(tmp_path),
+        session_id="sess-abc",
+        proxy_addr="127.0.0.1:8790",
+        proxy_api_key="platform-key",
+    )
+    try:
+        bash = create_tools_for_names(str(tmp_path.resolve()), ["bash"])[0]
+
+        class FakeAgent:
+            _tools = [bash]
+
+        class FakeSession:
+            _agent = FakeAgent()
+
+        from oma_adapter.turn import _wire_outbound_bash_proxy
+
+        _wire_outbound_bash_proxy(FakeSession(), str(tmp_path))
+        assert isinstance(bash.operations, OutboundBashOperations)
+        assert bash.operations.curl_home == str(tmp_path.resolve())
+    finally:
+        clear_outbound_proxy_for_turn(saved)
+
+
 @pytest.mark.asyncio
 async def test_outbound_bash_operations_sets_curl_home(tmp_path: Path) -> None:
     (tmp_path / ".curlrc").write_text('proxy = "http://127.0.0.1:8790"\n', encoding="utf-8")

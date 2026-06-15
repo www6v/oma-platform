@@ -159,6 +159,12 @@ def _events_include_tool_result(
     return False
 
 
+def _resolve_turn_workdir(workdir: str) -> str:
+    """Normalize sandbox path so harness and platform agree on .curlrc location."""
+    resolved = Path(workdir).expanduser().resolve()
+    return str(resolved)
+
+
 async def _default_create_session(
     *,
     workdir: str,
@@ -168,6 +174,7 @@ async def _default_create_session(
     system_prompt: str | None,
     builtin_tools: list[str],
     extension_paths: list[str],
+    outbound_curl_home: str | None = None,
 ) -> Any:
     from pi_coding_agent.sdk import CreateAgentSessionOptions, create_agent_session
 
@@ -181,26 +188,31 @@ async def _default_create_session(
         extension_paths=extension_paths or None,
         in_memory=True,
     )
-    return await create_agent_session(opts)
+    result = await create_agent_session(opts)
+    if outbound_curl_home:
+        _wire_outbound_bash_proxy(result.session, outbound_curl_home)
+    return result
 
 
 def _wire_outbound_bash_proxy(session: Any, workdir: str) -> None:
     """Ensure bash subprocesses read sandbox .curlrc via CURL_HOME."""
-    curlrc = Path(workdir) / ".curlrc"
+    curl_home = _resolve_turn_workdir(workdir)
+    curlrc = Path(curl_home) / ".curlrc"
     if not curlrc.is_file():
         return
     agent = getattr(session, "_agent", None)
+    if agent is None and hasattr(session, "agent"):
+        agent = session.agent
     if agent is None:
         return
     tools = getattr(agent, "_tools", None)
     if not tools:
         return
-    curl_home = str(Path(workdir).resolve())
+    ops = OutboundBashOperations(curl_home=curl_home)
     for tool in tools:
         if getattr(tool, "name", None) != "bash":
             continue
-        tool.operations = OutboundBashOperations(curl_home=curl_home)
-        break
+        tool.operations = ops
 
 
 async def _run_turn_core(
@@ -256,6 +268,7 @@ async def _run_turn_core(
         oma_provider=model.provider if model is not None else None,
     )
 
+    workdir = _resolve_turn_workdir(workdir)
     patch_path_utils(workdir)
     saved_env = mount_resources(workdir, resources)
 
@@ -269,10 +282,7 @@ async def _run_turn_core(
         proxy_addr=outbound_proxy_addr,
         proxy_api_key=outbound_proxy_api_key,
     )
-    if saved_proxy_env:
-        os.environ.update(
-            {key: value for key, value in saved_proxy_env.items() if value}
-        )
+    outbound_curl_home = saved_proxy_env.get("CURL_HOME")
 
     with provider_env(model):
         queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
@@ -351,6 +361,7 @@ async def _run_turn_core(
                     system_prompt=compose_system_prompt(agent.resolved_system_prompt),
                     builtin_tools=tool_cfg.builtin_tools,
                     extension_paths=tool_cfg.extension_paths,
+                    outbound_curl_home=outbound_curl_home,
                 )
             session = result.session
             _register_mcp_tools_on_session(session, mcp_runtime)

@@ -27,17 +27,11 @@ OUTBOUND_HOST="$(_e2e_outbound_host)"
 API_HEADERS=(-H "x-api-key: ${OMA_API_KEY}")
 
 json_field() {
-  local field="$1"
-  python3 -c 'import json,sys; print(json.load(sys.stdin)[sys.argv[1]])' "$field"
+  _e2e_json_field "$1"
 }
 
 api_post_json() {
-  local path="$1"
-  local body="$2"
-  curl -sf -X POST "${PLATFORM_URL}${path}" \
-    -H "content-type: application/json" \
-    "${API_HEADERS[@]}" \
-    -d "${body}"
+  _e2e_api_post_json "$1" "$2"
 }
 
 cleanup() {

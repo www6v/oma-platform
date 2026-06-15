@@ -137,6 +137,50 @@ _e2e_start_outbound_mock() {
   sleep 0.5
 }
 
+_e2e_json_field() {
+  local field="$1"
+  python3 -c 'import json,sys; print(json.load(sys.stdin)[sys.argv[1]])' "$field"
+}
+
+# POST JSON with retry on session-create rate limits (429).
+_e2e_api_post_json() {
+  local path="$1"
+  local body="$2"
+  local attempt=0
+  local max_attempts=15
+  local resp http_code api_key
+
+  api_key="${OMA_API_KEY:-dev-key}"
+  while (( attempt < max_attempts )); do
+    resp="$(
+      curl -s -w "\n__HTTP__%{http_code}" -X POST "${PLATFORM_URL}${path}" \
+        -H "content-type: application/json" \
+        -H "x-api-key: ${api_key}" \
+        -d "${body}"
+    )"
+    http_code="${resp##*__HTTP__}"
+    resp="${resp%__HTTP__*}"
+
+    if [[ "${http_code}" == "429" ]]; then
+      attempt=$((attempt + 1))
+      echo "==> rate limited on POST ${path}, retry ${attempt}/${max_attempts} in 5s" >&2
+      sleep 5
+      continue
+    fi
+
+    if [[ "${http_code}" -lt 200 || "${http_code}" -ge 300 ]]; then
+      echo "POST ${path} failed HTTP ${http_code}: ${resp}" >&2
+      return 1
+    fi
+
+    printf '%s' "${resp}"
+    return 0
+  done
+
+  echo "POST ${path} failed after ${max_attempts} retries (rate limit)" >&2
+  return 1
+}
+
 # Ensure a default model card exists for console UI tests (needs ANTHROPIC_API_KEY).
 _e2e_ensure_model_card() {
   if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
