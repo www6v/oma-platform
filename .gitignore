@@ -1,5 +1,6 @@
 /data/
 .env
+scripts/e2e/target.env
 *.db
 __pycache__/
 *.py[cod]

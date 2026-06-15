@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# T13 end-to-end: resource mounter + outcome evaluator (P2-3 / P2-4).
+# E2E: resource mounter + outcome evaluator (P2-3 / P2-4).
 #
 # Runs:
 #   - Go resource resolver unit test
@@ -12,14 +12,14 @@
 #   ./scripts/e2e/smoke-resource-live-e2e.sh
 #
 # Usage:
-#   ./scripts/e2e/smoke-t13-e2e.sh
+#   ./scripts/e2e/smoke-resource-outcome-e2e.sh
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT_DIR}"
 
 log() {
-  echo "[t13-smoke] $*"
+  echo "[resource-outcome] $*"
 }
 
 log "Go resource resolver"
@@ -50,4 +50,4 @@ log "Python resource mounter + outcome evaluator"
   fi
 )
 
-log "PASS: T13 resource mounter + outcome evaluator checks completed"
+log "PASS: resource mounter + outcome evaluator checks completed"

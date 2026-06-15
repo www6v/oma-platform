@@ -24,12 +24,14 @@ if [[ -f "${ROOT_DIR}/.env" ]]; then
   set +a
 fi
 
+# shellcheck disable=SC1091
+source "${ROOT_DIR}/scripts/e2e/common.sh"
+
 export OMA_API_KEY="${OMA_API_KEY:-dev-key}"
 export OMA_FAKE_HARNESS=0
 export SMOKE_MODEL="${SMOKE_MODEL:-claude-sonnet-4-6}"
 export SMOKE_TOOL_TIMEOUT_SEC="${SMOKE_TOOL_TIMEOUT_SEC:-180}"
 export SMOKE_POLL_SEC="${SMOKE_POLL_SEC:-2}"
-export HARNESS_URL="${HARNESS_URL:-http://127.0.0.1:8090}"
 export NO_PROXY="${NO_PROXY:-localhost,127.0.0.1,::1,*}"
 export no_proxy="${no_proxy:-$NO_PROXY}"
 unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy ALL_PROXY all_proxy || true

@@ -36,19 +36,15 @@ if [[ -f "${ROOT_DIR}/.env" ]]; then
   unset _saved_anthropic_key
 fi
 
+# shellcheck disable=SC1091
+source "${ROOT_DIR}/scripts/e2e/common.sh"
+
 export OMA_API_KEY="${OMA_API_KEY:-dev-key}"
 export OMA_INTERNAL_SECRET="${OMA_INTERNAL_SECRET:-dev-internal-secret}"
 export RUNTIME_ACP="${RUNTIME_ACP:-1}"
 export OMA_PROFILE="${OMA_PROFILE:-local}"
 export ACP_AGENT_ID="${ACP_AGENT_ID:-claude-acp}"
 export ACP_TIMEOUT_MS="${ACP_TIMEOUT_MS:-180000}"
-
-LISTEN_ADDR="${OMA_LISTEN_ADDR:-:8787}"
-if [[ "${LISTEN_ADDR}" == :* ]]; then
-  PLATFORM_URL="http://127.0.0.1${LISTEN_ADDR}"
-else
-  PLATFORM_URL="http://${LISTEN_ADDR}"
-fi
 
 USER_HEADERS=(
   -H "x-api-key: ${OMA_API_KEY}"

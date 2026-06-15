@@ -13,7 +13,15 @@ import { test, expect, type Page } from "@playwright/test";
  *     --config=playwright-web-search.config.ts
  */
 
-const API_BASE = process.env.OMA_API_URL || "http://localhost:8787";
+const API_BASE =
+  process.env.OMA_API_URL ||
+  process.env.PLATFORM_URL ||
+  "http://localhost:8787";
+const CONSOLE_BASE =
+  process.env.CONSOLE_URL ||
+  process.env.PLATFORM_URL ||
+  process.env.OMA_API_URL ||
+  "http://localhost:8787";
 const TEST_EMAIL = `web-search-${Date.now()}@test.openma.dev`;
 const TEST_PASSWORD = "e2e-websearch-pass-123";
 const TEST_NAME = "Web Search E2E";

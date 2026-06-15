@@ -4,7 +4,17 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-OMA_BASE="${OMA_BASE:-http://127.0.0.1:8787}"
+
+if [[ -f "${ROOT_DIR}/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "${ROOT_DIR}/.env"
+  set +a
+fi
+
+# shellcheck disable=SC1091
+source "${ROOT_DIR}/scripts/e2e/common.sh"
+
 OMA_API_KEY="${OMA_API_KEY:-dev-key}"
 
 export OMA_BASE OMA_API_KEY

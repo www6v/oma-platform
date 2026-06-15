@@ -12,7 +12,9 @@ if [[ -f "${ROOT}/.env" ]]; then
   set +a
 fi
 
-PLATFORM_URL="${PLATFORM_URL:-http://127.0.0.1:8787}"
+# shellcheck disable=SC1091
+source "${ROOT}/scripts/e2e/common.sh"
+
 INTERNAL_SECRET="${OMA_INTERNAL_SECRET:-dev-internal-secret}"
 API_KEY="${OMA_API_KEY:-dev-key}"
 

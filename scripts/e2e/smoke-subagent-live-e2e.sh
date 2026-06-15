@@ -21,19 +21,14 @@ if [[ -f "${ROOT_DIR}/.env" ]]; then
   set +a
 fi
 
+# shellcheck disable=SC1091
+source "${ROOT_DIR}/scripts/e2e/common.sh"
+
 export OMA_API_KEY="${OMA_API_KEY:-dev-key}"
 export OMA_FAKE_HARNESS="${OMA_FAKE_HARNESS:-0}"
 export SMOKE_MODEL="${SMOKE_MODEL:-claude-sonnet-4-6}"
 export SMOKE_TOOL_TIMEOUT_SEC="${SMOKE_TOOL_TIMEOUT_SEC:-180}"
 export SMOKE_POLL_SEC="${SMOKE_POLL_SEC:-2}"
-export HARNESS_URL="${HARNESS_URL:-http://127.0.0.1:8090}"
-
-LISTEN_ADDR="${OMA_LISTEN_ADDR:-:8787}"
-if [[ "${LISTEN_ADDR}" == :* ]]; then
-  PLATFORM_URL="http://127.0.0.1${LISTEN_ADDR}"
-else
-  PLATFORM_URL="http://${LISTEN_ADDR}"
-fi
 
 API_HEADERS=(-H "x-api-key: ${OMA_API_KEY}")
 

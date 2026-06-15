@@ -270,7 +270,7 @@ Client / Console
 | Eval + dream workers | `internal/eval/worker.go`, `internal/dream/worker.go` |
 | Session threads + subagent E2E | `session_threads.go`, `subagent_e2e_test.go` |
 | Resource mounter + outcome eval | `resource_mounter.py`, `outcome_evaluator.py` |
-| Internal API T15 | `internal.go`, `smoke-t15-e2e.sh` |
+| Internal API | `internal.go`, `smoke-internal-api-e2e.sh` |
 | Fake harness CI | `OMA_FAKE_HARNESS=1`, `internal/harness/fake.go` |
 | Docker Compose | `docker-compose.yml`（platform + harness） |
 
@@ -304,9 +304,9 @@ Client / Console
 - [x] **T10 (P1)** — Runtime WebSocket attach — `runtime_daemon.go`
 - [x] **T11 (P1)** — Session threads 从 event log 派生 — `session_threads.go`
 - [x] **T12 (P2)** — call_agent + compaction — harness
-- [x] **T13 (P2)** — resource mounter + outcome evaluator — Verify: `./scripts/e2e/smoke-t13-e2e.sh`
-- [x] **T14 (P2)** — Dreams + cost_report — Verify: `./scripts/e2e/smoke-t14-e2e.sh`
-- [x] **T15 (P2)** — `/v1/internal/*` — Verify: `./scripts/e2e/smoke-t15-e2e.sh`
+- [x] **T13 (P2)** — resource mounter + outcome evaluator — Verify: `./scripts/e2e/smoke-resource-outcome-e2e.sh`
+- [x] **T14 (P2)** — Dreams + cost_report — Verify: `./scripts/e2e/smoke-dreams-e2e.sh`
+- [x] **T15 (P2)** — `/v1/internal/*` — Verify: `./scripts/e2e/smoke-internal-api-e2e.sh`
 
 ### 当前 backlog（T16–T22）
 

@@ -6,7 +6,10 @@
  */
 import WebSocket from 'ws'
 
-const platformUrl = process.env.PLATFORM_URL ?? 'http://127.0.0.1:8787'
+const platformUrl =
+  process.env.PLATFORM_URL ??
+  process.env.OMA_API_URL ??
+  'http://127.0.0.1:8787'
 const internalSecret = process.env.OMA_INTERNAL_SECRET ?? 'dev-internal-secret'
 const runtimeId = process.env.RUNTIME_ID
 const sessionId = process.env.SESSION_ID ?? `sess-acp-${Date.now()}`

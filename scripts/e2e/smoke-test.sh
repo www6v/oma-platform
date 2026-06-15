@@ -10,6 +10,9 @@ if [[ -f "${ROOT_DIR}/.env" ]]; then
   set +a
 fi
 
+# shellcheck disable=SC1091
+source "${ROOT_DIR}/scripts/e2e/common.sh"
+
 export OMA_API_KEY="${OMA_API_KEY:-dev-key}"
 export OMA_FAKE_HARNESS="${OMA_FAKE_HARNESS:-0}"
 export SMOKE_MODEL="${SMOKE_MODEL:-claude-sonnet-4-6}"
@@ -21,7 +24,6 @@ export SMOKE_SKIP_TOOLS="${SMOKE_SKIP_TOOLS:-0}"
 export SMOKE_TOOLS_ONLY="${SMOKE_TOOLS_ONLY:-0}"
 export SMOKE_SKIP_P2="${SMOKE_SKIP_P2:-0}"
 export SMOKE_TOOL_TIMEOUT_SEC="${SMOKE_TOOL_TIMEOUT_SEC:-180}"
-export HARNESS_URL="${HARNESS_URL:-http://127.0.0.1:8090}"
 
 DEFAULT_ENV_ID="env-local-default"
 
@@ -30,13 +32,6 @@ if [[ "${SMOKE_SKIP_LLM}" != "1" && "${OMA_FAKE_HARNESS}" == "1" ]]; then
   echo "set OMA_FAKE_HARNESS=0 in .env and restart start-platform.sh + start-harness.sh" >&2
   echo "or set SMOKE_SKIP_LLM=1 to exercise P1 APIs only" >&2
   exit 1
-fi
-
-LISTEN_ADDR="${OMA_LISTEN_ADDR:-:8787}"
-if [[ "${LISTEN_ADDR}" == :* ]]; then
-  PLATFORM_URL="http://127.0.0.1${LISTEN_ADDR}"
-else
-  PLATFORM_URL="http://${LISTEN_ADDR}"
 fi
 
 API_HEADERS=(

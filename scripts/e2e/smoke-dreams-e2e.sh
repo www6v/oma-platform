@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# E2E: dreaming API + cost_report.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -11,13 +12,16 @@ if [[ -f "${ROOT}/.env" ]]; then
   set +a
 fi
 
-BASE_URL="${OMA_BASE_URL:-http://127.0.0.1:8787}"
+# shellcheck disable=SC1091
+source "${ROOT}/scripts/e2e/common.sh"
+
+BASE_URL="${OMA_BASE_URL}"
 API_KEY="${OMA_API_KEY:-dev-key}"
 BETA="managed-agents-2026-04-01,dreaming-2026-04-21"
 
 auth=(-H "Authorization: Bearer ${API_KEY}")
 
-echo "== T14 smoke: dreams + cost_report =="
+echo "== dreams + cost_report smoke =="
 
 if ! curl -sf "${BASE_URL}/health" >/dev/null 2>&1; then
   echo "error: platform not reachable at ${BASE_URL}" >&2
@@ -46,13 +50,13 @@ fi
 
 store_id="$(
   curl -sf "${auth[@]}" -H "Content-Type: application/json" \
-    -d '{"name":"t14-dream-input"}' \
+    -d '{"name":"dream-smoke-input"}' \
     "${BASE_URL}/v1/memory_stores" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])'
 )"
 echo "input memory store: ${store_id}"
 
 curl -sf "${auth[@]}" -H "Content-Type: application/json" \
-  -d '{"path":"/t14/note.md","content":"dream smoke memory"}' \
+  -d '{"path":"/dream-smoke/note.md","content":"dream smoke memory"}' \
   "${BASE_URL}/v1/memory_stores/${store_id}/memories" >/dev/null
 
 dream_id="$(
@@ -90,4 +94,4 @@ report="$(
 )"
 echo "${report}" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get("type")=="cost_report"; print("cost_report ok", d.get("span_count"))'
 
-echo "T14 smoke passed"
+echo "dreams smoke passed"

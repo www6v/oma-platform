@@ -31,8 +31,11 @@ async function main() {
 
   const sessionId = await createSession(agentId, envId);
   console.log("session:", sessionId);
-  const consoleUrl =
-    process.env.CONSOLE_URL || "http://localhost:5173";
+const consoleUrl =
+  process.env.CONSOLE_URL ||
+  process.env.PLATFORM_URL ||
+  process.env.OMA_API_URL ||
+  "http://localhost:5173";
   console.log(`console: ${consoleUrl}/sessions/${sessionId}`);
 
   console.log("sending...");

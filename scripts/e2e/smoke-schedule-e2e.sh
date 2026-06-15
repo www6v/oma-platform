@@ -26,16 +26,12 @@ if [[ -f "${ROOT_DIR}/.env" ]]; then
   set +a
 fi
 
+# shellcheck disable=SC1091
+source "${ROOT_DIR}/scripts/e2e/common.sh"
+
 export OMA_API_KEY="${OMA_API_KEY:-dev-key}"
 
-LISTEN_ADDR="${OMA_LISTEN_ADDR:-:8787}"
-if [[ "${LISTEN_ADDR}" == :* ]]; then
-  DEFAULT_BASE="http://127.0.0.1${LISTEN_ADDR}"
-else
-  DEFAULT_BASE="http://${LISTEN_ADDR}"
-fi
-
-BASE="${1:-${OMA_BASE_URL:-${OMA_API_URL:-$DEFAULT_BASE}}}"
+BASE="${1:-$PLATFORM_URL}"
 INTERNAL_SECRET="${OMA_INTERNAL_SECRET:-}"
 FIRE_TIMEOUT_SEC="${SMOKE_SCHEDULE_FIRE_TIMEOUT_SEC:-30}"
 POLL_SEC="${SMOKE_POLL_SEC:-2}"

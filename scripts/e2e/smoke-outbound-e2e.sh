@@ -12,6 +12,9 @@ if [[ -f "${ROOT_DIR}/.env" ]]; then
   set +a
 fi
 
+# shellcheck disable=SC1091
+source "${ROOT_DIR}/scripts/e2e/common.sh"
+
 export OMA_API_KEY="${OMA_API_KEY:-dev-key}"
 export OMA_FAKE_HARNESS="${OMA_FAKE_HARNESS:-0}"
 export SMOKE_MODEL="${SMOKE_MODEL:-claude-sonnet-4-6}"
@@ -20,13 +23,6 @@ export SMOKE_POLL_SEC="${SMOKE_POLL_SEC:-2}"
 export OUTBOUND_MOCK_PORT="${OUTBOUND_MOCK_PORT:-9888}"
 export MOCK_OUTBOUND_TOKEN="${MOCK_OUTBOUND_TOKEN:-outbound-smoke-token}"
 export OUTBOUND_MOCK_URL="http://127.0.0.1:${OUTBOUND_MOCK_PORT}"
-
-LISTEN_ADDR="${OMA_LISTEN_ADDR:-:8787}"
-if [[ "${LISTEN_ADDR}" == :* ]]; then
-  PLATFORM_URL="http://127.0.0.1${LISTEN_ADDR}"
-else
-  PLATFORM_URL="http://${LISTEN_ADDR}"
-fi
 
 OUTBOUND_ADDR="${OMA_OUTBOUND_PROXY_ADDR:-:8790}"
 if [[ "${OUTBOUND_ADDR}" == :* ]]; then

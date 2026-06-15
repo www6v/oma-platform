@@ -1,6 +1,10 @@
 import { chromium } from 'playwright';
 
-const base = process.env.CONSOLE_URL || 'http://127.0.0.1:8787';
+const base =
+  process.env.CONSOLE_URL ||
+  process.env.PLATFORM_URL ||
+  process.env.OMA_API_URL ||
+  'http://127.0.0.1:8787';
 const apiKey = process.env.OMA_API_KEY || 'dev-key';
 const errors = [];
 
