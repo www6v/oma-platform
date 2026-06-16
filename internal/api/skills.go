@@ -302,10 +302,62 @@ func mountSkillRoutes(r chi.Router, deps skillsDeps) {
 			})
 
 			r.Delete("/", func(w http.ResponseWriter, req *http.Request) {
-				writeError(
-					w, http.StatusNotImplemented,
-					"not implemented in oma-platform MVP",
+				id := chi.URLParam(req, "id")
+				version := chi.URLParam(req, "version")
+				if store.IsBuiltinSkillID(id) {
+					writeError(w, http.StatusNotFound, "Version not found")
+					return
+				}
+				skill, err := deps.Skills.Get(
+					req.Context(), tenantID(req), id,
 				)
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, err.Error())
+					return
+				}
+				if skill == nil {
+					writeError(w, http.StatusNotFound, "Skill not found")
+					return
+				}
+				ver, err := deps.Skills.GetVersion(
+					req.Context(), tenantID(req), id, version,
+				)
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, err.Error())
+					return
+				}
+				if ver == nil {
+					writeError(w, http.StatusNotFound, "Version not found")
+					return
+				}
+				err = deps.Skills.DeleteVersion(
+					req.Context(), tenantID(req), id, version,
+				)
+				if err == store.ErrLastSkillVersion {
+					writeError(
+						w,
+						http.StatusBadRequest,
+						"Cannot delete the last version. Delete the skill instead.",
+					)
+					return
+				}
+				if err == store.ErrNotFound {
+					writeError(w, http.StatusNotFound, "Version not found")
+					return
+				}
+				if err != nil {
+					status := http.StatusBadRequest
+					if strings.Contains(err.Error(), "built-in") {
+						status = http.StatusForbidden
+					}
+					writeError(w, status, err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, map[string]any{
+					"type":    "skill_version_deleted",
+					"id":      id,
+					"version": version,
+				})
 			})
 		})
 	})

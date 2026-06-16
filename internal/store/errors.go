@@ -13,4 +13,6 @@ var (
 	ErrCredentialMaxExceeded = errors.New("max credentials exceeded")
 	// ErrImmutableField is returned when a credential field cannot change.
 	ErrImmutableField = errors.New("immutable field")
+	// ErrLastSkillVersion is returned when deleting the only skill version.
+	ErrLastSkillVersion = errors.New("cannot delete the last skill version")
 )

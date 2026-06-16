@@ -282,6 +282,94 @@ func (r *SkillRepo) ListCustom(
 	return out, rows.Err()
 }
 
+// DeleteVersion removes one custom skill version and its files.
+// The skill must have at least one other version; delete the skill instead
+// when only one version remains.
+func (r *SkillRepo) DeleteVersion(
+	ctx context.Context,
+	tenantID, skillID, version string,
+) error {
+	if IsBuiltinSkillID(skillID) {
+		return fmt.Errorf("cannot delete built-in skill version")
+	}
+	tenantID = tenantOrDefault(tenantID)
+
+	skill, err := r.Get(ctx, tenantID, skillID)
+	if err != nil {
+		return err
+	}
+	if skill == nil {
+		return ErrNotFound
+	}
+
+	ver, err := r.GetVersion(ctx, tenantID, skillID, version)
+	if err != nil {
+		return err
+	}
+	if ver == nil {
+		return ErrNotFound
+	}
+
+	summaries, err := r.ListVersionSummaries(ctx, tenantID, skillID)
+	if err != nil {
+		return err
+	}
+	if len(summaries) <= 1 {
+		return ErrLastSkillVersion
+	}
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	res, err := tx.ExecContext(ctx, `
+		DELETE FROM skill_versions
+		WHERE skill_id = ? AND tenant_id = ? AND version = ?`,
+		skillID, tenantID, version,
+	)
+	if err != nil {
+		return fmt.Errorf("delete skill version: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+
+	if skill.LatestVersion == version {
+		newLatest := ""
+		for _, summary := range summaries {
+			if summary.Version != version {
+				newLatest = summary.Version
+				break
+			}
+		}
+		if newLatest == "" {
+			return ErrLastSkillVersion
+		}
+		now := time.Now().UnixMilli()
+		_, err = tx.ExecContext(ctx, `
+			UPDATE skills
+			SET latest_version = ?, updated_at = ?
+			WHERE id = ? AND tenant_id = ?`,
+			newLatest, now, skillID, tenantID,
+		)
+		if err != nil {
+			return fmt.Errorf("update skill latest_version: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	_ = r.files.DeleteVersionFiles(
+		tenantID, skillID, version, ver.Files,
+	)
+	return nil
+}
+
 // Delete removes a custom skill, all versions, and files.
 func (r *SkillRepo) Delete(
 	ctx context.Context,

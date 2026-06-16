@@ -105,3 +105,135 @@ func TestSkillsBuiltinAndCustom(t *testing.T) {
 		t.Fatalf("delete skill status=%d", rec.Code)
 	}
 }
+
+func TestSkillsVersionDeleteLifecycle(t *testing.T) {
+	handler := testRouter(t)
+
+	createBody := `{
+		"name": "lifecycle-skill",
+		"display_title": "Lifecycle",
+		"files": [
+			{
+				"filename": "SKILL.md",
+				"content": "---\nname: lifecycle-skill\ndescription: v1\n---\n"
+			}
+		]
+	}`
+	req := httptest.NewRequest(
+		http.MethodPost, "/v1/skills",
+		bytes.NewBufferString(createBody),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create skill status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var created map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	skillID, _ := created["id"].(string)
+	firstVersion, _ := created["latest_version"].(string)
+
+	v2Body := `{
+		"files": [
+			{
+				"filename": "SKILL.md",
+				"content": "---\nname: lifecycle-skill\ndescription: v2\n---\n"
+			}
+		]
+	}`
+	req = httptest.NewRequest(
+		http.MethodPost,
+		"/v1/skills/"+skillID+"/versions",
+		bytes.NewBufferString(v2Body),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create version status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(
+		http.MethodGet,
+		"/v1/skills/"+skillID+"/versions",
+		nil,
+	)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list versions status=%d", rec.Code)
+	}
+	var versionsResp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &versionsResp); err != nil {
+		t.Fatal(err)
+	}
+	versions, _ := versionsResp["data"].([]any)
+	if len(versions) != 2 {
+		t.Fatalf("expected 2 versions, got %d", len(versions))
+	}
+
+	req = httptest.NewRequest(
+		http.MethodDelete,
+		"/v1/skills/"+skillID+"/versions/"+firstVersion,
+		nil,
+	)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("delete version status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(
+		http.MethodGet,
+		"/v1/skills/"+skillID,
+		nil,
+	)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get skill status=%d", rec.Code)
+	}
+	var skill map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &skill); err != nil {
+		t.Fatal(err)
+	}
+	if skill["latest_version"] == firstVersion {
+		t.Fatalf("latest_version should advance after deleting %s", firstVersion)
+	}
+
+	req = httptest.NewRequest(
+		http.MethodGet,
+		"/v1/skills/"+skillID+"/versions/"+firstVersion,
+		nil,
+	)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("deleted version get status=%d", rec.Code)
+	}
+
+	req = httptest.NewRequest(
+		http.MethodDelete,
+		"/v1/skills/"+skillID+"/versions/"+skill["latest_version"].(string),
+		nil,
+	)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("delete last version status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(
+		http.MethodDelete,
+		"/v1/skills/"+skillID,
+		nil,
+	)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("delete skill status=%d", rec.Code)
+	}
+}
