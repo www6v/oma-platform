@@ -182,6 +182,15 @@ func isExempt(path string, consoleMounted bool) bool {
 		strings.HasPrefix(path, "/slack/webhook/") {
 		return true
 	}
+	if strings.HasPrefix(path, "/github/oauth/") ||
+		strings.HasPrefix(path, "/slack/oauth/") ||
+		strings.HasPrefix(path, "/github/manifest/") ||
+		strings.HasPrefix(path, "/github-setup/") ||
+		strings.HasPrefix(path, "/slack-setup/") ||
+		path == "/github/publications/credentials" ||
+		path == "/slack/publications/credentials" {
+		return true
+	}
 	if consoleMounted && !strings.HasPrefix(path, "/v1/") {
 		return true
 	}

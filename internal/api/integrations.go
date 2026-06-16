@@ -13,6 +13,7 @@ import (
 	"github.com/open-ma/oma-building/internal/integrations/github"
 	"github.com/open-ma/oma-building/internal/integrations/linear"
 	"github.com/open-ma/oma-building/internal/integrations/slack"
+	"github.com/open-ma/oma-building/internal/installbridge"
 	"github.com/open-ma/oma-building/internal/store"
 )
 
@@ -20,6 +21,8 @@ type integrationsDeps struct {
 	Integrations  *store.IntegrationRepo
 	GatewayOrigin string
 	Linear        *linear.Handler
+	InstallBridge *installbridge.Bridge
+	InstallProxy  *installbridge.Proxy
 }
 
 func mountIntegrationRoutes(r chi.Router, deps integrationsDeps) {
@@ -39,9 +42,7 @@ func mountIntegrationRoutes(r chi.Router, deps integrationsDeps) {
 	} {
 		p := provider
 		r.Route("/"+string(p), func(r chi.Router) {
-			mountProviderIntegrationRoutes(
-				r, p, deps.Integrations, origin, deps.Linear,
-			)
+			mountProviderIntegrationRoutes(r, p, deps)
 		})
 	}
 }
@@ -49,10 +50,11 @@ func mountIntegrationRoutes(r chi.Router, deps integrationsDeps) {
 func mountProviderIntegrationRoutes(
 	r chi.Router,
 	provider store.IntegrationProvider,
-	repo *store.IntegrationRepo,
-	origin string,
-	linearHandler *linear.Handler,
+	deps integrationsDeps,
 ) {
+	repo := deps.Integrations
+	origin := deps.GatewayOrigin
+	linearHandler := deps.Linear
 	r.Use(requireIntegrationUser)
 
 	r.Get("/installations", func(w http.ResponseWriter, req *http.Request) {
@@ -216,10 +218,10 @@ func mountProviderIntegrationRoutes(
 		})
 	})
 
-	r.Post("/start-a1", handleInstallProxyNotConfigured)
-	r.Post("/credentials", handleInstallProxyNotConfigured)
-	r.Post("/handoff-link", handleInstallProxyNotConfigured)
-	r.Post("/personal-token", handleInstallProxyNotConfigured)
+	r.Post("/start-a1", installProxyHandler(deps, provider, "start-a1"))
+	r.Post("/credentials", installProxyHandler(deps, provider, "credentials"))
+	r.Post("/handoff-link", installProxyHandler(deps, provider, "handoff-link"))
+	r.Post("/personal-token", installProxyHandler(deps, provider, "personal-token"))
 
 	r.Post("/publications/{id}/form-token", func(w http.ResponseWriter, req *http.Request) {
 		id := chi.URLParam(req, "id")
@@ -236,7 +238,47 @@ func mountProviderIntegrationRoutes(
 				"publication is '"+pub.Status+"'; cannot reissue form token")
 			return
 		}
-		writeJSON(w, http.StatusOK, providerPublicationShell(provider, *pub, origin))
+		if deps.InstallProxy != nil {
+			var body map[string]any
+			_ = json.NewDecoder(req.Body).Decode(&body)
+			if body == nil {
+				body = map[string]any{}
+			}
+			body["userId"] = userID(req)
+			status, raw, err := deps.InstallProxy.Forward(
+				req.Context(),
+				string(provider)+"/publications/"+id+"/form-token",
+				body, true,
+			)
+			if err != nil {
+				writeError(w, http.StatusBadGateway, err.Error())
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(status)
+			_, _ = w.Write(raw)
+			return
+		}
+		if deps.InstallBridge == nil {
+			handleInstallProxyNotConfigured(w, req)
+			return
+		}
+		if provider == store.ProviderLinear {
+			writeJSON(w, http.StatusOK, providerPublicationShell(provider, *pub, origin))
+			return
+		}
+		var body struct {
+			ReturnURL string `json:"returnUrl"`
+		}
+		_ = json.NewDecoder(req.Body).Decode(&body)
+		out, err := deps.InstallBridge.ReissueFormToken(
+			req.Context(), provider, *pub, userID(req), body.ReturnURL,
+		)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
 	})
 
 	if provider == store.ProviderLinear {
@@ -857,4 +899,198 @@ func integrationsGatewayOrigin() string {
 		return strings.TrimRight(v, "/")
 	}
 	return "http://127.0.0.1:8787"
+}
+
+func newInstallBridgeDeps(
+	integrations *store.IntegrationRepo,
+	origin, internalSecret string,
+) (bridge *installbridge.Bridge, proxy *installbridge.Proxy) {
+	if proxyURL := os.Getenv("INTEGRATIONS_INSTALL_PROXY_URL"); proxyURL != "" {
+		return nil, installbridge.NewProxy(proxyURL, internalSecret)
+	}
+	return installbridge.New(integrations, origin, internalSecret), nil
+}
+
+func installProxyHandler(
+	deps integrationsDeps,
+	provider store.IntegrationProvider,
+	mode string,
+) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		if deps.InstallProxy != nil {
+			var body map[string]any
+			if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid JSON body")
+				return
+			}
+			if body == nil {
+				body = map[string]any{}
+			}
+			needsSecret := mode == "start-a1" || mode == "handoff-link" ||
+				mode == "personal-token"
+			if needsSecret {
+				body["userId"] = userID(req)
+			}
+			status, raw, err := deps.InstallProxy.Forward(
+				req.Context(),
+				string(provider)+"/"+mode,
+				body, needsSecret,
+			)
+			if err != nil {
+				writeError(w, http.StatusBadGateway, err.Error())
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(status)
+			_, _ = w.Write(raw)
+			return
+		}
+		if deps.InstallBridge == nil {
+			handleInstallProxyNotConfigured(w, req)
+			return
+		}
+		switch mode {
+		case "start-a1":
+			handleInstallStartA1(w, req, deps, provider)
+		case "credentials":
+			handleInstallCredentials(w, req, deps, provider)
+		case "handoff-link":
+			handleInstallHandoff(w, req, deps, provider)
+		case "personal-token":
+			handleInstallPersonalToken(w, req, deps, provider)
+		default:
+			writeError(w, http.StatusBadRequest, "unknown install mode")
+		}
+	}
+}
+
+func handleInstallStartA1(
+	w http.ResponseWriter,
+	req *http.Request,
+	deps integrationsDeps,
+	provider store.IntegrationProvider,
+) {
+	if provider == store.ProviderLinear {
+		writeJSON(w, http.StatusGone, map[string]any{
+			"error": "linear_legacy_install_removed",
+			"remediation": "Linear's install flow is now publication-first. " +
+				"POST /v1/integrations/linear/publications instead.",
+		})
+		return
+	}
+	var body struct {
+		AgentID          string  `json:"agentId"`
+		EnvironmentID    string  `json:"environmentId"`
+		PersonaName      string  `json:"personaName"`
+		PersonaAvatarURL *string `json:"personaAvatarUrl"`
+		ReturnURL        string  `json:"returnUrl"`
+	}
+	if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	out, err := deps.InstallBridge.StartA1(req.Context(), provider, installbridge.StartA1Input{
+		UserID:           userID(req),
+		TenantID:         tenantID(req),
+		AgentID:          body.AgentID,
+		EnvironmentID:    body.EnvironmentID,
+		PersonaName:      body.PersonaName,
+		PersonaAvatarURL: body.PersonaAvatarURL,
+		ReturnURL:        body.ReturnURL,
+	})
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func handleInstallCredentials(
+	w http.ResponseWriter,
+	req *http.Request,
+	deps integrationsDeps,
+	provider store.IntegrationProvider,
+) {
+	if provider == store.ProviderLinear {
+		writeJSON(w, http.StatusGone, map[string]any{
+			"error": "linear_legacy_install_removed",
+			"remediation": "Linear's install flow is now publication-first. " +
+				"PATCH /v1/integrations/linear/publications/<id>/credentials instead.",
+		})
+		return
+	}
+	switch provider {
+	case store.ProviderGitHub:
+		var body installbridge.GitHubCredentialsInput
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		out, err := deps.InstallBridge.SubmitGitHubCredentials(req.Context(), body)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+	case store.ProviderSlack:
+		var body installbridge.SlackCredentialsInput
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		out, err := deps.InstallBridge.SubmitSlackCredentials(req.Context(), body)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+	default:
+		writeError(w, http.StatusBadRequest, "unsupported provider")
+	}
+}
+
+func handleInstallHandoff(
+	w http.ResponseWriter,
+	req *http.Request,
+	deps integrationsDeps,
+	provider store.IntegrationProvider,
+) {
+	if provider == store.ProviderLinear {
+		writeJSON(w, http.StatusGone, map[string]any{
+			"error": "linear_handoff_removed",
+			"remediation": "Linear's handoff page is gone with the " +
+				"publication-first refactor — share the callback URL from " +
+				"POST /v1/integrations/linear/publications directly.",
+		})
+		return
+	}
+	var body installbridge.HandoffInput
+	if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	out, err := deps.InstallBridge.CreateHandoffLink(provider, body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func handleInstallPersonalToken(
+	w http.ResponseWriter,
+	req *http.Request,
+	deps integrationsDeps,
+	provider store.IntegrationProvider,
+) {
+	if provider != store.ProviderLinear {
+		writeError(w, http.StatusBadRequest,
+			"personal-token install only supported on linear")
+		return
+	}
+	writeJSON(w, http.StatusGone, map[string]any{
+		"error": "linear_personal_token_removed",
+		"remediation": "Use publication-first OAuth flow via " +
+			"POST /v1/integrations/linear/publications instead.",
+	})
 }

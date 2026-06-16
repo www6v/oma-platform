@@ -65,6 +65,8 @@ type Deps struct {
 	RateLimit           *ratelimit.Gates
 	OAuthState          *oauthflow.StateStore
 	PublicURL           string
+	// InstallBridgeHTTP overrides outbound HTTP for install/OAuth (tests).
+	InstallBridgeHTTP *http.Client
 }
 
 // NewRouter returns the platform HTTP handler.
@@ -218,10 +220,18 @@ func NewRouter(deps Deps) http.Handler {
 	}
 
 	gatewayOrigin := integrationsGatewayOrigin()
+	installBridge, installProxy := newInstallBridgeDeps(
+		deps.Integrations, gatewayOrigin, deps.InternalSecret,
+	)
+	if installBridge != nil && deps.InstallBridgeHTTP != nil {
+		installBridge.HTTP = deps.InstallBridgeHTTP
+	}
 	integrationDeps := integrationsDeps{
 		Integrations:  deps.Integrations,
 		GatewayOrigin: gatewayOrigin,
 		Linear:        deps.LinearGateway,
+		InstallBridge: installBridge,
+		InstallProxy:  installProxy,
 	}
 	r.Route("/v1/integrations", func(r chi.Router) {
 		mountIntegrationRoutes(r, integrationDeps)
@@ -235,6 +245,9 @@ func NewRouter(deps Deps) http.Handler {
 	}
 	if deps.SlackGateway != nil {
 		mountSlackGatewayRoutes(r, slackGatewayDeps{Handler: deps.SlackGateway})
+	}
+	if installBridge != nil {
+		mountInstallGatewayRoutes(r, installGatewayDeps{Bridge: installBridge})
 	}
 
 	mountMemoryStoreRoutes(r, memoryStoresDeps{

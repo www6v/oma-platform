@@ -14,10 +14,15 @@ func mountOmaAliasRoutes(r chi.Router, deps Deps) {
 	}
 	tenant := tenantDeps{Tenants: deps.Tenants}
 	gatewayOrigin := integrationsGatewayOrigin()
+	installBridge, installProxy := newInstallBridgeDeps(
+		deps.Integrations, gatewayOrigin, deps.InternalSecret,
+	)
 	integrationDeps := integrationsDeps{
 		Integrations:  deps.Integrations,
 		GatewayOrigin: gatewayOrigin,
 		Linear:        deps.LinearGateway,
+		InstallBridge: installBridge,
+		InstallProxy:  installProxy,
 	}
 	evalDeps := evalRunsDeps{
 		EvalRuns:     deps.EvalRuns,

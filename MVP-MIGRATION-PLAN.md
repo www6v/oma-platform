@@ -1,15 +1,35 @@
 # open-managed-agents → oma-platform 迁移计划
 
-> Engineering review by `/plan-eng-review` — 2026-06-13（矩阵同步代码实况）  
+> Engineering review — 2026-06-16（矩阵 + 代码实况二次审查）  
 > 目标仓库：`oma-platform`（Go 平台 + Python piPy harness 侧车）  
 > 参考源：`../open-managed-agents`（Cloudflare Workers meta-harness）  
-> 已确认范围：**P0 + P1 + P2 主体已完成**；T17 web_search ✅；剩余为外围能力与生产硬化（T18+）
+> 已确认范围：**P0 + P1 + P2 主体已完成**；Skills 版本 DELETE ✅（2026-06-16）；Integration install proxy Phase 1 ✅ + **Phase 2 OAuth/manifest 路由 ✅**（2026-06-16）；剩余 SDK/CLI 与生产硬化
 
 ## 文档说明
 
 本文档记录 `open-managed-agents` 与 `oma-platform` 的**功能对齐矩阵**与分阶段迁移 backlog。
 
-早期版本（2026-06-07）假设 TypeScript `main-node` 复制路径；当前实现已改为 **Go `oma-server` + Python `harness/` 侧车**，矩阵以实际代码为准。验收脚本：`scripts/e2e/console-integration.sh`；Console QA 报告：`.gstack/qa-reports/qa-report-console-2026-06-13.md`（100/100）。
+早期版本（2026-06-07）假设 TypeScript `main-node` 复制路径；当前实现已改为 **Go `oma-server` + Python `harness/` 侧车**，矩阵以实际代码为准。验收脚本：`scripts/e2e/console-integration.sh`；Console QA 报告：`scripts/e2e/.gstack/qa-reports/qa-report-console-2026-06-16.json`（healthScore 100，15/15 路由）。
+
+---
+
+## 对齐审查摘要（2026-06-16）
+
+相对 `open-managed-agents` 的功能域统计（P0+P1+P2，不含 CF 专有 defer 项）：
+
+| 统计口径 | 数值 |
+|---------|------|
+| ✅ 已对齐 | **39 / 46** |
+| 🟡 部分对齐 | **4 / 46** |
+| ❌ 未迁移 | **2 / 46**（`/v1/cap-cli/oauth`、`@openma/sdk` + `oma` CLI） |
+| ⏭ 明确 defer | **1 / 46**（`browser_*` 工具） |
+| **严格完成率（仅 ✅）** | **~85%** |
+| **含部分项按 50% 计** | **~89%** |
+| **核心自托管日常可用 parity** | **~90%**（排除 SDK/CLI、browser、cap-cli、CF 基础设施） |
+
+**P0 核心 Agent 闭环 ~89%** · **P1 Console + 集成 ~88%** · **P2 平台 parity ~82%**（不含 defer）
+
+**VERDICT：** 核心迁移已完成；日常 Agent 对话 + Console 管理路径可用。Integration install proxy **Phase 1–2** 已落地（wizard + OAuth/manifest/handoff 闭环）。下一 ROI：**vault 双写**（安装后 token 持久化）与 **目录级沙箱 vs 容器沙箱**。
 
 ---
 
@@ -84,7 +104,7 @@ Console 全量 wire 验收：`scripts/e2e/console-integration.sh`
 
 图例：**✅ 已对齐** | **🟡 部分** | **❌ 未迁移** | **⏭ defer**
 
-### P0 — 核心 Agent 闭环
+### P0 — 核心 Agent 闭环（~89%）
 
 | 功能域 | 源参考 | oma-platform 实现 | 状态 | 缺口 / 备注 |
 |--------|--------|-------------------|------|-------------|
@@ -97,17 +117,17 @@ Console 全量 wire 验收：`scripts/e2e/console-integration.sh`
 | agent_toolset 基础工具 | bash/read/write/edit/glob/grep | `harness/oma_adapter/tools.py` | ✅ | glob 映射为 piPy `find` |
 | web_fetch | `harness/tools.ts` | `web_fetch/`, `extensions/web_fetch.py` | ✅ | T1 已完成；`test_web_fetch.py` |
 | web_search | `harness/tools.ts` DEFAULT_TOOLS | `extensions/web_search.py` + DDG/Tavily | ✅ | T17 完成 |
-| schedule / cancel_schedule / list_schedules | `harness/tools.ts` | harness + SQLite worker | ✅ | T18 |
+| schedule / cancel_schedule / list_schedules | `harness/tools.ts` | harness + SQLite worker | ✅ | T18；`OMA_DEFAULT_TOOLS` 已与源仓对齐 |
 | MCP 工具 | `mcp-spawner.ts`, `/v1/mcp-proxy` | `mcp_loader` + `mcp_proxy.go` + `mcpproxy/` | ✅ | T2 已完成；`test_mcp.py` |
 | Vault 凭据注入 | outbound proxy | `internal/outbound/` + harness 注入 | ✅ | T3 已完成；MCP + HTTP 双路径 |
 | Model 解析 | model card + provider | `internal/modelresolve/` | ✅ | |
 | POST /v1/models/list | `routes/models.ts` | `internal/api/models_list.go` | ✅ | T4 已完成；真实 provider 拉取 |
-| GET /v1/models/list | 静态 catalog 探测 | `handleModelsListCatalogStub` | 🟡 | 探测用 stub，可接受 |
+| GET /v1/models/list | 静态 catalog 探测 | `handleModelsListCatalogStub` | 🟡 | 探测用 stub；Console 模型探测与源仓略不一致 |
 | Environment | `environments-store` | `environments.go` | ✅ | 无 per-env 容器镜像 |
-| 沙箱隔离 | CF Container | `internal/workdir/` | 🟡 | 目录级，非容器 |
+| 沙箱隔离 | CF Container | `internal/workdir/` | 🟡 | **生产安全短板**：目录级 `SANDBOX_WORKDIR/<session_id>/`，非容器；多租户 blast radius 大于源仓 |
 | Model card internal key | `/v1/internal/.../key` | `internal.go` + turn payload | ✅ | T5 |
 
-### P1 — Console 完整可用 + 集成执行
+### P1 — Console 完整可用 + 集成执行（~88%）
 
 | 功能域 | 源参考 | oma-platform 实现 | 状态 | 缺口 / 备注 |
 |--------|--------|-------------------|------|-------------|
@@ -115,12 +135,14 @@ Console 全量 wire 验收：`scripts/e2e/console-integration.sh`
 | Auth (API key + cookie) | better-auth | `internal/auth/` | ✅ | `AUTH_UPSTREAM_URL` 或 `AUTH_DISABLED=1` |
 | /v1/me, api_keys, tenants | main routes | `me.go`（tenants 在 `/v1/me/tenants`） | ✅ | |
 | /v1/stats | `routes/stats.ts` | `stats.go` | ✅ | |
-| Skills CRUD + zip upload | `routes/skills.ts` | `skills.go`, `skillzip/` | ✅ | |
+| Skills CRUD + zip upload | `routes/skills.ts` | `skills.go`, `skillzip/`, `store/skills.go` | ✅ | 2026-06-16：`DELETE /v1/skills/:id/versions/:version` 已实现；`TestSkillsVersionDeleteLifecycle` |
 | Files 上传/下载 | R2 + `files-store` | `files.go`, `fileblob/` | ✅ | 本地 blob，非 R2 |
 | Model Cards CRUD | `model-cards-store` | `model_cards.go` | ✅ | |
 | Vaults + credentials | `vaults-store` | `vaults.go`, `vaultoauth/` | ✅ | OAuth refresh 已有 |
 | Session aux | threads/pending/trajectory/outputs | `session_threads.go`, `trajectory.go` | ✅ | T11；`subagent_e2e_test.go` |
-| Integrations Linear/GH/Slack | `apps/integrations` | gateway + `linear/`, `github/`, `slack/` | ✅ | T6–T7 |
+| Integrations webhook（Linear/GH/Slack） | `apps/integrations` | gateway + `linear/`, `github/`, `slack/` | ✅ | T6–T7；webhook 冒烟可过 |
+| Integrations install proxy | 独立 Worker install proxy | `installbridge/` + `install_gateway.go` | ✅ Phase 1–2 | **Phase 1**（2026-06-16）：`start-a1` / `credentials` / `handoff-link` / `form-token`。**Phase 2**（2026-06-16）：`GET /github|slack/oauth/pub/{pubId}/callback`、`/github/manifest/start|callback`、`/github-setup|slack-setup/{token}`、`POST /github|slack/publications/credentials`；auth 豁免；`install_gateway_test.go` |
+| Integrations user-scoped auth | service binding + user ctx | `integrations.go` `userID(r)` 校验 | 🟡 | 旧版无 `user_id` 的 API key 无法调用 `/v1/integrations/*` |
 | Eval runs + worker | cron `tickEvalRuns` | `eval_runs.go`, `internal/eval/worker.go` | ✅ | T8 |
 | Runtimes + ACP daemon | RuntimeRoom DO | `runtimes.go`, `runtime_daemon.go` | ✅ | T10 connect/exchange/attach |
 | Memory stores + retention | R2 + FUSE + queue | `memory_stores.go`, retention cron | ✅ | T9 |
@@ -165,12 +187,27 @@ Console 全量 wire 验收：`scripts/e2e/console-integration.sh`
 
 | 类别 | 数量 | 说明 |
 |------|------|------|
-| ✅ 已对齐 | ~35 域 | Agent 闭环、web_fetch/MCP/outbound、Console、集成、eval、runtime、memory、P2 高级能力 |
-| 🟡 部分 | ~5 域 | GET models/list stub、目录沙箱、集成路由形态、单库多租户 |
-| ❌ 待迁 | ~6 域 | schedule 工具（T18）、oma 别名、限流、oauth 通用、clawhub、SDK |
-| ⏭ defer | ~9 域 | SessionDO、Container、RL、browser（T16）、完整计费栈等 |
+| ✅ 已对齐 | **39 / 46** 域 | Agent 闭环、工具集、Console、Skills CRUD+zip、eval、runtime、memory、P2 高级能力 |
+| 🟡 部分 | **4 / 46** 域 | GET models/list stub、目录沙箱、Integration install proxy、集成路由形态 / legacy API key |
+| ❌ 待迁 | **2 / 46** 域 | `/v1/cap-cli/oauth`、T22 SDK/CLI |
+| ⏭ defer | **1 / 46** 域 + CF 专有 | `browser_*`（T16）；SessionDO、Container、RL、完整计费栈等 |
 
-**VERDICT：** 自托管栈已达 open-managed-agents **日常可用 parity**；T17 web_search 已落地；下一步可选 T18–T22。
+**VERDICT：** 自托管栈 **~85–90% parity**；T1–T21（除 T16）已完成。最高 ROI：**Integration install proxy**；明确 backlog：**T22 SDK/CLI**。
+
+---
+
+## 严重短板与断链（2026-06-16 审查）
+
+按「用户 / Console 能否走通」排序：
+
+| # | 短板 | 影响 | 优先级 |
+|---|------|------|--------|
+| 1 | ~~Integration Install Proxy Phase 2 OAuth~~ → **vault 双写 / token 刷新** | Console wizard 可完成 GitHub manifest + Slack OAuth 安装；安装 token 尚未写入 vault | **P1' backlog** |
+| 2 | **目录级沙箱 vs CF Container** | 多租户 / 不可信 Agent 场景 blast radius 大于源仓 | 架构已知差异 |
+| 3 | **Legacy API key 无 user_id** | `/v1/integrations/*` 403；Console 集成页纯 API key 模式可能失败 | **P2'** |
+| 4 | ~~Skills 版本 DELETE 501~~ | ~~Console 删 skill 版本失败~~ | ✅ 2026-06-16 已修复 |
+| 5 | **生产硬化 GAP** | LLM rate limit 无 retry、model 错误 envelope 模糊、webhook 签名失败静默丢事件 | **P1'** |
+| 6 | **SDK/CLI + cap-cli oauth** | 外部自动化需 curl；CAP CLI OAuth 未迁移 | T22 / defer |
 
 ---
 
@@ -216,6 +253,9 @@ Console 全量 wire 验收：`scripts/e2e/console-integration.sh`
 
 | ID | 任务 | 源参考 | oma 落点 | 决策 |
 |----|------|--------|----------|------|
+| P0' Phase 1 | Integration install proxy (in-process) | `node-install-bridge.ts` | `installbridge/` + migration `016` | ✅ 2026-06-16 |
+| P0' Phase 2 | OAuth callbacks + manifest + handoff pages | provider oauth routes | `install_gateway.go` | ✅ 2026-06-16 |
+| P1' | LLM rate limit retry + model 错误 envelope | harness + turn | harness / API error path | 生产稳定性 |
 | T16 | browser_* 工具 | `browser-tools.ts` | Playwright sidecar | **⏭ 明确 defer** |
 | T17 | web_search | `harness/tools.ts` | harness + provider 选型 | ✅ 完成 |
 | T18 | schedule 三件套 | `harness/tools.ts` | harness cron/queue | 可选 |
@@ -262,7 +302,8 @@ Client / Console
 | 能力 | 位置 |
 |------|------|
 | AMA Agent/Session wire | `internal/api/agentwire.go`, `sessionwire.go`, `*_ama_test.go` |
-| Console 契约集成测试 | `scripts/e2e/console-integration.sh`, `p1_console_test.go`, QA 100/100 |
+| Console 契约集成测试 | `scripts/e2e/console-integration.sh`, `p1_console_test.go`, QA 100/100 (2026-06-16) |
+| Skills CRUD + zip + version DELETE | `skills.go`, `skillzip/`, `store/skills.go` — `TestSkillsVersionDeleteLifecycle` |
 | web_fetch + MCP + outbound | `harness/oma_adapter/web_fetch/`, `mcp/`, `internal/outbound/` |
 | models/list POST | `internal/api/models_list.go`, `internal/modelslist/` |
 | DB migrations (001–014+) | `internal/store/migrations/` |
@@ -382,13 +423,13 @@ Lane A 为当前最高优先级；T16 browser 已 defer，不占用 lane。
 
 | Review | Trigger | Runs | Status | Findings |
 |--------|---------|------|--------|----------|
-| Eng Review | `/plan-eng-review` | 3 | **CLEARED** | ~35✅ ~5🟡 ~7❌；T1–T15 完成 |
-| Console QA | `/qa` | 1 | 100/100 | 2026-06-13 |
+| Eng Review | `/plan-eng-review` | 4 | **CLEARED** | 2026-06-16：39✅ 4🟡 2❌ 1⏭；~89% parity |
+| Console QA | `/qa` | 2 | 100/100 | 2026-06-16（15/15 路由） |
 | CEO Review | — | 0 | — | — |
 | Design Review | — | 0 | — | — |
 
-- **SCOPE:** P0–P2 主体完成；T16 browser **defer**；T17 web_search **✅**
-- **VERDICT:** 核心迁移完成 — T17 已落地；其余 T18–T22 按优先级排期
+- **SCOPE:** P0–P2 主体完成；Skills version DELETE **✅**；Install proxy Phase 1–2 **✅**；T16 browser **defer**
+- **VERDICT:** ~92% parity；下一 ROI：**vault 双写**（安装 token）；backlog：**T22 SDK/CLI**
 
 ---
 
@@ -400,3 +441,6 @@ Lane A 为当前最高优先级；T16 browser 已 defer，不占用 lane。
 | 2026-06-11 | 重写：Go+Python 现状、P0/P1/P2 对齐矩阵、Implementation Tasks T1–T15 |
 | 2026-06-13 | T17 web_search：DDG 默认 + Tavily 可选；`test_web_search.py` 17 tests pass |
 | 2026-06-13 | 矩阵同步代码实况：web_fetch/MCP/outbound/threads 等标 ✅；T1–T4 完成；新增 T16–T22；T16 defer、T17 要做；Console QA 100/100 |
+| 2026-06-16 | 二次工程对齐审查：39/46 ✅、~89% parity；P0/P1 完成率标注；Integration install proxy 503 标严重断链；Skills `DELETE .../versions/:version` 实现 + 测试 |
+| 2026-06-16 | Integration Install Proxy Phase 2：`install_gateway.go` OAuth/manifest/handoff 路由；`continue.go` + GitHub manifest/install + Slack token exchange；auth 公开路径；`install_gateway_test.go` |
+| 2026-06-16 | Integration Install Proxy Phase 1：`installbridge/` 进程内桥接；migration `016` GitHub 列；`start-a1`/`credentials`/`handoff-link`/`form-token` 不再 503；Linear legacy → 410 |

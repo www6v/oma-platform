@@ -54,6 +54,30 @@ func (m *Machine) SetAppendLocker(locker sync.Locker) {
 	m.appendLocker = locker
 }
 
+// syncDeps copies handler-owned dependencies without resetting turn state.
+func (m *Machine) syncDeps(src *Machine) {
+	if src == nil {
+		return
+	}
+	m.TenantID = src.TenantID
+	m.SessionID = src.SessionID
+	m.Sessions = src.Sessions
+	m.Agents = src.Agents
+	m.Events = src.Events
+	m.Pending = src.Pending
+	m.Hub = src.Hub
+	m.Workdirs = src.Workdirs
+	m.Harness = src.Harness
+	m.Models = src.Models
+	m.Resources = src.Resources
+	m.McpProxyBase = src.McpProxyBase
+	m.McpProxyAPIKey = src.McpProxyAPIKey
+	m.PlatformBase = src.PlatformBase
+	m.InternalSecret = src.InternalSecret
+	m.OutboundProxyAddr = src.OutboundProxyAddr
+	m.OutboundProxyAPIKey = src.OutboundProxyAPIKey
+}
+
 // IsTurnActive reports whether a harness turn is currently running.
 func (m *Machine) IsTurnActive() bool {
 	m.activeTurnM.Lock()

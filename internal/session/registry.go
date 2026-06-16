@@ -32,12 +32,13 @@ func (r *Registry) Remove(sessionID string) {
 }
 
 // Register stores a machine for a session id and starts its turn worker.
+// Re-registering the same session refreshes dependencies on the live
+// Machine without swapping the instance, so in-flight turn state is kept.
 func (r *Registry) Register(sessionID string, machine *Machine) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if lane, ok := r.lanes[sessionID]; ok {
-		lane.machine = machine
-		machine.SetAppendLocker(&lane.appendMu)
+		lane.machine.syncDeps(machine)
 		return
 	}
 	r.lanes[sessionID] = newSessionLane(machine)
