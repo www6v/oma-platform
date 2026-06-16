@@ -156,4 +156,58 @@ Then ask the helper again to read and summarize it.`,
     scorer: all(threadCreated(1), idleNoError()),
     timeoutMs: 600_000,
   },
+
+  // T5.4 — Parallel delegation (Medium)
+  {
+    id: "T5.4-parallel-delegation",
+    category: "multi-agent",
+    difficulty: "medium",
+    description:
+      "Delegate to two sub-agents in the same coordinator turn (parallel tool calls)",
+    agentConfig: {
+      system:
+        "You are a coordinator with two sub-agents. When asked to delegate in parallel, " +
+        "you MUST invoke both call_agent tools in a single model turn — do not wait for " +
+        "the first result before calling the second. Use the exact tool names provided.",
+      tools: DEFAULT_TOOLS,
+    },
+    subAgents: [
+      {
+        name: "alpha",
+        system:
+          "You answer math questions with a single number only. No explanation.",
+        tools: DEFAULT_TOOLS,
+      },
+      {
+        name: "beta",
+        system:
+          "You answer math questions with a single number only. No explanation.",
+        tools: DEFAULT_TOOLS,
+      },
+    ],
+    turns: [
+      {
+        message:
+          "In ONE response, call BOTH sub-agents in parallel: ask alpha 'What is 2+2?' " +
+          "and ask beta 'What is 3+3?'. After both return, write /workspace/parallel.txt " +
+          "with one line per answer (format: alpha=<n>, beta=<n>).",
+        verify: (events) => {
+          const threads = eventsOfType(events, "session.thread_created");
+          const noError = assertIdleNoError(events);
+
+          if (threads.length < 2) {
+            return {
+              status: "fail",
+              message: `Expected >=2 parallel thread_created events, got ${threads.length}`,
+            };
+          }
+
+          const bash = assertToolUsed(events, "bash");
+          return allOf(bash, noError);
+        },
+      },
+    ],
+    scorer: all(threadCreated(2), toolUsed("bash"), idleNoError()),
+    timeoutMs: 600_000,
+  },
 ];

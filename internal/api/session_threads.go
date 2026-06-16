@@ -58,6 +58,16 @@ func deriveSessionThreads(
 				createdAt:      ev.CreatedAt,
 				status:         "active",
 			}
+		case "session.sub_agent_started":
+			tid := stringField(data, "session_thread_id")
+			if th, ok := threads[tid]; ok {
+				th.status = "running"
+			}
+		case "session.sub_agent_completed", "session.thread_idle":
+			tid := stringField(data, "session_thread_id")
+			if th, ok := threads[tid]; ok {
+				th.status = "idle"
+			}
 		}
 	}
 

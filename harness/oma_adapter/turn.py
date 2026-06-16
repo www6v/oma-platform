@@ -16,6 +16,7 @@ from oma_adapter.call_agent.runtime import (
     CallAgentRuntime,
     clear_call_agent_runtime,
     configure_call_agent,
+    get_call_agent_runtime,
 )
 from oma_adapter.emit import emit_oma_events
 from oma_adapter.platform_guidance import compose_system_prompt
@@ -465,6 +466,13 @@ async def _run_turn_core(
             if not oma_events:
                 msg = "harness turn produced no assistant output"
                 raise RuntimeError(msg)
+
+            call_runtime = get_call_agent_runtime()
+            if call_runtime is not None and call_runtime.background_tasks:
+                await asyncio.gather(
+                    *call_runtime.background_tasks,
+                    return_exceptions=True,
+                )
 
             return TurnResponse(events=oma_events)
         finally:

@@ -140,7 +140,7 @@ func (m *Machine) RunTurn(ctx context.Context) error {
 	}
 
 	subAgents, err := harness.ResolveSubAgents(
-		ctx, m.Agents, m.TenantID, agent.CallableAgents,
+		ctx, m.Agents, m.TenantID, agent,
 	)
 	if err != nil {
 		return m.failTurn(ctx, turnID, err)

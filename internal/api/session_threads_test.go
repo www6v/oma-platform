@@ -104,3 +104,58 @@ func TestDeriveSessionThreadsFromEvents(t *testing.T) {
 		t.Fatalf("third id=%v", threads[2]["id"])
 	}
 }
+
+func TestDeriveSessionThreadsBackgroundStatus(t *testing.T) {
+	t.Parallel()
+	now := int64(1_700_000_000_000)
+	sess := &store.Session{
+		ID:        "sess_test",
+		AgentID:   "agt_main",
+		CreatedAt: now,
+		AgentSnapshot: json.RawMessage(
+			`{"id":"agt_main","name":"MainAgent"}`,
+		),
+	}
+	events := []store.StoredEvent{
+		{
+			Type: "session.thread_created",
+			Payload: json.RawMessage(`{
+				"type": "session.thread_created",
+				"session_thread_id": "sthr_bg",
+				"agent_id": "agt_worker",
+				"agent_name": "Worker",
+				"parent_thread_id": "sthr_primary"
+			}`),
+			CreatedAt: now + 1000,
+		},
+		{
+			Type: "session.sub_agent_started",
+			Payload: json.RawMessage(`{
+				"type": "session.sub_agent_started",
+				"task_id": "sbtask_1",
+				"session_thread_id": "sthr_bg",
+				"agent_id": "agt_worker"
+			}`),
+			CreatedAt: now + 1100,
+		},
+		{
+			Type: "session.sub_agent_completed",
+			Payload: json.RawMessage(`{
+				"type": "session.sub_agent_completed",
+				"task_id": "sbtask_1",
+				"session_thread_id": "sthr_bg",
+				"agent_id": "agt_worker",
+				"summary": "done"
+			}`),
+			CreatedAt: now + 5000,
+		},
+	}
+
+	threads := deriveSessionThreads(sess, events, false)
+	if len(threads) != 2 {
+		t.Fatalf("len=%d want 2", len(threads))
+	}
+	if threads[1]["status"] != "idle" {
+		t.Fatalf("status=%v want idle", threads[1]["status"])
+	}
+}

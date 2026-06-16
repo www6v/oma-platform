@@ -243,7 +243,9 @@ export function deriveSpans(events: Event[]): { spans: Span[]; totalMs: number }
       e.type === "agent.thread_message_received" ||
       e.type === "agent.thread_message" ||
       e.type === "session.thread_created" ||
-      e.type === "session.thread_idle"
+      e.type === "session.thread_idle" ||
+      e.type === "session.sub_agent_started" ||
+      e.type === "session.sub_agent_completed"
     ) {
       pushSpan({ key: `thread-${i}`, family: "thread", label: e.type.replace(/^.*\./, ""), startMs, durationMs: 0 });
     } else if (e.type === "agent.thread_context_compacted") {

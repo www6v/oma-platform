@@ -47,14 +47,19 @@ func AgentSnapshotFromRaw(raw json.RawMessage) (AgentSnapshot, error) {
 	return AgentSnapshotFromConfig(cfg), nil
 }
 
-// ResolveSubAgents loads callable agent configs for a turn.
+// ResolveSubAgents loads callable agent configs for a turn. When the parent
+// agent metadata defines default_subagent_roles, those entries merge with
+// callable_agents and tag each sub-agent with metadata.subagent_role.
 func ResolveSubAgents(
 	ctx context.Context,
 	repo *store.AgentRepo,
 	tenantID string,
-	callable json.RawMessage,
+	parent AgentSnapshot,
 ) (map[string]AgentSnapshot, error) {
-	refs, err := parseCallableAgentRefs(callable)
+	refs, rolesByID, err := mergeCallableWithRoleDefaults(
+		parent.CallableAgents,
+		parent.Metadata,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +78,8 @@ func ResolveSubAgents(
 		if agent == nil {
 			return nil, fmt.Errorf("callable agent %q not found", ref.ID)
 		}
-		out[ref.ID] = AgentSnapshotFromConfig(agent.AgentConfig)
+		snap := AgentSnapshotFromConfig(agent.AgentConfig)
+		out[ref.ID] = tagSubagentRole(snap, rolesByID[ref.ID])
 	}
 	return out, nil
 }

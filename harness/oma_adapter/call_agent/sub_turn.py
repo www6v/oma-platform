@@ -54,10 +54,10 @@ async def run_sub_agent_turn(
     from oma_adapter.call_agent.runtime import (
         CallAgentRuntime,
         configure_call_agent,
-        clear_call_agent_runtime,
+        reset_call_agent_runtime,
     )
 
-    configure_call_agent(
+    token = configure_call_agent(
         CallAgentRuntime(
             session_id=session_id,
             tenant_id=tenant_id,
@@ -94,7 +94,7 @@ async def run_sub_agent_turn(
             on_event=tagged_on_event,
         )
     finally:
-        clear_call_agent_runtime()
+        reset_call_agent_runtime(token)
 
 
 def extract_assistant_text(events: list[dict[str, Any]]) -> str:

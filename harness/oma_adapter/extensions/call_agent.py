@@ -38,7 +38,14 @@ def _make_call_agent_tool(agent_id: str) -> type:
                 "message": {
                     "type": "string",
                     "description": "The task to delegate",
-                }
+                },
+                "run_in_background": {
+                    "type": "boolean",
+                    "description": (
+                        "If true, start the sub-agent asynchronously and "
+                        "return immediately with a task_id"
+                    ),
+                },
             },
             "required": ["message"],
         }
@@ -55,7 +62,12 @@ def _make_call_agent_tool(agent_id: str) -> type:
             message = args.get("message")
             if not isinstance(message, str) or not message.strip():
                 return _tool_result("Error: message is required", is_error=True)
-            text = await delegate_to_agent(agent_id, message.strip())
+            run_in_background = bool(args.get("run_in_background"))
+            text = await delegate_to_agent(
+                agent_id,
+                message.strip(),
+                run_in_background=run_in_background,
+            )
             is_error = text.startswith("Sub-agent error:")
             return _tool_result(text, is_error=is_error)
 
@@ -76,7 +88,14 @@ class GeneralSubagentTool:
             "task": {
                 "type": "string",
                 "description": "The task description for the sub-agent",
-            }
+            },
+            "run_in_background": {
+                "type": "boolean",
+                "description": (
+                    "If true, start the sub-agent asynchronously and "
+                    "return immediately with a task_id"
+                ),
+            },
         },
         "required": ["task"],
     }
@@ -93,7 +112,12 @@ class GeneralSubagentTool:
         task = args.get("task")
         if not isinstance(task, str) or not task.strip():
             return _tool_result("Error: task is required", is_error=True)
-        text = await delegate_to_agent("general", task.strip())
+        run_in_background = bool(args.get("run_in_background"))
+        text = await delegate_to_agent(
+            "general",
+            task.strip(),
+            run_in_background=run_in_background,
+        )
         is_error = text.startswith("Sub-agent error:") or text.startswith(
             "general sub-agent error:"
         )

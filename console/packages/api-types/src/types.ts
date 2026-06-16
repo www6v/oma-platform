@@ -596,6 +596,23 @@ export interface SessionThreadIdleEvent extends EventBase {
   session_thread_id: string;
 }
 
+export interface SessionSubAgentStartedEvent extends EventBase {
+  type: "session.sub_agent_started";
+  task_id: string;
+  session_thread_id: string;
+  agent_id: string;
+  agent_name?: string;
+}
+
+export interface SessionSubAgentCompletedEvent extends EventBase {
+  type: "session.sub_agent_completed";
+  task_id: string;
+  session_thread_id: string;
+  agent_id: string;
+  summary?: string;
+  is_error?: boolean;
+}
+
 // Span events (observability)
 export interface SpanModelRequestStartEvent extends EventBase {
   type: "span.model_request_start";
@@ -840,6 +857,8 @@ export type SessionEvent =
   | SessionOutcomeEvaluatedEvent
   | SessionThreadCreatedEvent
   | SessionThreadIdleEvent
+  | SessionSubAgentStartedEvent
+  | SessionSubAgentCompletedEvent
   | SpanModelRequestStartEvent
   | SpanModelFirstTokenEvent
   | SpanModelRequestEndEvent

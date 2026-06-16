@@ -137,7 +137,12 @@ export function SessionDetail() {
    *  parent_thread_id powers the tree view (coordinator → worker → sub-
    *  worker); missing parents fall back to the primary root. */
   const [threads, setThreads] = useState<
-    Array<{ id: string; agent_name?: string; parent_thread_id?: string | null }>
+    Array<{
+      id: string;
+      agent_name?: string;
+      parent_thread_id?: string | null;
+      status?: "active" | "running" | "idle";
+    }>
   >([]);
   /** Currently-active thread id. Defaults to 'sthr_primary'. Filters
    *  the events array at render time. SSE-driven new threads don't
@@ -420,8 +425,39 @@ export function SessionDetail() {
                   // older sessions (pre-Phase 1) may not — fall back to
                   // primary so the tree stays well-formed.
                   parent_thread_id: tc.parent_thread_id ?? "sthr_primary",
+                  status: "active",
                 },
               ],
+        );
+      }
+    }
+    if (ev.type === "session.sub_agent_started") {
+      const started = ev as {
+        session_thread_id?: string;
+        agent_name?: string;
+      };
+      if (started.session_thread_id) {
+        setThreads((prev) =>
+          prev.map((t) =>
+            t.id === started.session_thread_id
+              ? { ...t, status: "running" as const }
+              : t,
+          ),
+        );
+      }
+    }
+    if (
+      ev.type === "session.sub_agent_completed" ||
+      ev.type === "session.thread_idle"
+    ) {
+      const idle = ev as { session_thread_id?: string };
+      if (idle.session_thread_id && idle.session_thread_id !== "sthr_primary") {
+        setThreads((prev) =>
+          prev.map((t) =>
+            t.id === idle.session_thread_id
+              ? { ...t, status: "idle" as const }
+              : t,
+          ),
         );
       }
     }
@@ -579,10 +615,25 @@ export function SessionDetail() {
     // selector only renders when there's something to switch between
     // — single-thread sessions get zero UI clutter.
     api<{
-      data: Array<{ id: string; agent_name?: string; parent_thread_id?: string | null }>;
+      data: Array<{
+        id: string;
+        agent_name?: string;
+        parent_thread_id?: string | null;
+        status?: "active" | "running" | "idle";
+      }>;
     }>(`/v1/sessions/${id}/threads`)
       .then((res) => {
-        const subThreads = (res.data ?? []).filter((t) => t.id !== "sthr_primary");
+        const subThreads = (res.data ?? [])
+          .filter((t) => t.id !== "sthr_primary")
+          .map((t) => ({
+            id: t.id,
+            agent_name: t.agent_name,
+            parent_thread_id: t.parent_thread_id,
+            status:
+              t.status === "running" || t.status === "idle"
+                ? t.status
+                : ("active" as const),
+          }));
         setThreads(subThreads);
       })
       .catch(() => setThreads([]));
@@ -1300,18 +1351,27 @@ function ThreadTab({
   active,
   onClick,
   depth = 0,
+  status,
 }: {
   label: string;
   active: boolean;
   onClick: () => void;
   depth?: number;
+  status?: "active" | "running" | "idle";
 }) {
+  const statusTitle =
+    status === "running"
+      ? "Sub-agent running"
+      : status === "idle"
+        ? "Sub-agent idle"
+        : undefined;
   return (
     <button
       onClick={onClick}
       role="tab"
       aria-selected={active}
       tabIndex={active ? 0 : -1}
+      title={statusTitle}
       className={`py-1 min-h-11 sm:min-h-0 text-xs whitespace-nowrap rounded-md my-1 transition-colors duration-[var(--dur-quick)] ease-[var(--ease-soft)] flex items-center gap-1 ${
         active
           ? "bg-bg-surface text-info font-semibold"
@@ -1319,11 +1379,13 @@ function ThreadTab({
       }`}
       style={{ paddingLeft: `${0.75 + depth * 0.75}rem`, paddingRight: "0.75rem" }}
     >
-      {/* Tree branch glyph for depth>0 — visual cue that this thread
-          was spawned by another (rather than being a sibling of Main).
-          Plain text (not a unicode-only flair) so it survives in both
-          dark and light themes without needing a separate icon. */}
       {depth > 0 && <span className="text-fg-subtle">└</span>}
+      {status === "running" && (
+        <span
+          className="inline-block h-1.5 w-1.5 rounded-full bg-info animate-pulse"
+          aria-hidden
+        />
+      )}
       <span>{label}</span>
     </button>
   );
@@ -1344,7 +1406,12 @@ function ThreadTree({
   activeThreadId,
   onSelect,
 }: {
-  threads: Array<{ id: string; agent_name?: string; parent_thread_id?: string | null }>;
+  threads: Array<{
+    id: string;
+    agent_name?: string;
+    parent_thread_id?: string | null;
+    status?: "active" | "running" | "idle";
+  }>;
   activeThreadId: string;
   onSelect: (id: string) => void;
 }) {
@@ -1359,13 +1426,21 @@ function ThreadTree({
     arr.push(t);
     childrenOf.set(parent, arr);
   }
-  const flat: Array<{ id: string; label: string; depth: number }> = [
-    { id: "sthr_primary", label: "Main", depth: 0 },
-  ];
+  const flat: Array<{
+    id: string;
+    label: string;
+    depth: number;
+    status?: "active" | "running" | "idle";
+  }> = [{ id: "sthr_primary", label: "Main", depth: 0 }];
   const walk = (parentId: string, depth: number) => {
     const kids = childrenOf.get(parentId) ?? [];
     for (const k of kids) {
-      flat.push({ id: k.id, label: k.agent_name ?? k.id.slice(0, 12), depth });
+      flat.push({
+        id: k.id,
+        label: k.agent_name ?? k.id.slice(0, 12),
+        depth,
+        status: k.status,
+      });
       walk(k.id, depth + 1);
     }
   };
@@ -1386,6 +1461,7 @@ function ThreadTree({
           key={n.id}
           label={n.label}
           depth={isFlat ? 0 : n.depth}
+          status={n.status}
           active={activeThreadId === n.id}
           onClick={() => onSelect(n.id)}
         />

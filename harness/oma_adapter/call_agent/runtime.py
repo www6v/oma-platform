@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
 
@@ -28,20 +30,29 @@ class CallAgentRuntime:
     parent_thread_id: str = "sthr_primary"
     depth: int = 0
     max_depth: int = 3
+    background_tasks: list[asyncio.Task[Any]] = field(
+        default_factory=list,
+        repr=False,
+    )
 
 
-_runtime: CallAgentRuntime | None = None
+_call_agent_runtime: ContextVar[CallAgentRuntime | None] = ContextVar(
+    "call_agent_runtime",
+    default=None,
+)
 
 
-def configure_call_agent(runtime: CallAgentRuntime) -> None:
-    global _runtime
-    _runtime = runtime
+def configure_call_agent(runtime: CallAgentRuntime) -> Token:
+    return _call_agent_runtime.set(runtime)
 
 
 def get_call_agent_runtime() -> CallAgentRuntime | None:
-    return _runtime
+    return _call_agent_runtime.get()
+
+
+def reset_call_agent_runtime(token: Token) -> None:
+    _call_agent_runtime.reset(token)
 
 
 def clear_call_agent_runtime() -> None:
-    global _runtime
-    _runtime = None
+    _call_agent_runtime.set(None)
