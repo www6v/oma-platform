@@ -26,9 +26,9 @@
 
 | 层级 | 路径 | 职责 |
 |------|------|------|
-| **核心包** | `harness/pi_subagent/` | 与宿主无关：工具定义、`delegate_to_agent`、内置 role prompt、事件 helper |
+| **核心包** | `piPy-subagent/packages/pi_subagent/` | 与宿主无关：工具定义、`delegate_to_agent`、内置 role prompt、事件 helper |
 | **宿主桥** | `harness/oma_adapter/subagent_bridge.py` | 把子 turn 接到 OMA 的 `_run_turn_core`（隔离历史、打标 `session_thread_id`） |
-| **piPy 扩展** | `harness/extensions/subagent_extension.py` | 在 session 创建时注册 `call_agent_*` / `general_subagent` |
+| **piPy 扩展** | `piPy-subagent/extensions/subagent_extension.py` | 在 session 创建时注册 `call_agent_*` / `general_subagent` |
 | **Go 解析** | `internal/harness/snapshot.go`、`subagent_roles.go` | `ResolveSubAgents`、角色与 `callable_agents` 合并 |
 
 ## 为什么需要 Sub-agent？
@@ -432,7 +432,7 @@ subAgents, err := harness.ResolveSubAgents(
 
 ### 3. 工具注册（Python）
 
-`oma_adapter/tools.py` 的 `_needs_subagent_extension` 判断是否需要加载 `extensions/subagent_extension.py`：
+`oma_adapter/tools.py` 的 `_needs_subagent_extension` 判断是否需要加载 `piPy-subagent/extensions/subagent_extension.py`（可通过 `PIPY_SUBAGENT_EXTENSION` 覆盖路径）：
 
 - `agent.callable_agents` 非空，或
 - `agent.enable_general_subagent` 为 true
@@ -441,7 +441,7 @@ subAgents, err := harness.ResolveSubAgents(
 
 ### 4. 委派核心（`pi_subagent`）
 
-`harness/pi_subagent/delegate.py` — `delegate_to_agent(agent_id, message, *, run_in_background=False)`：
+`piPy-subagent/packages/pi_subagent/src/pi_subagent/delegate.py` — `delegate_to_agent(agent_id, message, *, run_in_background=False)`：
 
 1. 读取 `SubAgentRuntime`（ContextVar，见下）
 2. 检查 `depth < max_depth`（默认 `max_depth = 3`）
@@ -567,9 +567,9 @@ Harness 将 `Sub-agent error:` 前缀的结果标记为 `is_error=True` 的 tool
 
 | 脚本 / 测试 | 覆盖 |
 |-------------|------|
-| `./scripts/e2e/smoke-subagent-e2e.sh` | Go `SubAgent`/`E2ESubAgent` 测试 + Python `test_subagent_e2e.py`、`test_call_agent.py`、live harness |
-| `./scripts/e2e/smoke-subagent-live-e2e.sh` | 真实 oma-server + harness 委派 |
-| `./scripts/e2e/smoke-subagent-console-e2e.sh` | Playwright：Console 线程 Tab、`call_agent` 可见性 |
+| `./scripts/multi-agent/smoke-subagent-e2e.sh` | Go `SubAgent`/`E2ESubAgent` 测试 + Python `test_subagent_e2e.py`、`test_call_agent.py` |
+| `./scripts/multi-agent/smoke-subagent-live-e2e.sh` | 真实 oma-server + harness 委派 |
+| `./scripts/multi-agent/smoke-subagent-console-e2e.sh` | Playwright：Console 线程 Tab、`call_agent` 可见性 |
 | `internal/api/subagent_e2e_test.go` | 平台 API 端到端 |
 | `harness/tests/test_call_agent.py` | 工具注册、同步/后台委派、role 覆盖 |
 
@@ -593,18 +593,18 @@ Harness 将 `Sub-agent error:` 前缀的结果标记为 `is_error=True` 的 tool
 | 配置解析 | `internal/harness/snapshot.go` | `ResolveSubAgents` |
 | 角色合并 | `internal/harness/subagent_roles.go` | `mergeCallableWithRoleDefaults`、`tagSubagentRole` |
 | 请求 DTO | `internal/harness/client.go` | `TurnRequest.SubAgents` |
-| 工具映射 | `harness/oma_adapter/tools.py` | 加载 subagent 扩展 |
-| piPy 扩展 | `harness/extensions/subagent_extension.py` | 注册 `call_agent_*` / `general_subagent` |
-| 核心委派 | `harness/pi_subagent/delegate.py` | `delegate_to_agent`、thread 生命周期 |
-| 核心工具 | `harness/pi_subagent/tools.py` | `make_call_agent_tool`、`GeneralSubagentTool` |
-| 角色 prompt | `harness/pi_subagent/roles.py` | explore / plan / verify |
-| 运行时 | `harness/pi_subagent/runtime.py` | `SubAgentRuntime`（ContextVar） |
-| 事件 helper | `harness/pi_subagent/events.py` | thread/task id、提取 assistant 文本 |
+| 工具映射 | `harness/oma_adapter/tools.py` | 加载 subagent 扩展（`PIPY_SUBAGENT_EXTENSION`） |
+| piPy 扩展 | `piPy-subagent/extensions/subagent_extension.py` | 注册 `call_agent_*` / `general_subagent` |
+| 核心委派 | `piPy-subagent/.../pi_subagent/delegate.py` | `delegate_to_agent`、thread 生命周期 |
+| 核心工具 | `piPy-subagent/.../pi_subagent/tools.py` | `make_call_agent_tool`、`GeneralSubagentTool` |
+| 角色 prompt | `piPy-subagent/.../pi_subagent/roles.py` | explore / plan / verify |
+| 运行时 | `piPy-subagent/.../pi_subagent/runtime.py` | `SubAgentRuntime`（ContextVar） |
+| 事件 helper | `piPy-subagent/.../pi_subagent/events.py` | thread/task id、提取 assistant 文本 |
 | OMA 宿主桥 | `harness/oma_adapter/subagent_bridge.py` | `_oma_run_sub_turn`、`_strip_delegation_to_oma` |
 | Turn 集成 | `harness/oma_adapter/turn.py` | `build_subagent_runtime`、`background_tasks` 等待 |
-| 类型 | `harness/pi_subagent/types.py`、`oma_adapter/types.py` | `SubAgentSnapshot`、`CallableAgentRef` |
+| 类型 | `piPy-subagent/.../pi_subagent/types.py`、`oma_adapter/types.py` | `SubAgentSnapshot`、`CallableAgentRef` |
 | 线程 API | `internal/api/session_threads.go` | 从事件派生线程列表 |
-| 测试 | `harness/tests/test_call_agent.py`、`test_subagent_e2e.py` | 委派与工具注册 |
+| 测试 | `piPy-subagent/packages/pi_subagent/tests/`、`harness/tests/test_subagent_tools.py` | 委派与工具注册 |
 | E2E | `internal/api/subagent_e2e_test.go` | 平台 API E2E |
 | Agent API | `internal/store/agents.go` | `callable_agents` 字段 |
 | CF 参考 | `open-managed-agents/apps/agent/src/runtime/session-do.ts` | `runSubAgent` |

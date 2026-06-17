@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -59,9 +60,17 @@ SCHEDULE_EXTENSION_PATH = (
 MCP_LOADER_EXTENSION_PATH = (
     Path(__file__).resolve().parent / "extensions" / "mcp_loader.py"
 )
-SUBAGENT_EXTENSION_PATH = (
-    Path(__file__).resolve().parents[1] / "extensions" / "subagent_extension.py"
-)
+def resolve_subagent_extension_path() -> Path:
+    """Resolve piPy subagent extension path (env override or sibling repo)."""
+    explicit = os.environ.get("PIPY_SUBAGENT_EXTENSION")
+    if explicit:
+        return Path(explicit)
+    return (
+        Path(__file__).resolve().parents[3]
+        / "piPy-subagent"
+        / "extensions"
+        / "subagent_extension.py"
+    )
 TEAM_EXTENSION_PATH = (
     Path(__file__).resolve().parents[1] / "extensions" / "team_extension.py"
 )
@@ -131,8 +140,9 @@ def _extension_paths_for_agent(agent: AgentSnapshot) -> list[str]:
     paths = _extension_paths_for_names(_resolved_tool_names(agent))
     if agent.mcp_servers and MCP_LOADER_EXTENSION_PATH.is_file():
         paths.append(str(MCP_LOADER_EXTENSION_PATH))
-    if _needs_subagent_extension(agent) and SUBAGENT_EXTENSION_PATH.is_file():
-        paths.append(str(SUBAGENT_EXTENSION_PATH))
+    subagent_path = resolve_subagent_extension_path()
+    if _needs_subagent_extension(agent) and subagent_path.is_file():
+        paths.append(str(subagent_path))
     if _needs_team_extension(agent) and TEAM_EXTENSION_PATH.is_file():
         paths.append(str(TEAM_EXTENSION_PATH))
     return paths
@@ -151,9 +161,13 @@ def _needs_team_extension(agent: AgentSnapshot) -> bool:
 
 
 def _needs_subagent_extension(agent: AgentSnapshot) -> bool:
+    from pi_subagent.roles_resolve import has_default_subagent_roles
+
     if agent.callable_agents:
         return True
-    return agent.enable_general_subagent
+    if agent.enable_general_subagent:
+        return True
+    return has_default_subagent_roles(agent.metadata)
 
 
 def _pipy_name(raw: str) -> str | None:

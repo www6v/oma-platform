@@ -329,7 +329,7 @@ OMA 的 Agent Team 设计参考 Claude Code 的 Agent Teams / Swarm，做了平�
 | Harness 工具 | `harness/pi_team/tools.py` | piPy 工具定义 |
 | Harness 桥接 | `harness/oma_adapter/team_bridge.py` | 按 Agent 配置启用 |
 | Console | `console/src/pages/session-detail/TeamPanel.tsx` | Team Tab UI |
-| E2E | `scripts/e2e/smoke-team-e2e.sh` | 全链路 smoke |
+| E2E | `scripts/multi-agent/smoke-team-e2e.sh` | 全链路 smoke |
 
 ## 相关文档
 

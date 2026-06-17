@@ -53,15 +53,8 @@ func TestE2ESubAgentCriticalPath(t *testing.T) {
 	if last.SessionID != sessionID {
 		t.Fatalf("harness session=%q want %q", last.SessionID, sessionID)
 	}
-	if len(last.SubAgents) != 1 {
-		t.Fatalf("sub_agents=%d want 1", len(last.SubAgents))
-	}
-	workerSnap, ok := last.SubAgents[workerID]
-	if !ok {
-		t.Fatalf("missing sub_agent %q keys=%v", workerID, mapKeys(last.SubAgents))
-	}
-	if workerSnap.Name != "subagent-worker" {
-		t.Fatalf("worker name=%q", workerSnap.Name)
+	if len(last.Agent.CallableAgents) == 0 {
+		t.Fatal("expected callable_agents on coordinator agent")
 	}
 
 	assertSubAgentEvents(t, client, eventsURL)

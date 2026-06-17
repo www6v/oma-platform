@@ -9,7 +9,7 @@
 | 阶段 | 状态 | 说明 |
 |------|------|------|
 | Phase 1 | ✅ 已 ship | `pi_subagent` 扩展 + Console thread UI + eval + console E2E |
-| Phase 2 | 🚧 进行中 | DB + Go API + `pi_team` + Console Team Tab 已落地；eval 待补 |
+| Phase 2 | 🚧 进行中 | DB + Go API + `pi_team` + Console Team Tab + Eval T13 已落地 |
 | Phase 3+ | ⏳ 未开始 | 任务看板、worktree 隔离 |
 
 ---
@@ -136,7 +136,7 @@ flowchart TB
 
 | 项 | 状态 | 位置 |
 |----|------|------|
-| 并行 sub-turn | ✅ | `harness/pi_subagent/delegate.py` |
+| 并行 sub-turn | ✅ | `piPy-subagent/.../pi_subagent/delegate.py` |
 | 后台 sub-agent + SSE | ✅ | `pi_subagent/delegate.py` + Go events |
 | `max_depth=3` | ✅ | `pi_subagent/runtime.py` |
 | `resume_thread_id` | ⏳ | 未实现 |
@@ -168,11 +168,11 @@ harness/
 | 项 | 状态 |
 |----|------|
 | Thread 树 + sub-agent 状态 | ✅ |
-| Playwright console E2E | ✅ `scripts/e2e/smoke-subagent-console-e2e.sh` |
+| Playwright console E2E | ✅ `scripts/multi-agent/smoke-subagent-console-e2e.sh` |
 
 #### 4.1.4 验收
 
-- ✅ `scripts/e2e/smoke-subagent-e2e.sh`
+- ✅ `scripts/multi-agent/smoke-subagent-e2e.sh`
 - ✅ `test/eval/suites/multi-agent.ts` — `T5.4-parallel-delegation`
 - ✅ `harness/tests/test_call_agent.py` / `test_subagent_e2e.py`
 
@@ -240,7 +240,7 @@ harness/
 |----|------|
 | `internal/store/teams_test.go` | ✅ |
 | `harness/tests/test_team_tools.py` | ✅ |
-| `scripts/e2e/smoke-team-e2e.sh` | ✅ |
+| `scripts/multi-agent/smoke-team-e2e.sh` | ✅ |
 | 全链路 eval + Console E2E | ⏳ |
 | 租户隔离测试 | ⏳ |
 
@@ -422,7 +422,7 @@ Leader 调用工具 `spawn_teammate` 时，Go 侧：
 | T3 | Skills 模板 explore/plan/verify | ⏳ | `data/skills/` |
 | T4 | `metadata.default_subagent_roles` | ✅ | `internal/harness/subagent_roles.go` |
 | T5 | Eval parallel delegation | ✅ | `test/eval/suites/multi-agent.ts` |
-| T6 | Console thread + E2E | ✅ | `scripts/e2e/smoke-subagent-console-e2e.sh` |
+| T6 | Console thread + E2E | ✅ | `scripts/multi-agent/smoke-subagent-console-e2e.sh` |
 
 ### Phase 2
 
@@ -431,11 +431,11 @@ Leader 调用工具 `spawn_teammate` 时，Go 侧：
 | T7 | `017_teams.sql` + TeamRepo | ✅ | `internal/store/` |
 | T8 | Internal + public teams API | ✅ | Python `pi_team/service.py`; Go read-only `ListTeams` + `POST .../events/batch` |
 | T9 | `pi_team` + `team_extension` | ✅ | `harness/pi_team/` |
-| T10 | `smoke-team-e2e.sh` | ✅ | `scripts/e2e/` |
+| T10 | `smoke-team-e2e.sh` | ✅ | `scripts/multi-agent/` |
 | T11 | 长驻 teammate loop | ✅ | `pi_team/loop.py` |
 | T12 | Console Team Tab | ✅ | `console/src/pages/session-detail/TeamPanel.tsx` |
-| T13 | Eval team 协作场景 | ⏳ | `test/eval/suites/multi-agent.ts` |
-| T14 | Console Team E2E | ✅ | `scripts/e2e/smoke-team-console-e2e.sh` |
+| T13 | Eval team 协作场景 | ✅ | `test/eval/suites/multi-agent.ts` — T13.1 spawn, T13.2 send_team_message |
+| T14 | Console Team E2E | ✅ | `scripts/multi-agent/smoke-team-console-e2e.sh` |
 
 ---
 

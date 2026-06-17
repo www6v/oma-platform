@@ -5,7 +5,7 @@ import {
   gaiaMatch,
   idleNoError,
   type Scorer,
-} from "../../../packages/shared/src/index.js";
+} from "@open-managed-agents/shared";
 // Stub: RECOMMENDED_AGENT_BASE was removed from shared in 68bf967
 // (slim-shared refactor) but gaia.ts still references it. Inline a
 // minimal placeholder so the eval runner can load this suite. The real

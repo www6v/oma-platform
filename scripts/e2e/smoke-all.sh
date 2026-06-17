@@ -16,6 +16,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 E2E_DIR="${ROOT_DIR}/scripts/e2e"
+MA_DIR="${ROOT_DIR}/scripts/multi-agent"
 
 _E2E_ANTHROPIC_KEY_BEFORE_ENV="${ANTHROPIC_API_KEY:-}"
 if [[ -f "${ROOT_DIR}/.env" ]]; then
@@ -109,6 +110,11 @@ run_shell() {
   bash "${E2E_DIR}/${script}"
 }
 
+run_multi_agent_shell() {
+  local script="$1"
+  bash "${MA_DIR}/${script}"
+}
+
 run_with_target() {
   bash "${E2E_DIR}/with-target.sh" "$@"
 }
@@ -120,10 +126,10 @@ run_core_suite() {
     run_shell smoke-resource-outcome-e2e.sh
 
   run_case "sub-agent delegation (sim + unit)" \
-    run_shell smoke-subagent-e2e.sh
+    run_multi_agent_shell smoke-subagent-e2e.sh
 
   run_case "team store + harness tools" \
-    run_shell smoke-team-e2e.sh
+    run_multi_agent_shell smoke-team-e2e.sh
 
   run_case "internal model card key" \
     run_shell smoke-internal-model-key.sh
@@ -151,7 +157,7 @@ run_core_suite() {
   fi
 
   run_case "sub-agent live harness" \
-    run_shell smoke-subagent-live-e2e.sh
+    run_multi_agent_shell smoke-subagent-live-e2e.sh
 
   run_case "web_search tool (API)" \
     run_shell smoke-web-search-e2e.sh
@@ -218,7 +224,7 @@ run_noncore_suite() {
       run_with_target node "${E2E_DIR}/console-comprehensive-e2e.mjs"
 
     run_case "team console E2E" \
-      run_shell smoke-team-console-e2e.sh
+      run_multi_agent_shell smoke-team-console-e2e.sh
   fi
 
   if is_local_target; then

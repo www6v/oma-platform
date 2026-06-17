@@ -1,5 +1,5 @@
 // ---- Eval Framework Types ----
-import type { Scorer, ContentBlock } from "../../packages/shared/src/index.js";
+import type { Scorer, ContentBlock } from "@open-managed-agents/shared";
 
 export type Difficulty = "easy" | "medium" | "hard";
 export type Category = "tool-use" | "coding" | "multi-step" | "error-recovery" | "multi-agent";
@@ -46,6 +46,10 @@ export interface SetupUpload {
 
 export interface EvalTurnContext {
   fileIds: string[];
+  /** Lead agent id (team coordinator). */
+  leadAgentId: string;
+  /** Named team worker agents (spawn_teammate targets), not callable_agents. */
+  teamWorkers: Record<string, string>;
 }
 
 export interface EvalTurn {
@@ -82,10 +86,15 @@ export interface EvalTask {
     /** Auxiliary model id — opt into in-tool LLM work (e.g. web_fetch
      *  summarization + raw-markdown offload to /workspace/.web/). */
     aux_model?: string;
+    /** Agent metadata (e.g. enable_team_tools for pi_team tools). */
+    metadata?: Record<string, unknown>;
   };
 
   // Sub-agents created before the eval (multi-agent tasks)
   subAgents?: SubAgentConfig[];
+
+  /** Team worker agents for spawn_teammate (not added to callable_agents). */
+  teamWorkers?: SubAgentConfig[];
 
   // Files written to sandbox in a setup turn before the eval starts
   setupFiles?: SetupFile[];
@@ -185,5 +194,6 @@ export const DEFAULT_TOOLS = [
 ];
 
 export const DEFAULT_SYSTEM = "You are a helpful coding assistant. Complete tasks precisely and verify your work.";
-export const DEFAULT_MODEL = process.env.OMA_MODEL || "MiniMax-M2.7";
+export const DEFAULT_MODEL =
+  process.env.OMA_MODEL || process.env.SMOKE_MODEL || "claude-sonnet-4-6";
 export const DEFAULT_TIMEOUT = 600_000; // 10 min for production tasks

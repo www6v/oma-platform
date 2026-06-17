@@ -14,7 +14,7 @@ import {
   includes,
   toolOutcome,
   toolUsed,
-} from "../../../packages/shared/src/index.js";
+} from "@open-managed-agents/shared";
 
 export const toolUseSuite: EvalTask[] = [
   // T1.1 — File Write and Verify (Easy)

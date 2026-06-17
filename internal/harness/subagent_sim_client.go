@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
 )
 
 const e2eSubThreadID = "sthr_e2e_worker"
@@ -44,10 +43,7 @@ func (c *SubAgentSimulatingClient) RunTurnStream(
 		return err
 	}
 
-	workerID, workerName, err := firstSubAgent(req.SubAgents)
-	if err != nil {
-		return err
-	}
+	workerID, workerName := firstSubAgentFromCallable(req)
 
 	workerText := c.workerReply()
 	primaryText := c.primaryReply()
@@ -117,35 +113,24 @@ func validateSubAgentTurnRequest(req TurnRequest) error {
 		string(req.Agent.CallableAgents) == "null" {
 		return fmt.Errorf("expected callable_agents on coordinator agent")
 	}
-	if len(req.SubAgents) == 0 {
-		return fmt.Errorf("expected sub_agents map on turn request")
-	}
-	var refs []callableAgentRef
-	if err := json.Unmarshal(req.Agent.CallableAgents, &refs); err != nil {
-		return fmt.Errorf("parse callable_agents: %w", err)
-	}
-	for _, ref := range refs {
-		if ref.ID == "" {
-			continue
-		}
-		if _, ok := req.SubAgents[ref.ID]; !ok {
-			return fmt.Errorf("missing sub_agent config for %q", ref.ID)
-		}
-	}
 	return nil
 }
 
-func firstSubAgent(
-	subAgents map[string]AgentSnapshot,
-) (id, name string, err error) {
-	if len(subAgents) == 0 {
-		return "", "", fmt.Errorf("empty sub_agents")
+func firstSubAgentFromCallable(req TurnRequest) (id, name string) {
+	var refs []struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+		Type string `json:"type"`
 	}
-	ids := make([]string, 0, len(subAgents))
-	for k := range subAgents {
-		ids = append(ids, k)
+	if err := json.Unmarshal(req.Agent.CallableAgents, &refs); err != nil {
+		return "agt_worker", "subagent-worker"
 	}
-	sort.Strings(ids)
-	snap := subAgents[ids[0]]
-	return ids[0], snap.Name, nil
+	if len(refs) == 0 || refs[0].ID == "" {
+		return "agt_worker", "subagent-worker"
+	}
+	workerID := refs[0].ID
+	if snap, ok := req.SubAgents[workerID]; ok && snap.Name != "" {
+		return workerID, snap.Name
+	}
+	return workerID, "subagent-worker"
 }

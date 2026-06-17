@@ -1,6 +1,6 @@
 import type { EvalTask } from "../types.js";
 import { DEFAULT_TOOLS, DEFAULT_SYSTEM } from "../types.js";
-import { all, idleNoError, includes, toolUsed } from "../../../packages/shared/src/index.js";
+import { all, idleNoError, includes, toolUsed } from "@open-managed-agents/shared";
 
 // 64x64 PNG: red square in white border. Used to validate the multimodal
 // Read tool pipeline end-to-end (image → tool result with ContentBlock[] →

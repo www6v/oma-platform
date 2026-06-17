@@ -8,7 +8,7 @@ import (
 	"github.com/open-ma/oma-building/internal/harness"
 )
 
-func TestSubAgentSimulatingClientValidatesSubAgents(t *testing.T) {
+func TestSubAgentSimulatingClientAcceptsEmptySubAgents(t *testing.T) {
 	client := &harness.SubAgentSimulatingClient{}
 	callable, _ := json.Marshal([]map[string]any{
 		{"type": "agent", "id": "agt_worker", "version": 1},
@@ -29,8 +29,8 @@ func TestSubAgentSimulatingClientValidatesSubAgents(t *testing.T) {
 		},
 		func(json.RawMessage) error { return nil },
 	)
-	if err == nil {
-		t.Fatal("expected error when sub_agents missing")
+	if err != nil {
+		t.Fatalf("expected success without sub_agents: %v", err)
 	}
 }
 

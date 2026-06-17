@@ -7,6 +7,18 @@ export function eventsOfType(events: SSEEvent[], type: string): SSEEvent[] {
   return events.filter((e) => e.type === type);
 }
 
+/** Assert at least N events of a given type */
+export function assertMinEvents(
+  events: SSEEvent[],
+  type: string,
+  min: number,
+): VerifyResult {
+  const count = eventsOfType(events, type).length;
+  return count >= min
+    ? pass(`${count} "${type}" event(s) (>= ${min})`)
+    : fail(`Expected >= ${min} "${type}" events, got ${count}`);
+}
+
 /** Get all tool_use events */
 export function toolUseEvents(events: SSEEvent[]): SSEEvent[] {
   return eventsOfType(events, "agent.tool_use");

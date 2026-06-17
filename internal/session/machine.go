@@ -146,13 +146,6 @@ func (m *Machine) RunTurn(ctx context.Context, threadID string) error {
 		return m.failTurn(ctx, turnID, err)
 	}
 
-	subAgents, err := harness.ResolveSubAgents(
-		ctx, m.Agents, m.TenantID, agent,
-	)
-	if err != nil {
-		return m.failTurn(ctx, turnID, err)
-	}
-
 	modelCfg, err := m.resolveModel(ctx, agent.Model)
 	if err != nil {
 		return m.failTurn(ctx, turnID, err)
@@ -178,6 +171,16 @@ func (m *Machine) RunTurn(ctx context.Context, threadID string) error {
 		)
 		if resErr == nil {
 			resources = resolved
+		}
+	}
+
+	var subAgents map[string]harness.AgentSnapshot
+	if threadID == defaultThreadID {
+		subAgents, err = harness.ResolveSubAgents(
+			ctx, m.TenantID, agent, m.Agents,
+		)
+		if err != nil {
+			return m.failTurn(ctx, turnID, err)
 		}
 	}
 

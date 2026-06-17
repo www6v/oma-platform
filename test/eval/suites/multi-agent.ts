@@ -1,15 +1,40 @@
 import type { EvalTask } from "../types.js";
-import { DEFAULT_TOOLS, DEFAULT_SYSTEM } from "../types.js";
+import { DEFAULT_TOOLS } from "../types.js";
 import {
   assertToolUsed,
-  assertToolResultContains,
   assertIdleNoError,
-  assertLastBashSuccess,
-  assertMinToolCalls,
+  assertMinEvents,
   eventsOfType,
   allOf,
 } from "../verify.js";
-import { all, idleNoError, threadCreated, toolUsed } from "../../../packages/shared/src/index.js";
+import {
+  all,
+  idleNoError,
+  includes,
+  threadCreated,
+  teamCreated,
+  teamMessage,
+  toolUsed,
+} from "@open-managed-agents/shared";
+
+const TEAM_LEAD_SYSTEM = `You are a team lead coordinating agents via team tools:
+team_create, spawn_teammate, send_team_message, read_team_messages.
+
+Rules:
+- When creating a team, include yourself as a member in team_create's members array with display_name "lead".
+- Use the exact agent_id values from the user message — never invent IDs.
+- After team_create, read the returned members list to find your from_member_id for send_team_message.
+- Complete all steps in the user message before finishing.`;
+
+const TEAM_CODER_SYSTEM =
+  "You are a team coder teammate. When you receive mailbox instructions, follow them exactly " +
+  "using your tools (write, bash). Write files with relative paths in the workspace root " +
+  "(e.g. team-eval-marker.txt), never /workspace/... absolute paths. Complete file tasks " +
+  "without asking questions.";
+
+const TEAM_MARKER_SENDMSG = "TEAM-EVAL-SENDMSG-OK";
+const TEAM_MARKER_FILE = "team-eval-marker.txt";
+const TEAM_MARKER_SPAWN = "TEAM-SPAWN-OK";
 
 // Note: Multi-agent evals require creating sub-agents at runtime.
 // The `subAgents` field is used by the runner to create these agents
@@ -208,6 +233,130 @@ Then ask the helper again to read and summarize it.`,
       },
     ],
     scorer: all(threadCreated(2), toolUsed("bash"), idleNoError()),
+    timeoutMs: 600_000,
+  },
+
+  // T13.1 — Team create + spawn teammate (Medium)
+  {
+    id: "T13.1-team-spawn",
+    category: "multi-agent",
+    difficulty: "medium",
+    description: "Lead uses team_create and spawn_teammate to add a named teammate",
+    agentConfig: {
+      system: TEAM_LEAD_SYSTEM,
+      tools: DEFAULT_TOOLS,
+      metadata: { enable_team_tools: true },
+    },
+    teamWorkers: [
+      {
+        name: "coder",
+        system: TEAM_CODER_SYSTEM,
+        tools: DEFAULT_TOOLS,
+      },
+    ],
+    turns: [
+      {
+        message: (ctx) => {
+          const workerId = ctx.teamWorkers.coder;
+          const leadId = ctx.leadAgentId;
+          return `Using team tools, do exactly this in order:
+1. team_create with name "eval-alpha" and members: [{ "agent_id": "${leadId}", "display_name": "lead", "role": "lead" }]
+2. spawn_teammate with team_id from step 1, agent_id "${workerId}", display_name "coder", start_poll_loop true
+3. bash: echo ${TEAM_MARKER_SPAWN}`;
+        },
+        verify: (events) => {
+          const teamEvt = assertMinEvents(events, "session.team_created", 1);
+          const threads = eventsOfType(events, "session.thread_created");
+          const createTool = assertToolUsed(events, "team_create");
+          const spawnTool = assertToolUsed(events, "spawn_teammate");
+          const noError = assertIdleNoError(events);
+
+          if (threads.length < 1) {
+            return {
+              status: "fail",
+              message: "No teammate thread created (expected session.thread_created)",
+            };
+          }
+
+          return allOf(teamEvt, createTool, spawnTool, noError);
+        },
+      },
+    ],
+    scorer: all(
+      teamCreated(1),
+      threadCreated(1),
+      toolUsed("team_create"),
+      toolUsed("spawn_teammate"),
+      idleNoError(),
+    ),
+    timeoutMs: 600_000,
+  },
+
+  // T13.2 — SendMessage mailbox collaboration (Hard)
+  {
+    id: "T13.2-team-send-message",
+    category: "multi-agent",
+    difficulty: "hard",
+    description:
+      "Lead spawns teammate and sends_team_message; teammate writes marker file",
+    agentConfig: {
+      system: TEAM_LEAD_SYSTEM,
+      tools: DEFAULT_TOOLS,
+      metadata: { enable_team_tools: true },
+    },
+    teamWorkers: [
+      {
+        name: "coder",
+        system: TEAM_CODER_SYSTEM,
+        tools: DEFAULT_TOOLS,
+      },
+    ],
+    turns: [
+      {
+        message: (ctx) => {
+          const workerId = ctx.teamWorkers.coder;
+          const leadId = ctx.leadAgentId;
+          return `Using team tools, do exactly this in order (do not verify the file yet):
+1. team_create with name "eval-mailbox" and members: [{ "agent_id": "${leadId}", "display_name": "lead", "role": "lead" }]
+2. spawn_teammate with team_id from step 1, agent_id "${workerId}", display_name "coder", start_poll_loop true
+3. send_team_message with team_id, from_member_id = your lead member id from step 1, to "coder", body "Write ${TEAM_MARKER_FILE} with exactly the text ${TEAM_MARKER_SENDMSG} using the write tool."`;
+        },
+        verify: (events) => {
+          const teamEvt = assertMinEvents(events, "session.team_created", 1);
+          const mailbox = assertMinEvents(events, "team.message", 1);
+          const sendTool = assertToolUsed(events, "send_team_message");
+          const spawnTool = assertToolUsed(events, "spawn_teammate");
+          const noError = assertIdleNoError(events);
+
+          return allOf(teamEvt, mailbox, sendTool, spawnTool, noError);
+        },
+      },
+      {
+        message: `Run: cat ${TEAM_MARKER_FILE}`,
+        verify: (events) => {
+          const allText = events
+            .map((e) => JSON.stringify(e))
+            .join("\n");
+          if (!allText.includes(TEAM_MARKER_SENDMSG)) {
+            return {
+              status: "fail",
+              message: `Marker ${TEAM_MARKER_SENDMSG} not found in turn output`,
+            };
+          }
+          return assertIdleNoError(events);
+        },
+      },
+    ],
+    scorer: all(
+      teamCreated(1),
+      teamMessage(1),
+      threadCreated(1),
+      toolUsed("team_create"),
+      toolUsed("spawn_teammate"),
+      toolUsed("send_team_message"),
+      includes(TEAM_MARKER_SENDMSG),
+      idleNoError(),
+    ),
     timeoutMs: 600_000,
   },
 ];

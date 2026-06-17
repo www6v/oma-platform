@@ -212,7 +212,7 @@ SMOKE_SKIP_LLM=1 ./scripts/e2e/smoke-test.sh
 |------|------|
 | `scripts/e2e/console-integration.sh` | Console 线型契约集成测试 |
 | `scripts/e2e/smoke-mcp-e2e.sh` | MCP proxy + harness MCP loader |
-| `scripts/e2e/smoke-subagent-e2e.sh` | 子 Agent 委派 E2E |
+| `scripts/multi-agent/smoke-subagent-e2e.sh` | 子 Agent 委派 E2E |
 | `scripts/e2e/smoke-runtime-e2e.sh` | Runtime / ACP daemon |
 | `scripts/e2e/smoke-linear-webhook.sh` | Linear webhook 分发 |
 | `scripts/e2e/smoke-github-webhook.sh` | GitHub webhook 分发 |

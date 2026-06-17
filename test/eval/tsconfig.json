@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "paths": {
+      "@open-managed-agents/api-types": [
+        "../../../open-managed-agents/packages/api-types/src/index.ts"
+      ],
+      "@open-managed-agents/eval-core": [
+        "../../../open-managed-agents/packages/eval-core/src/index.ts"
+      ],
+      "@open-managed-agents/shared": [
+        "../../../open-managed-agents/packages/shared/src/index.ts"
+      ]
+    }
+  },
+  "include": ["./**/*.ts"]
+}

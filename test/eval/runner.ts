@@ -8,7 +8,7 @@ import type {
   VerifyStatus,
   SSEEvent,
 } from "./types.js";
-import type { Trajectory, StoredEvent } from "../../packages/shared/src/index.js";
+import type { Trajectory, StoredEvent } from "@open-managed-agents/shared";
 import { DEFAULT_MODEL, DEFAULT_TIMEOUT } from "./types.js";
 import {
   createAgent,
@@ -94,6 +94,21 @@ async function runOneTrial(task: EvalTask, trialIndex: number): Promise<EvalTria
       }
     }
 
+    // Team workers (spawn_teammate targets — not callable_agents)
+    const teamWorkerIds: Record<string, string> = {};
+    if (task.teamWorkers) {
+      for (const worker of task.teamWorkers) {
+        const workerId = await createAgent({
+          name: `eval-team-${worker.name}-${Date.now()}-${trialIndex}`,
+          system: worker.system,
+          model: worker.model || DEFAULT_MODEL,
+          tools: worker.tools,
+        });
+        agentIds.push(workerId);
+        teamWorkerIds[worker.name] = workerId;
+      }
+    }
+
     // Create main agent
     const agentId = await createAgent({
       name: `eval-${task.id}-${Date.now()}-${trialIndex}`,
@@ -103,6 +118,7 @@ async function runOneTrial(task: EvalTask, trialIndex: number): Promise<EvalTria
       callable_agents: callableAgents.length > 0 ? callableAgents : undefined,
       mcp_servers: task.agentConfig.mcp_servers,
       aux_model: task.agentConfig.aux_model,
+      metadata: task.agentConfig.metadata,
     });
     agentIds.push(agentId);
 
@@ -140,7 +156,11 @@ async function runOneTrial(task: EvalTask, trialIndex: number): Promise<EvalTria
       log(task.id, `${trialLabel} Turn ${i + 1}/${task.turns.length}: sending message...`);
 
       const messageInput = typeof turn.message === "function"
-        ? turn.message({ fileIds: uploadedFileIds })
+        ? turn.message({
+          fileIds: uploadedFileIds,
+          leadAgentId: agentId,
+          teamWorkers: teamWorkerIds,
+        })
         : turn.message;
 
       const events = typeof messageInput === "string"

@@ -14,6 +14,8 @@ from oma_adapter.compaction import (
 )
 from oma_adapter.subagent_bridge import build_subagent_runtime
 from oma_adapter.team_bridge import build_team_runtime
+from pi_subagent.resolve import enrich_parent_for_delegation, resolve_sub_agents
+from pi_subagent.types import SubAgentSnapshot
 from pi_subagent.runtime import (
     clear_subagent_runtime,
     configure_subagent_runtime,
@@ -254,6 +256,24 @@ async def _run_turn_core(
     thread_tag = session_thread_id or PRIMARY_THREAD_ID
     is_subthread = thread_tag != PRIMARY_THREAD_ID
 
+    delegation_agent = SubAgentSnapshot.model_validate(agent.model_dump())
+    resolved_sub_agents: dict[str, SubAgentSnapshot] = {}
+    if sub_agents:
+        resolved_sub_agents = {
+            aid: SubAgentSnapshot.model_validate(s.model_dump())
+            for aid, s in sub_agents.items()
+        }
+    if not is_subthread:
+        delegation_agent = enrich_parent_for_delegation(delegation_agent)
+        try:
+            resolved_sub_agents = resolve_sub_agents(
+                parent=delegation_agent,
+                tenant_id=tenant_id,
+                database_path=database_path,
+            )
+        except ValueError as exc:
+            raise RuntimeError(str(exc)) from exc
+
     async def tagged_on_event(event: dict[str, Any]) -> None:
         if is_subthread:
             tagged = dict(event)
@@ -369,8 +389,13 @@ async def _run_turn_core(
                 session_id=session_id,
                 tenant_id=tenant_id,
                 workdir=workdir,
-                parent_agent=agent,
-                sub_agents=sub_agents,
+                parent_agent=AgentSnapshot.model_validate(
+                    delegation_agent.model_dump()
+                ),
+                sub_agents={
+                    aid: AgentSnapshot.model_validate(s.model_dump())
+                    for aid, s in resolved_sub_agents.items()
+                },
                 model=model,
                 aux_model=aux_model,
                 environment=environment,
@@ -393,7 +418,9 @@ async def _run_turn_core(
             if create_session is not None:
                 result = await create_session(None)
             else:
-                tool_cfg = session_tool_config_from_agent(agent)
+                tool_cfg = session_tool_config_from_agent(
+                    AgentSnapshot.model_validate(delegation_agent.model_dump())
+                )
                 result = await _default_create_session(
                     workdir=workdir,
                     model=session_model,

@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# Console sub-agent E2E — ephemeral stack + Playwright session UI verification.
+#
+# Starts oma-server with OMA_FAKE_HARNESS=subagent (no real LLM/harness),
+# creates coordinator/worker delegation, opens Session page, asserts thread tabs
+# and call_agent visibility.
+#
+# Usage:
+#   ./scripts/multi-agent/smoke-subagent-console-e2e.sh
+#   SUBAGENT_E2E_HEADED=1 ./scripts/multi-agent/smoke-subagent-console-e2e.sh
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+MA_DIR="${ROOT_DIR}/scripts/multi-agent"
+QA_PORT="${SUBAGENT_E2E_PORT:-8793}"
+QA_DB="${ROOT_DIR}/data/subagent-console-e2e.db"
+
+# shellcheck disable=SC1091
+source "${ROOT_DIR}/scripts/go-env.sh"
+
+if command -v lsof >/dev/null 2>&1; then
+  stale_pids="$(lsof -ti ":${QA_PORT}" 2>/dev/null || true)"
+  if [[ -n "${stale_pids}" ]]; then
+    echo "[subagent-console] stopping stale listener(s) on :${QA_PORT}"
+    # shellcheck disable=SC2086
+    kill ${stale_pids} 2>/dev/null || true
+    sleep 1
+  fi
+fi
+
+CONSOLE_DIST="${CONSOLE_DIR:-${ROOT_DIR}/console/dist}"
+if [[ ! -f "${CONSOLE_DIST}/index.html" ]]; then
+  echo "[subagent-console] building console dist…"
+  "${ROOT_DIR}/scripts/build-console.sh"
+fi
+
+if [[ ! -d "${MA_DIR}/node_modules/playwright" ]]; then
+  echo "[subagent-console] installing Playwright deps in scripts/multi-agent…"
+  (cd "${MA_DIR}" && npm install --no-fund --no-audit)
+fi
+
+if ! (cd "${MA_DIR}" && node -e "import('playwright')") >/dev/null 2>&1; then
+  echo "error: playwright not available — run: (cd scripts/multi-agent && npm install)" >&2
+  exit 1
+fi
+
+SERVER_PID=""
+cleanup() {
+  if [[ -n "${SERVER_PID}" ]] && kill -0 "${SERVER_PID}" 2>/dev/null; then
+    kill "${SERVER_PID}" 2>/dev/null || true
+    wait "${SERVER_PID}" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT INT TERM
+
+rm -f "${QA_DB}"
+
+echo "[subagent-console] starting oma-server on :${QA_PORT} (OMA_FAKE_HARNESS=subagent)"
+(
+  cd "${ROOT_DIR}"
+  OMA_LISTEN_ADDR=":${QA_PORT}" \
+  AUTH_DISABLED=1 \
+  OMA_RATE_LIMIT_DISABLED=1 \
+  OMA_FAKE_HARNESS=subagent \
+  OMA_API_KEY="${OMA_API_KEY:-dev-key}" \
+  DATABASE_PATH="${QA_DB}" \
+  OMA_DATABASE_PATH="${QA_DB}" \
+  SANDBOX_WORKDIR="${ROOT_DIR}/data/sandboxes-subagent-e2e" \
+  CONSOLE_DIR="${CONSOLE_DIST}" \
+  exec "${GO_BIN}" run ./cmd/oma-server/
+) &
+SERVER_PID=$!
+
+for _ in $(seq 1 40); do
+  if curl -sf "http://127.0.0.1:${QA_PORT}/health" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 0.5
+done
+
+if ! curl -sf "http://127.0.0.1:${QA_PORT}/health" >/dev/null 2>&1; then
+  echo "error: oma-server failed to start on :${QA_PORT}" >&2
+  exit 1
+fi
+
+echo "[subagent-console] running Playwright console-subagent-e2e.mjs"
+cd "${MA_DIR}"
+CONSOLE_URL="http://127.0.0.1:${QA_PORT}" \
+PLATFORM_URL="http://127.0.0.1:${QA_PORT}" \
+OMA_API_KEY="${OMA_API_KEY:-dev-key}" \
+node console-subagent-e2e.mjs
+
+echo "[subagent-console] PASS"

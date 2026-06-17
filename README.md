@@ -212,7 +212,7 @@ Set `ANTHROPIC_API_KEY` in `.env` or configure piPy via `~/.pi/agent/{settings,m
 |--------|---------|
 | `scripts/e2e/console-integration.sh` | Console wire-shape integration tests |
 | `scripts/e2e/smoke-mcp-e2e.sh` | MCP proxy + harness MCP loader |
-| `scripts/e2e/smoke-subagent-e2e.sh` | Sub-agent delegation E2E |
+| `scripts/multi-agent/smoke-subagent-e2e.sh` | Sub-agent delegation E2E |
 | `scripts/e2e/smoke-runtime-e2e.sh` | Runtime / ACP daemon |
 | `scripts/e2e/smoke-linear-webhook.sh` | Linear webhook dispatch |
 | `scripts/e2e/smoke-github-webhook.sh` | GitHub webhook dispatch |

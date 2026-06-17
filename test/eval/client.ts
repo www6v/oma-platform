@@ -109,6 +109,7 @@ export async function createAgent(config: {
   callable_agents?: unknown[];
   mcp_servers?: unknown[];
   aux_model?: string;
+  metadata?: Record<string, unknown>;
 }): Promise<string> {
   const data = await post("/v1/agents", {
     name: config.name,
@@ -118,6 +119,7 @@ export async function createAgent(config: {
     callable_agents: config.callable_agents,
     mcp_servers: config.mcp_servers,
     aux_model: config.aux_model,
+    metadata: config.metadata,
   });
   return data.id;
 }
@@ -422,7 +424,11 @@ export async function cleanup(handle: CleanupHandle): Promise<void> {
 
 const JUDGE_API_URL = process.env.OMA_JUDGE_API_URL || "https://api.example.com/anthropic/v1";
 const JUDGE_API_KEY = process.env.OMA_JUDGE_API_KEY || process.env.OMA_API_KEY || "";
-const JUDGE_MODEL = process.env.OMA_JUDGE_MODEL || "MiniMax-M2.7";
+const JUDGE_MODEL =
+  process.env.OMA_JUDGE_MODEL ||
+  process.env.OMA_MODEL ||
+  process.env.SMOKE_MODEL ||
+  "claude-sonnet-4-6";
 const JUDGE_MAX_RETRIES = 10;
 const JUDGE_BASE_DELAY = 2000;
 const JUDGE_TIMEOUT_MS = 60_000;

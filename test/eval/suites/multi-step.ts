@@ -8,7 +8,7 @@ import {
   assertMinToolCalls,
   allOf,
 } from "../verify.js";
-import { all, bashSuccess, idleNoError, includes, toolUsed } from "../../../packages/shared/src/index.js";
+import { all, bashSuccess, idleNoError, includes, toolUsed } from "@open-managed-agents/shared";
 
 export const multiStepSuite: EvalTask[] = [
   // T3.1 — Data Pipeline (Medium)
