@@ -327,7 +327,18 @@ func (h *sessionHandlers) appendAndPublish(
 	sessionID string,
 	payload json.RawMessage,
 ) error {
-	stored, err := h.events.AppendEvents(ctx, sessionID, []json.RawMessage{payload})
+	return h.appendAndPublishBatch(ctx, sessionID, []json.RawMessage{payload})
+}
+
+func (h *sessionHandlers) appendAndPublishBatch(
+	ctx context.Context,
+	sessionID string,
+	payloads []json.RawMessage,
+) error {
+	if len(payloads) == 0 {
+		return nil
+	}
+	stored, err := h.events.AppendEvents(ctx, sessionID, payloads)
 	if err != nil {
 		return err
 	}

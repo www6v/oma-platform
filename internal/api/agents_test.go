@@ -68,6 +68,7 @@ func testRouterDeps(
 			MemoryStores: store.NewMemoryStoreRepo(db, nil),
 		},
 		store.NewWakeupRepo(db),
+		store.NewTeamRepo(db),
 		"", "", gatewayOrigin, testInternalSecret, "", "",
 	)
 	memoryStores := store.NewMemoryStoreRepo(db, nil)
@@ -207,6 +208,7 @@ func testRouterSharedDB(
 			sessions, agents, events, pending, hub, reg, workdirs, outputs, client, models,
 			&harness.ResourceResolver{Files: files, FileBlobs: fileBlobs},
 			store.NewWakeupRepo(db),
+			store.NewTeamRepo(db),
 			"", "", "", "", "", "",
 		),
 	})

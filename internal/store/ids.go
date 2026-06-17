@@ -4,6 +4,10 @@ const (
 	sessionPrefix  = "sess-"
 	eventPrefix    = "evt-"
 	schedulePrefix = "sched-"
+	teamPrefix     = "team-"
+	memberPrefix   = "tmem-"
+	tmsgPrefix     = "tmsg-"
+	threadPrefix   = "sthr_"
 )
 
 func generateSessionID() string {
@@ -18,6 +22,22 @@ func generateScheduleID() string {
 	return schedulePrefix + randomString(idLength)
 }
 
+func generateTeamID() string {
+	return teamPrefix + randomString(idLength)
+}
+
+func generateTeamMemberID() string {
+	return memberPrefix + randomString(idLength)
+}
+
+func generateTeamMessageID() string {
+	return tmsgPrefix + randomString(idLength)
+}
+
+func generateThreadID() string {
+	return threadPrefix + randomString(idLength)
+}
+
 // NewEventID returns a unique event id for span / lifecycle events.
 func NewEventID() string {
 	return generateEventID()
@@ -26,4 +46,24 @@ func NewEventID() string {
 // NewScheduleID returns a unique wakeup schedule id.
 func NewScheduleID() string {
 	return generateScheduleID()
+}
+
+// NewTeamID returns a unique team id.
+func NewTeamID() string {
+	return generateTeamID()
+}
+
+// NewTeamMemberID returns a unique team member id.
+func NewTeamMemberID() string {
+	return generateTeamMemberID()
+}
+
+// NewTeamMessageID returns a unique team mailbox message id.
+func NewTeamMessageID() string {
+	return generateTeamMessageID()
+}
+
+// NewThreadID returns a unique session thread id (non-primary).
+func NewThreadID() string {
+	return generateThreadID()
 }

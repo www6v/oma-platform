@@ -13,6 +13,7 @@ from oma_adapter.compaction import (
     should_compact,
 )
 from oma_adapter.subagent_bridge import build_subagent_runtime
+from oma_adapter.team_bridge import build_team_runtime
 from pi_subagent.runtime import (
     clear_subagent_runtime,
     configure_subagent_runtime,
@@ -48,6 +49,7 @@ from oma_adapter.web_search.runtime import (
     configure_web_search,
     resolve_search_backend,
 )
+from pi_team.runtime import clear_team_runtime, configure_team_runtime
 from oma_adapter.schedule.runtime import (
     ScheduleRuntime,
     clear_schedule_runtime,
@@ -324,6 +326,17 @@ async def _run_turn_core(
                     enabled_tools=schedule_enabled,
                 ),
             )
+        team_runtime = build_team_runtime(
+            session_id=session_id,
+            tenant_id=tenant_id,
+            platform_base=platform_base,
+            internal_secret=internal_secret or os.environ.get(
+                "OMA_INTERNAL_SECRET"
+            ),
+            agent=agent,
+        )
+        if team_runtime is not None:
+            configure_team_runtime(team_runtime)
         configure_subagent_runtime(
             build_subagent_runtime(
                 session_id=session_id,
@@ -484,6 +497,7 @@ async def _run_turn_core(
             clear_schedule_runtime()
             clear_mcp_runtime()
             clear_subagent_runtime()
+            clear_team_runtime()
 
 
 async def run_turn(

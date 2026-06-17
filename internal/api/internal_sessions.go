@@ -163,6 +163,62 @@ func handleInternalSessionEvents(deps internalDeps) http.HandlerFunc {
 	}
 }
 
+type internalEventsBatchBody struct {
+	Events  []json.RawMessage `json:"events"`
+	Enqueue bool              `json:"enqueue"`
+	RunTurn bool              `json:"run_turn"`
+}
+
+func handleInternalSessionEventsBatch(deps internalDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.Sessions == nil {
+			writeError(w, http.StatusServiceUnavailable, "sessions not configured")
+			return
+		}
+		sessionID := chi.URLParam(r, "id")
+		var body internalEventsBatchBody
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid json")
+			return
+		}
+		if len(body.Events) == 0 {
+			writeError(w, http.StatusBadRequest, "events required")
+			return
+		}
+
+		sess, err := deps.Sessions.sessions.GetByID(r.Context(), sessionID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if sess == nil {
+			writeError(w, http.StatusNotFound, "session not found")
+			return
+		}
+
+		deps.Sessions.registerMachine(sess)
+		if body.Enqueue {
+			if err := deps.Sessions.registry.EnqueueEvents(
+				r.Context(),
+				sessionID,
+				body.Events,
+				body.RunTurn,
+				false,
+				nil,
+			); err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+		} else if err := deps.Sessions.appendAndPublishBatch(
+			r.Context(), sessionID, body.Events,
+		); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	}
+}
+
 func handleInternalGetSession(deps internalDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if deps.Sessions == nil {

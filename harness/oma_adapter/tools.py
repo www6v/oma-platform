@@ -62,6 +62,18 @@ MCP_LOADER_EXTENSION_PATH = (
 SUBAGENT_EXTENSION_PATH = (
     Path(__file__).resolve().parents[1] / "extensions" / "subagent_extension.py"
 )
+TEAM_EXTENSION_PATH = (
+    Path(__file__).resolve().parents[1] / "extensions" / "team_extension.py"
+)
+
+TEAM_TOOL_NAMES = frozenset(
+    {
+        "team_create",
+        "spawn_teammate",
+        "send_team_message",
+        "read_team_messages",
+    }
+)
 
 OMA_EXTENSION_TOOLS = frozenset(
     {
@@ -121,7 +133,21 @@ def _extension_paths_for_agent(agent: AgentSnapshot) -> list[str]:
         paths.append(str(MCP_LOADER_EXTENSION_PATH))
     if _needs_subagent_extension(agent) and SUBAGENT_EXTENSION_PATH.is_file():
         paths.append(str(SUBAGENT_EXTENSION_PATH))
+    if _needs_team_extension(agent) and TEAM_EXTENSION_PATH.is_file():
+        paths.append(str(TEAM_EXTENSION_PATH))
     return paths
+
+
+def _needs_team_extension(agent: AgentSnapshot) -> bool:
+    if agent.enable_team_tools:
+        return True
+    for item in agent.tools or []:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name")
+        if isinstance(name, str) and name in TEAM_TOOL_NAMES:
+            return True
+    return False
 
 
 def _needs_subagent_extension(agent: AgentSnapshot) -> bool:

@@ -14,6 +14,7 @@ import (
 
 func (h *sessionHandlers) mountSessionAuxRoutes(r chi.Router) {
 	r.Get("/{id}/threads", h.handleSessionThreads)
+	r.Get("/{id}/teams", h.handleSessionTeams)
 	r.Get("/{id}/pending", h.handleSessionPending)
 	r.Get("/{id}/trajectory", h.handleSessionTrajectory)
 	r.Get("/{id}/outputs", h.handleSessionOutputs)
@@ -35,6 +36,25 @@ func (h *sessionHandlers) requireSession(
 		return nil, false
 	}
 	return sess, true
+}
+
+func (h *sessionHandlers) handleSessionTeams(
+	w http.ResponseWriter,
+	req *http.Request,
+) {
+	sess, ok := h.requireSession(w, req)
+	if !ok {
+		return
+	}
+	teams, err := h.ListTeams(req.Context(), sess.ID)
+	if err != nil {
+		writeTeamError(w, err)
+		return
+	}
+	if teams == nil {
+		teams = []map[string]any{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": teams})
 }
 
 func (h *sessionHandlers) handleSessionThreads(

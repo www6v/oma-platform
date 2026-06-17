@@ -161,10 +161,11 @@ func main() {
 		MemoryStores: memoryStores,
 	}
 	wakeups := store.NewWakeupRepo(db)
+	teams := store.NewTeamRepo(db)
 	sessionHandlers := api.NewSessionHandlers(
 		sessions, agents, events, pending, hub, registry, workdirs,
 		sessionOutputs, harnessClient, modelResolver, resourceResolver,
-		wakeups,
+		wakeups, teams,
 		harnessPlatformBase, apiKey,
 		harnessPlatformBase, internalSecret,
 		outbound.HostForHarness(outboundAddr), apiKey,

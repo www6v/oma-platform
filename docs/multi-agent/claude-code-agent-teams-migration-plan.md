@@ -4,6 +4,14 @@
 > 目标仓库：`oma-platform`（Go `oma-server` + Python `oma-harness`）
 > 源仓库：`claude-code-rev/src`（Claude Code Agent Teams / Swarm）
 
+**实施状态（2026-06-16）**
+
+| 阶段 | 状态 | 说明 |
+|------|------|------|
+| Phase 1 | ✅ 已 ship | `pi_subagent` 扩展 + Console thread UI + eval + console E2E |
+| Phase 2 | 🚧 进行中 | DB + Go internal API + `pi_team` 扩展已落地；Console Team Tab、长驻 loop、eval 待补 |
+| Phase 3+ | ⏳ 未开始 | 任务看板、worktree 隔离 |
+
 ---
 
 ## 1. 迁移目标与原则
@@ -45,18 +53,17 @@
 
 | Claude Code 能力 | oma 现状 | Gap | 迁移策略 |
 |------------------|----------|-----|----------|
-| `Agent` sub-agent | ✅ `call_agent_*` / `general_subagent` | 单次 turn，无寻址 | Phase 1 增强 |
-| Named teammate | ❌ | 无持久 agent 名 | Phase 2 `team_members` |
-| `TeamCreate` | ❌ | 无 team 实体 | Phase 2 `teams` 表 |
-| `SendMessage` | ❌ | 无 mailbox | Phase 2 `agent_messages` |
+| `Agent` sub-agent | ✅ `call_agent_*` / `general_subagent`（`pi_subagent`） | 无 `resume_thread_id` | Phase 1 ✅；resume 可 Phase 1.1 |
+| Named teammate | ✅ `team_members.display_name` | Leader member 未自动注册 | Phase 2 🚧 |
+| `TeamCreate` | ✅ `teams` 表 + `team_create` 工具 | — | Phase 2 🚧 |
+| `SendMessage` | ✅ `agent_messages` + `send_team_message` | 广播 fan-out 未做 | Phase 2 🚧 |
 | `TaskCreate` 看板 | ❌ | 无任务依赖 | Phase 3 `team_tasks` |
-| 并行 teammate | 串行 sub-turn | 无真并行 | Phase 2 可选 goroutine/多 harness |
+| 并行 teammate | ✅ 并行 sub-turn + 按 thread 排队 turn | 多 harness 进程 | Phase 4 |
 | Worktree 隔离 | 共享 sandbox | 无 git worktree | Phase 3 sandbox 扩展 |
-| Plan/shutdown 协议 | ❌ | 无结构化消息 | Phase 2 message `type` |
-| `TeamFile` 路径白名单 | sandbox policy | 模型不同 | Phase 3 policy 扩展 |
-| Built-in agent 类型 | Agent 配置 | 无 explore/plan 预设 | Phase 1 Skills 模板 |
-| Monitor 工具 | Console thread tab | 无 aggregate 视图 | Phase 2 Console Team 面板 |
-| In-process teammate | harness 单进程 | 语义接近 | Phase 2 对齐 thread 模型 |
+| Plan/shutdown 协议 | ✅ `shutdown_request` / `shutdown_response` + loop | 无 shutdown 状态机 | Phase 2.1 |
+| Built-in agent 类型 | 🚧 `pi_subagent/roles.py` + Go roles | Skills seed 文件未加 | Phase 1.1 |
+| Monitor 工具 | Console thread tab ✅ | 无 Team 聚合视图 | Phase 2 Console |
+| In-process teammate | ✅ spawn + 长驻 poll loop | 多 harness 进程 | Phase 2.1 `pi_team/loop.py` |
 
 参考现有文档：[subagent.md](./subagent.md)、[session-threads.md](./session-threads.md)。
 
@@ -81,8 +88,10 @@ flowchart TB
   end
   subgraph Py["oma-harness"]
     Turn[turn.py]
-    CallAgent[call_agent/]
-    TeamTools[team_tools Phase2]
+    PiSubagent[pi_subagent/]
+    PiTeam[pi_team/]
+    SubExt[extensions/subagent_extension.py]
+    TeamExt[extensions/team_extension.py]
   end
   subgraph Store
     SQLite[(oma.db)]
@@ -93,8 +102,10 @@ flowchart TB
   SessAPI --> Reg
   Reg --> Mach
   Mach --> Turn
-  Turn --> CallAgent
-  Turn --> TeamTools
+  Turn --> SubExt
+  Turn --> TeamExt
+  SubExt --> PiSubagent
+  TeamExt --> PiTeam
   TeamSvc --> SQLite
   MsgSvc --> SQLite
   Mach --> Sandbox
@@ -117,136 +128,121 @@ flowchart TB
 
 ## 4. 分阶段实施
 
-### Phase 1 — Sub-agent 增强（2–3 周，可独立 ship）
+### Phase 1 — Sub-agent 增强 ✅（已 ship，2026-06）
 
 **目标**：对齐 Claude Code `Agent` 工具的「单次委派」体验，不引入 Team 实体。
 
-#### 4.1.1 Harness
+#### 4.1.1 Harness（piPy 扩展，高内聚 / 低耦合）
 
-| 项 | 改动 | 参考 CC 源 |
-|----|------|-----------|
-| 并行 sub-turn | `call_agent` 在 `execution_mode=parallel` 时真并行 `asyncio.gather` | `AgentTool` async 路径 |
-| 后台 sub-agent | 委派后立即返回 task id，SSE 推送完成 | `LocalAgentTask` |
-| 深度与 resume | 保持 `max_depth=3`；增加 `resume_thread_id` | `resumeAgent.ts` |
-| Agent 角色模板 | Skills：`explore-agent`, `plan-agent`, `verify-agent` | `builtInAgents.ts` |
+| 项 | 状态 | 位置 |
+|----|------|------|
+| 并行 sub-turn | ✅ | `harness/pi_subagent/delegate.py` |
+| 后台 sub-agent + SSE | ✅ | `pi_subagent/delegate.py` + Go events |
+| `max_depth=3` | ✅ | `pi_subagent/runtime.py` |
+| `resume_thread_id` | ⏳ | 未实现 |
+| Agent 角色模板 | 🚧 | `pi_subagent/roles.py`（Skills seed 待补） |
 
-文件触点：
+目录布局（与 `piPy_memory` 同模式）：
 
-- `harness/oma_adapter/extensions/call_agent.py`
-- `harness/oma_adapter/call_agent/delegate.py`
-- `harness/oma_adapter/call_agent/sub_turn.py`
+```
+harness/
+├── pi_subagent/                 # 业务逻辑（host 无关）
+│   ├── types.py
+│   ├── runtime.py
+│   ├── delegate.py
+│   ├── roles.py
+│   └── tools.py
+├── extensions/subagent_extension.py   # 薄注册层
+└── oma_adapter/subagent_bridge.py     # OMA turn 桥接
+```
 
 #### 4.1.2 Go API
 
-- `POST /v1/sessions/{id}/turn` 支持 `parallel_tool_calls` 语义文档化
-- Agent 配置：`metadata.default_subagent_roles` → 映射 callable_agents
+| 项 | 状态 |
+|----|------|
+| `default_subagent_roles` snapshot | ✅ `internal/harness/subagent_roles.go` |
+| `parallel_tool_calls` 文档化 | ⏳ |
 
 #### 4.1.3 Console
 
-- Thread 面板：显示 parallel 委派树（已有基础，补并行状态）
+| 项 | 状态 |
+|----|------|
+| Thread 树 + sub-agent 状态 | ✅ |
+| Playwright console E2E | ✅ `scripts/e2e/smoke-subagent-console-e2e.sh` |
 
 #### 4.1.4 验收
 
-- `scripts/e2e/smoke-subagent-e2e.sh` 通过
-- `test/eval/suites/multi-agent.ts` 增加 parallel 场景
-- Eval：`session.thread_created` × N 同 turn
+- ✅ `scripts/e2e/smoke-subagent-e2e.sh`
+- ✅ `test/eval/suites/multi-agent.ts` — `T5.4-parallel-delegation`
+- ✅ `harness/tests/test_call_agent.py` / `test_subagent_e2e.py`
+
+**Phase 1 遗留（可选 1.1）**：`resume_thread_id`、Skills seed（explore/plan/verify）、`parallel_tool_calls` API 文档。
 
 ---
 
-### Phase 2 — Team + Mailbox（4–6 周）
+### Phase 2 — Team + Mailbox 🚧（进行中）
 
 **目标**：复刻 Claude Code 的 Team 编制与 SendMessage 协调，DB 持久化。
 
-#### 4.2.1 数据模型（SQLite）
+#### 4.2.1 数据模型（SQLite）✅
 
-```sql
--- teams: 一个 session 内可有多个 team（通常 1:1）
-CREATE TABLE teams (
-  id TEXT PRIMARY KEY,
-  session_id TEXT NOT NULL,
-  tenant_id TEXT NOT NULL,
-  name TEXT NOT NULL,
-  description TEXT,
-  lead_thread_id TEXT NOT NULL DEFAULT 'sthr_primary',
-  lead_agent_id TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'active',  -- active | archived
-  created_at INTEGER NOT NULL,
-  UNIQUE(session_id, name)
-);
+Migration：`internal/store/migrations/017_teams.sql`  
+Store：`internal/store/teams.go`（`TeamRepo`）
 
-CREATE TABLE team_members (
-  id TEXT PRIMARY KEY,
-  team_id TEXT NOT NULL REFERENCES teams(id),
-  agent_id TEXT NOT NULL,
-  display_name TEXT NOT NULL,          -- SendMessage 寻址名
-  color TEXT,
-  thread_id TEXT,                      -- 绑定 session thread
-  role TEXT,                           -- coder | tester | ...
-  plan_mode_required INTEGER DEFAULT 0,
-  backend_type TEXT DEFAULT 'in_process', -- in_process | subprocess
-  status TEXT DEFAULT 'idle',          -- idle | running | shutdown
-  joined_at INTEGER NOT NULL
-);
+#### 4.2.2 Go 服务 ✅（合并于 `internal/api/teams.go`，非独立 package）
 
-CREATE TABLE agent_messages (
-  id TEXT PRIMARY KEY,
-  team_id TEXT NOT NULL,
-  from_member_id TEXT NOT NULL,
-  to_member_id TEXT,                   -- NULL = broadcast
-  message_type TEXT NOT NULL DEFAULT 'text',  -- text | shutdown_request | ...
-  body TEXT NOT NULL,                  -- JSON for structured
-  summary TEXT,
-  read_at INTEGER,
-  created_at INTEGER NOT NULL
-);
-```
-
-#### 4.2.2 Go 服务
-
-| 包 | 职责 |
-|----|------|
-| `internal/team/` | CRUD team / member；spawn 时创建 thread |
-| `internal/teammessage/` | 写 inbox、mark read、SSE `team.message` 事件 |
-| `internal/api/teams.go` | REST：`POST /v1/sessions/{sid}/teams`, `POST .../messages` |
-
-#### 4.2.3 Harness 工具
-
-新增扩展（类比 CC 工具名，便于 prompt 迁移）：
-
-| 工具 | 行为 |
+| 路由 | 用途 |
 |------|------|
-| `team_create` | 调 Go API 建 team，写 `session.team_created` 事件 |
-| `spawn_teammate` | 创建 member + thread，启动 sub-turn loop（长驻） |
-| `send_team_message` | 写 `agent_messages`，唤醒目标 thread |
-| `read_team_messages` | Leader/teammate turn 开头拉 unread |
+| `GET /v1/sessions/{id}/teams` | Console / 租户 API 列表 |
+| `GET /v1/internal/sessions/{id}/teams` | Harness 列表 |
+| `POST /v1/internal/sessions/{id}/teams` | `team_create` |
+| `POST .../teams/spawn` | `spawn_teammate` → thread + `session.thread_created` |
+| `POST .../teams/messages` | `send_team_message` → DB + SSE `team.message` + 可选 EnqueueEvents |
+| `POST .../teams/messages/read` | `read_team_messages` + mark read |
 
-实现目录建议：`harness/oma_adapter/extensions/team/`
+Harness 通过 internal secret 回调（与 schedule wakeup 同模式），**不写 SQLite**。
 
-#### 4.2.4 长驻 Teammate 循环（对齐 inProcessRunner）
+#### 4.2.3 Harness 工具 ✅（piPy 扩展）
 
 ```
-spawn_teammate
-→ register thread + team_member
-→ while status != shutdown:
-      unread = read_team_messages()
-      if unread: run_turn(unread)
-      else: wait SSE / poll 2s
-→ session.thread_archived
+harness/
+├── pi_team/                     # 业务逻辑（host 无关）
+│   ├── types.py
+│   ├── runtime.py
+│   ├── client.py                # → /v1/internal/sessions/{id}/teams/*
+│   └── tools.py
+├── extensions/team_extension.py # 薄注册层
+└── oma_adapter/team_bridge.py   # metadata.enable_team_tools 门控
 ```
 
-参考：`utils/swarm/inProcessRunner.ts` 主循环。
+| 工具 | 状态 | 行为 |
+|------|------|------|
+| `team_create` | ✅ | 调 Go API；emit `session.team_created` |
+| `spawn_teammate` | ✅ | member + thread + SSE |
+| `send_team_message` | ✅ | inbox + `team.message` + 默认 `run_target_turn` |
+| `read_team_messages` | ✅ | unread + mark read |
 
-#### 4.2.5 Console
+启用方式：Agent `metadata.enable_team_tools: true` 或在 `tools[]` 中声明工具名。
 
-- Session 详情页 **Team** Tab：成员列表、颜色、状态
-- Message 时间线（按 member 过滤）
-- 手动「Shutdown teammate」
+#### 4.2.4 长驻 Teammate 循环 ⏳
+
+当前：`send_team_message(run_target_turn=true)` 经 `Registry.EnqueueEvents` 唤醒目标 thread。  
+待补：`pi_team/loop.py` 后台 poll + shutdown 协议。✅ 已实现：`spawn_teammate(start_poll_loop=true)` 启动 loop；`send_team_message` 在 loop 活跃时跳过 `run_target_turn` 避免重复 enqueue。
+
+#### 4.2.5 Console ⏳
+
+- Session **Team** Tab（成员、消息时间线）
+- 手动 Shutdown teammate
 
 #### 4.2.6 验收
 
-- E2E：Leader spawn 2 teammates → SendMessage → 两者均回复 → Monitor 状态正确
-- 租户隔离：team 不可跨 tenant 读
-- 结构化消息：plan_approval_request/response 往返
+| 项 | 状态 |
+|----|------|
+| `internal/store/teams_test.go` | ✅ |
+| `harness/tests/test_team_tools.py` | ✅ |
+| `scripts/e2e/smoke-team-e2e.sh` | ✅ |
+| 全链路 eval + Console E2E | ⏳ |
+| 租户隔离测试 | ⏳ |
 
 ---
 
@@ -387,12 +383,12 @@ Leader 调用工具 `spawn_teammate` 时，Go 侧：
 
 ## 9. 里程碑与交付物
 
-| 里程碑 | 交付 | 预计 |
+| 里程碑 | 交付 | 状态 |
 |--------|------|------|
-| M1 | Phase 1 代码 + eval 绿 | +2–3 周 |
-| M2 | `teams` / `agent_messages` + harness tools + smoke | +4–6 周 |
-| M3 | Task 看板 + worktree 可选 | +4–5 周 |
-| M4 | Console Team 面板 + 文档 | 与 M2/M3 重叠 |
+| M1 | Phase 1 代码 + eval 绿 | ✅ |
+| M2 | `teams` / `agent_messages` + `pi_team` + smoke | 🚧 |
+| M3 | Task 看板 + worktree 可选 | ⏳ |
+| M4 | Console Team 面板 + 文档 | ⏳ |
 
 文档交付（本次）：
 
@@ -415,16 +411,30 @@ Leader 调用工具 `spawn_teammate` 时，Go 侧：
 
 ---
 
-## 11. 首批实现任务（Phase 1 可立即开工）
+## 11. 任务清单与状态
 
-| ID | 优先级 | 任务 | 文件 |
-|----|--------|------|------|
-| T1 | P1 | `call_agent` 真并行 `asyncio.gather` | `delegate.py` |
-| T2 | P1 | 后台 sub-agent：返回 task_id + SSE 完成事件 | `delegate.py`, `session/machine` |
-| T3 | P1 | Skills 模板：explore / plan / verify agent | `data/skills/` |
-| T4 | P2 | Agent API：`metadata.team_roles` 文档与校验 | `internal/api/agents.go` |
-| T5 | P2 | Eval：parallel delegation 场景 | `test/eval/suites/multi-agent.ts` |
-| T6 | P2 | 设计 `teams` 表 migration | `internal/store/migrations/` |
+### Phase 1
+
+| ID | 任务 | 状态 | 文件 |
+|----|------|------|------|
+| T1 | `call_agent` 真并行 | ✅ | `pi_subagent/delegate.py` |
+| T2 | 后台 sub-agent + SSE | ✅ | `pi_subagent/delegate.py` |
+| T3 | Skills 模板 explore/plan/verify | ⏳ | `data/skills/` |
+| T4 | `metadata.default_subagent_roles` | ✅ | `internal/harness/subagent_roles.go` |
+| T5 | Eval parallel delegation | ✅ | `test/eval/suites/multi-agent.ts` |
+| T6 | Console thread + E2E | ✅ | `scripts/e2e/smoke-subagent-console-e2e.sh` |
+
+### Phase 2
+
+| ID | 任务 | 状态 | 文件 |
+|----|------|------|------|
+| T7 | `017_teams.sql` + TeamRepo | ✅ | `internal/store/` |
+| T8 | Internal + public teams API | ✅ | Python `pi_team/service.py`; Go read-only `ListTeams` + `POST .../events/batch` |
+| T9 | `pi_team` + `team_extension` | ✅ | `harness/pi_team/` |
+| T10 | `smoke-team-e2e.sh` | ✅ | `scripts/e2e/` |
+| T11 | 长驻 teammate loop | ✅ | `pi_team/loop.py` |
+| T12 | Console Team Tab | ⏳ | Console |
+| T13 | Eval team 协作场景 | ⏳ | `test/eval/suites/multi-agent.ts` |
 
 ---
 

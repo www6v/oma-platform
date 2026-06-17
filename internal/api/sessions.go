@@ -50,6 +50,7 @@ type sessionHandlers struct {
 	models       *modelresolve.Resolver
 	resources    *harness.ResourceResolver
 	wakeups      *store.WakeupRepo
+	teams        *store.TeamRepo
 	mcpProxyBase string
 	mcpProxyKey  string
 	platformBase string

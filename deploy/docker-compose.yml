@@ -44,7 +44,9 @@ services:
       - "8090:8090"
     environment:
       OMA_PLATFORM_URL: http://oma-platform:8787
+      OMA_DATABASE_PATH: /data/oma.db
     volumes:
+      - ../data:/data
       - ${HOME}/.pi/agent:/root/.pi/agent:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health')"]

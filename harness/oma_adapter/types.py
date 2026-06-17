@@ -49,6 +49,12 @@ class AgentSnapshot(BaseModel):
             return True
         return False
 
+    @property
+    def enable_team_tools(self) -> bool:
+        if self.metadata and self.metadata.get("enable_team_tools") is True:
+            return True
+        return False
+
 
 class TurnRequest(BaseModel):
     session_id: str
