@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from oma_adapter.types import AgentSnapshot
+from pi_subagent.types import SubAgentSnapshot
 
 EXPLORE_AGENT_PROMPT = (
     "You are an explore sub-agent. Search the codebase and environment "
@@ -35,12 +35,12 @@ def role_system_prompt(role: str) -> str | None:
 
 
 def agent_snapshot_with_role(
-    agent: AgentSnapshot,
+    agent: SubAgentSnapshot,
     role: str,
-) -> AgentSnapshot:
+) -> SubAgentSnapshot:
     prompt = role_system_prompt(role)
     if prompt is None:
         return agent
     data = agent.model_dump()
     data["system_prompt"] = prompt
-    return AgentSnapshot.model_validate(data)
+    return SubAgentSnapshot.model_validate(data)

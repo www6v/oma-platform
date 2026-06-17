@@ -12,11 +12,11 @@ from oma_adapter.compaction import (
     resolve_context_window_tokens,
     should_compact,
 )
-from oma_adapter.call_agent.runtime import (
-    CallAgentRuntime,
-    clear_call_agent_runtime,
-    configure_call_agent,
-    get_call_agent_runtime,
+from oma_adapter.subagent_bridge import build_subagent_runtime
+from pi_subagent.runtime import (
+    clear_subagent_runtime,
+    configure_subagent_runtime,
+    get_subagent_runtime,
 )
 from oma_adapter.emit import emit_oma_events
 from oma_adapter.platform_guidance import compose_system_prompt
@@ -324,13 +324,13 @@ async def _run_turn_core(
                     enabled_tools=schedule_enabled,
                 ),
             )
-        configure_call_agent(
-            CallAgentRuntime(
+        configure_subagent_runtime(
+            build_subagent_runtime(
                 session_id=session_id,
                 tenant_id=tenant_id,
                 workdir=workdir,
                 parent_agent=agent,
-                sub_agents=sub_agents or {},
+                sub_agents=sub_agents,
                 model=model,
                 aux_model=aux_model,
                 environment=environment,
@@ -467,10 +467,10 @@ async def _run_turn_core(
                 msg = "harness turn produced no assistant output"
                 raise RuntimeError(msg)
 
-            call_runtime = get_call_agent_runtime()
-            if call_runtime is not None and call_runtime.background_tasks:
+            subagent_runtime = get_subagent_runtime()
+            if subagent_runtime is not None and subagent_runtime.background_tasks:
                 await asyncio.gather(
-                    *call_runtime.background_tasks,
+                    *subagent_runtime.background_tasks,
                     return_exceptions=True,
                 )
 
@@ -483,7 +483,7 @@ async def _run_turn_core(
             clear_web_search_runtime()
             clear_schedule_runtime()
             clear_mcp_runtime()
-            clear_call_agent_runtime()
+            clear_subagent_runtime()
 
 
 async def run_turn(

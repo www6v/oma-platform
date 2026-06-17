@@ -132,8 +132,14 @@ func main() {
 		BaseURL: harnessURL,
 		HTTP:    &http.Client{Timeout: harnessTimeout},
 	}
-	if os.Getenv("OMA_FAKE_HARNESS") == "1" {
+	if fakeHarness := os.Getenv("OMA_FAKE_HARNESS"); fakeHarness == "1" ||
+		fakeHarness == "true" {
 		harnessClient = &harness.FakeClient{}
+	} else if fakeHarness == "subagent" {
+		harnessClient = &harness.SubAgentSimulatingClient{
+			WorkerReply:  "SUBAGENT-UI-WORKER-OK",
+			PrimaryReply: "SUBAGENT-UI-COORD-OK",
+		}
 	}
 
 	publicURL := envOrDefault(

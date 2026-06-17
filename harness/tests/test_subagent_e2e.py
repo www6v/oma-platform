@@ -7,15 +7,15 @@ from typing import Any
 
 import pytest
 
-from oma_adapter.call_agent.delegate import delegate_to_agent
-from oma_adapter.call_agent.runtime import CallAgentRuntime, configure_call_agent
 from oma_adapter.tools import session_tool_config_from_agent
-from oma_adapter.types import AgentSnapshot, CallableAgentRef, TurnResponse
+from oma_adapter.types import AgentSnapshot, CallableAgentRef
+from pi_subagent.delegate import delegate_to_agent
+from pi_subagent.runtime import SubAgentRuntime, configure_subagent_runtime
+from pi_subagent.types import CallableAgentRef as SubCallableAgentRef
+from pi_subagent.types import SubAgentSnapshot, SubTurnResult
 
 
-def test_subagent_harness_e2e_delegate_pipeline(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_subagent_harness_e2e_delegate_pipeline() -> None:
     """Full delegate pipeline: thread lifecycle events + sub-turn + text result."""
     emitted: list[dict[str, Any]] = []
     sub_turn_calls: list[dict[str, Any]] = []
@@ -23,7 +23,7 @@ def test_subagent_harness_e2e_delegate_pipeline(
     async def fake_emit(event: dict[str, Any]) -> None:
         emitted.append(event)
 
-    async def fake_sub_turn(**kwargs: Any) -> TurnResponse:
+    async def fake_sub_turn(**kwargs: Any) -> SubTurnResult:
         sub_turn_calls.append(kwargs)
         thread_id = kwargs["thread_id"]
         on_event = kwargs.get("on_event")
@@ -35,7 +35,7 @@ def test_subagent_harness_e2e_delegate_pipeline(
                     "content": [{"type": "text", "text": "worker pipeline ok"}],
                 }
             )
-        return TurnResponse(
+        return SubTurnResult(
             events=[
                 {
                     "type": "agent.message",
@@ -45,28 +45,24 @@ def test_subagent_harness_e2e_delegate_pipeline(
             ]
         )
 
-    monkeypatch.setattr(
-        "oma_adapter.call_agent.delegate.run_sub_agent_turn",
-        fake_sub_turn,
-    )
-
-    parent = AgentSnapshot(
+    parent = SubAgentSnapshot(
         id="agt_coord",
         name="Coordinator",
         model="faux/test",
-        callable_agents=[CallableAgentRef(id="agt_worker")],
+        callable_agents=[SubCallableAgentRef(id="agt_worker")],
     )
-    worker = AgentSnapshot(
+    worker = SubAgentSnapshot(
         id="agt_worker",
         name="Worker",
         model="faux/test",
         system_prompt="worker",
     )
-    configure_call_agent(
-        CallAgentRuntime(
+    configure_subagent_runtime(
+        SubAgentRuntime(
             session_id="sess_e2e",
             workdir="/tmp/oma-e2e",
             parent_agent=parent,
+            run_sub_turn=fake_sub_turn,
             sub_agents={"agt_worker": worker},
             emit_event=fake_emit,
         )
@@ -98,7 +94,7 @@ def test_subagent_harness_e2e_delegate_pipeline(
 
 
 def test_subagent_harness_e2e_tool_wiring() -> None:
-    """Coordinator with callable_agents loads call_agent extension."""
+    """Coordinator with callable_agents loads subagent extension."""
     agent = AgentSnapshot(
         id="agt_coord",
         name="Coordinator",
@@ -106,4 +102,4 @@ def test_subagent_harness_e2e_tool_wiring() -> None:
         callable_agents=[CallableAgentRef(id="agt_worker")],
     )
     cfg = session_tool_config_from_agent(agent)
-    assert any("call_agent.py" in path for path in cfg.extension_paths)
+    assert any("subagent_extension.py" in path for path in cfg.extension_paths)

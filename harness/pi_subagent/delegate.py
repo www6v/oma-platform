@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-import random
-import time
 from typing import Any
 
-from oma_adapter.call_agent.roles import agent_snapshot_with_role
-from oma_adapter.call_agent.runtime import get_call_agent_runtime
-from oma_adapter.call_agent.sub_turn import extract_assistant_text, run_sub_agent_turn
-from oma_adapter.types import AgentSnapshot
+from pi_subagent.events import extract_assistant_text, new_task_id, new_thread_id
+from pi_subagent.roles import agent_snapshot_with_role
+from pi_subagent.runtime import get_subagent_runtime
+from pi_subagent.types import SubAgentSnapshot
 
 GENERAL_SUBAGENT_TOOLS = [
     {
@@ -36,18 +34,8 @@ GENERAL_SYSTEM_PROMPT = (
 )
 
 
-def _thread_id() -> str:
-    suffix = f"{int(time.time() * 1000):x}{random.randint(0, 0xFFFFFF):06x}"
-    return f"sthr_{suffix}"
-
-
-def _task_id() -> str:
-    suffix = f"{int(time.time() * 1000):x}{random.randint(0, 0xFFFFFF):06x}"
-    return f"sbtask_{suffix}"
-
-
-def _general_subagent(parent: AgentSnapshot) -> AgentSnapshot:
-    return AgentSnapshot(
+def _general_subagent(parent: SubAgentSnapshot) -> SubAgentSnapshot:
+    return SubAgentSnapshot(
         id="general",
         name="general",
         model=parent.model,
@@ -57,7 +45,7 @@ def _general_subagent(parent: AgentSnapshot) -> AgentSnapshot:
     )
 
 
-def _apply_subagent_role(agent: AgentSnapshot) -> AgentSnapshot:
+def _apply_subagent_role(agent: SubAgentSnapshot) -> SubAgentSnapshot:
     if not agent.metadata:
         return agent
     role = agent.metadata.get("subagent_role")
@@ -66,7 +54,7 @@ def _apply_subagent_role(agent: AgentSnapshot) -> AgentSnapshot:
     return agent_snapshot_with_role(agent, role.strip())
 
 
-def _resolve_sub_agent(agent_id: str, runtime) -> AgentSnapshot | None:
+def resolve_sub_agent(agent_id: str, runtime) -> SubAgentSnapshot | None:
     if agent_id == "general":
         return _general_subagent(runtime.parent_agent)
     sub_agent = runtime.sub_agents.get(agent_id)
@@ -84,13 +72,13 @@ async def _run_delegate_body(
     *,
     runtime,
     agent_id: str,
-    sub_agent: AgentSnapshot,
+    sub_agent: SubAgentSnapshot,
     message: str,
     thread_id: str,
     task_id: str | None = None,
 ) -> str:
     try:
-        resp = await run_sub_agent_turn(
+        resp = await runtime.run_sub_turn(
             session_id=runtime.session_id,
             tenant_id=runtime.tenant_id,
             agent=sub_agent,
@@ -141,7 +129,7 @@ async def _background_delegate(
     *,
     runtime,
     agent_id: str,
-    sub_agent: AgentSnapshot,
+    sub_agent: SubAgentSnapshot,
     message: str,
     thread_id: str,
     task_id: str,
@@ -182,7 +170,7 @@ async def delegate_to_agent(
     *,
     run_in_background: bool = False,
 ) -> str:
-    runtime = get_call_agent_runtime()
+    runtime = get_subagent_runtime()
     if runtime is None:
         return "Multi-agent delegation not available: no thread executor configured"
     if runtime.depth >= runtime.max_depth:
@@ -190,11 +178,11 @@ async def delegate_to_agent(
             f"Sub-agent error: delegation depth limit ({runtime.max_depth}) reached"
         )
 
-    sub_agent = _resolve_sub_agent(agent_id, runtime)
+    sub_agent = resolve_sub_agent(agent_id, runtime)
     if sub_agent is None:
         return f'Sub-agent error: agent "{agent_id}" not found'
 
-    thread_id = _thread_id()
+    thread_id = new_thread_id()
     await _emit(
         runtime,
         {
@@ -207,7 +195,7 @@ async def delegate_to_agent(
     )
 
     if run_in_background:
-        task_id = _task_id()
+        task_id = new_task_id()
         await _emit(
             runtime,
             {

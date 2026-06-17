@@ -1,4 +1,4 @@
-"""Register call_agent_* and general_subagent tools for the current turn."""
+"""piPy tool classes for sub-agent delegation."""
 
 from __future__ import annotations
 
@@ -8,23 +8,22 @@ from typing import Any
 from pi_agent.types import AgentToolResult
 from pi_ai.types import TextContent
 
-from oma_adapter.call_agent.delegate import delegate_to_agent
-from oma_adapter.call_agent.runtime import get_call_agent_runtime
+from pi_subagent.delegate import delegate_to_agent
 
 
-def _sanitize_agent_id(agent_id: str) -> str:
+def sanitize_agent_id(agent_id: str) -> str:
     return re.sub(r"[^a-zA-Z0-9_]", "_", agent_id)
 
 
-def _tool_result(text: str, *, is_error: bool = False) -> AgentToolResult:
+def tool_result(text: str, *, is_error: bool = False) -> AgentToolResult:
     return AgentToolResult(
         content=[TextContent(text=text)],
         is_error=is_error,
     )
 
 
-def _make_call_agent_tool(agent_id: str) -> type:
-    tool_name = f"call_agent_{_sanitize_agent_id(agent_id)}"
+def make_call_agent_tool(agent_id: str) -> type:
+    tool_name = f"call_agent_{sanitize_agent_id(agent_id)}"
 
     class CallAgentTool:
         name = tool_name
@@ -61,7 +60,7 @@ def _make_call_agent_tool(agent_id: str) -> type:
             del tool_call_id, signal, on_update
             message = args.get("message")
             if not isinstance(message, str) or not message.strip():
-                return _tool_result("Error: message is required", is_error=True)
+                return tool_result("Error: message is required", is_error=True)
             run_in_background = bool(args.get("run_in_background"))
             text = await delegate_to_agent(
                 agent_id,
@@ -69,7 +68,7 @@ def _make_call_agent_tool(agent_id: str) -> type:
                 run_in_background=run_in_background,
             )
             is_error = text.startswith("Sub-agent error:")
-            return _tool_result(text, is_error=is_error)
+            return tool_result(text, is_error=is_error)
 
     CallAgentTool.__name__ = tool_name
     return CallAgentTool
@@ -111,7 +110,7 @@ class GeneralSubagentTool:
         del tool_call_id, signal, on_update
         task = args.get("task")
         if not isinstance(task, str) or not task.strip():
-            return _tool_result("Error: task is required", is_error=True)
+            return tool_result("Error: task is required", is_error=True)
         run_in_background = bool(args.get("run_in_background"))
         text = await delegate_to_agent(
             "general",
@@ -121,17 +120,4 @@ class GeneralSubagentTool:
         is_error = text.startswith("Sub-agent error:") or text.startswith(
             "general sub-agent error:"
         )
-        return _tool_result(text, is_error=is_error)
-
-
-def register(pi: Any) -> None:
-    runtime = get_call_agent_runtime()
-    if runtime is None:
-        return
-
-    parent = runtime.parent_agent
-    for entry in parent.callable_agents or []:
-        pi.register_tool(_make_call_agent_tool(entry.id)())
-
-    if parent.enable_general_subagent:
-        pi.register_tool(GeneralSubagentTool())
+        return tool_result(text, is_error=is_error)
