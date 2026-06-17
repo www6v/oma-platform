@@ -71,9 +71,19 @@ def resolve_subagent_extension_path() -> Path:
         / "extensions"
         / "subagent_extension.py"
     )
-TEAM_EXTENSION_PATH = (
-    Path(__file__).resolve().parents[1] / "extensions" / "team_extension.py"
-)
+
+
+def resolve_teams_extension_path() -> Path:
+    """Resolve piPy teams extension path (env override or sibling repo)."""
+    explicit = os.environ.get("PIPY_TEAMS_EXTENSION")
+    if explicit:
+        return Path(explicit)
+    return (
+        Path(__file__).resolve().parents[3]
+        / "piPy-teams"
+        / "extensions"
+        / "team_extension.py"
+    )
 
 TEAM_TOOL_NAMES = frozenset(
     {
@@ -143,8 +153,8 @@ def _extension_paths_for_agent(agent: AgentSnapshot) -> list[str]:
     subagent_path = resolve_subagent_extension_path()
     if _needs_subagent_extension(agent) and subagent_path.is_file():
         paths.append(str(subagent_path))
-    if _needs_team_extension(agent) and TEAM_EXTENSION_PATH.is_file():
-        paths.append(str(TEAM_EXTENSION_PATH))
+    if _needs_team_extension(agent) and resolve_teams_extension_path().is_file():
+        paths.append(str(resolve_teams_extension_path()))
     return paths
 
 

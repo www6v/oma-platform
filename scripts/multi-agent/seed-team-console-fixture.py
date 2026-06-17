@@ -10,8 +10,8 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-HARNESS = ROOT / "harness"
-sys.path.insert(0, str(HARNESS))
+TEAMS_SRC = ROOT.parent / "piPy-teams" / "packages" / "pi_team" / "src"
+sys.path.insert(0, str(TEAMS_SRC))
 
 from pi_team.ids import (  # noqa: E402
     PRIMARY_THREAD_ID,

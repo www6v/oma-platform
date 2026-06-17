@@ -18,12 +18,24 @@ GOPROXY="${GOPROXY:-https://goproxy.cn,direct}" \
   -run 'Team' -count=1 -v
 
 log "Python pi_team tools"
+PIPY_TEAMS_DIR="${ROOT_DIR}/../piPy-teams"
+(
+  cd "${PIPY_TEAMS_DIR}"
+  if command -v uv >/dev/null 2>&1; then
+    uv sync
+    uv run pytest packages/pi_team/tests/ -v
+  else
+    python3 -m pytest packages/pi_team/tests/ -v
+  fi
+)
+log "Python harness team extension wiring"
 (
   cd harness
   if command -v uv >/dev/null 2>&1; then
-    uv run pytest tests/test_team_tools.py tests/test_team_tenant_isolation.py tests/test_team_broadcast.py tests/test_team_shutdown.py -v
+    uv sync
+    uv run pytest tests/test_team_tools.py -v
   else
-    python3 -m pytest tests/test_team_tools.py tests/test_team_tenant_isolation.py tests/test_team_broadcast.py tests/test_team_shutdown.py -v
+    python3 -m pytest tests/test_team_tools.py -v
   fi
 )
 

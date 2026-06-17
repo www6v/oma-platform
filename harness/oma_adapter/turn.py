@@ -56,7 +56,7 @@ from oma_adapter.web_search.runtime import (
     configure_web_search,
     resolve_search_backend,
 )
-from pi_team.runtime import clear_team_runtime, configure_team_runtime
+from pi_team.runtime import configure_team_runtime, get_team_runtime, reset_team_runtime
 from oma_adapter.schedule.runtime import (
     ScheduleRuntime,
     clear_schedule_runtime,
@@ -371,6 +371,7 @@ async def _run_turn_core(
                 ),
             )
         team_runtime = None
+        team_runtime_token = None
         if not is_subthread:
             team_runtime = build_team_runtime(
                 session_id=session_id,
@@ -383,7 +384,7 @@ async def _run_turn_core(
                 database_path=database_path,
             )
         if team_runtime is not None:
-            configure_team_runtime(team_runtime)
+            team_runtime_token = configure_team_runtime(team_runtime)
             from pi_team.shutdown import drain_pending_shutdowns
 
             try:
@@ -562,7 +563,18 @@ async def _run_turn_core(
             clear_schedule_runtime()
             clear_mcp_runtime()
             clear_subagent_runtime()
-            clear_team_runtime()
+            if team_runtime_token is not None:
+                active_team = get_team_runtime()
+                if active_team is not None and active_team.session_id:
+                    try:
+                        asyncio.get_running_loop().create_task(
+                            active_team.loop_manager.stop_all_for_session(
+                                active_team.session_id
+                            )
+                        )
+                    except RuntimeError:
+                        pass
+                reset_team_runtime(team_runtime_token)
 
 
 async def run_turn(
