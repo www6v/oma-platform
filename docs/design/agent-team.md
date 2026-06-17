@@ -117,7 +117,8 @@ Team 不替代 Thread 模型，而是在其上叠加「编制 + 邮箱」：
 用户向 Leader 提需求
     │
     ▼
-Leader 调用 team_create({ name: "auth-refactor", members: [...] })
+Leader 调用 team_create({ name: "auth-refactor" })
+    ├─ 自动注册 lead member（display_name 默认 `lead`，thread `sthr_primary`）
     ├─ 写入 teams / team_members
     └─ SSE: session.team_created
     │
@@ -241,7 +242,7 @@ agent_messages
 
 | 工具 | 作用 |
 |------|------|
-| `team_create` | 创建 Team，可选同时注册初始成员 |
+| `team_create` | 创建 Team；自动注册 lead member（`sthr_primary`），可选 `members` 预置队友 |
 | `spawn_teammate` | 向已有 Team 添加队友并创建线程 |
 | `send_team_message` | 向队友发邮件（`to=display_name` 或 `*` 广播） |
 | `read_team_messages` | 读取某成员未读邮件，可选 mark read |

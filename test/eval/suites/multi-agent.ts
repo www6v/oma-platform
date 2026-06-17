@@ -21,7 +21,7 @@ const TEAM_LEAD_SYSTEM = `You are a team lead coordinating agents via team tools
 team_create, spawn_teammate, send_team_message, read_team_messages.
 
 Rules:
-- When creating a team, include yourself as a member in team_create's members array with display_name "lead".
+- team_create registers you automatically as member display_name "lead"; use that member's id as from_member_id for send_team_message.
 - Use the exact agent_id values from the user message — never invent IDs.
 - After team_create, read the returned members list to find your from_member_id for send_team_message.
 - Complete all steps in the user message before finishing.`;
@@ -258,9 +258,8 @@ Then ask the helper again to read and summarize it.`,
       {
         message: (ctx) => {
           const workerId = ctx.teamWorkers.coder;
-          const leadId = ctx.leadAgentId;
           return `Using team tools, do exactly this in order:
-1. team_create with name "eval-alpha" and members: [{ "agent_id": "${leadId}", "display_name": "lead", "role": "lead" }]
+1. team_create with name "eval-alpha"
 2. spawn_teammate with team_id from step 1, agent_id "${workerId}", display_name "coder", start_poll_loop true
 3. bash: echo ${TEAM_MARKER_SPAWN}`;
         },
@@ -315,9 +314,8 @@ Then ask the helper again to read and summarize it.`,
       {
         message: (ctx) => {
           const workerId = ctx.teamWorkers.coder;
-          const leadId = ctx.leadAgentId;
           return `Using team tools, do exactly this in order (do not verify the file yet):
-1. team_create with name "eval-mailbox" and members: [{ "agent_id": "${leadId}", "display_name": "lead", "role": "lead" }]
+1. team_create with name "eval-mailbox"
 2. spawn_teammate with team_id from step 1, agent_id "${workerId}", display_name "coder", start_poll_loop true
 3. send_team_message with team_id, from_member_id = your lead member id from step 1, to "coder", body "Write ${TEAM_MARKER_FILE} with exactly the text ${TEAM_MARKER_SENDMSG} using the write tool."`;
         },

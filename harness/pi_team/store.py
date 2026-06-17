@@ -129,6 +129,17 @@ class TeamStore:
             pass
         return None
 
+    def agent_exists(self, tenant_id: str, agent_id: str) -> bool:
+        with self._conn() as conn:
+            row = conn.execute(
+                """
+                SELECT 1 FROM agents
+                WHERE id = ? AND tenant_id = ?
+                """,
+                (agent_id, tenant_id or "default"),
+            ).fetchone()
+        return row is not None
+
     def create_team(self, team: TeamRow) -> None:
         with self._conn() as conn:
             conn.execute(

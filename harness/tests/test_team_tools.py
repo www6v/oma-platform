@@ -134,11 +134,21 @@ async def test_team_create_tool_persists_and_emits(httpx_mock, tmp_path) -> None
     payload = json.loads(text)
     assert payload["name"] == "alpha"
     assert payload["id"].startswith("team-")
+    assert len(payload["members"]) == 1
+    lead = payload["members"][0]
+    assert lead["display_name"] == "lead"
+    assert lead["role"] == "lead"
+    assert lead["agent_id"] == "agt-lead"
+    assert lead["thread_id"] == "sthr_primary"
 
     conn = sqlite3.connect(db_path)
     row = conn.execute(
         "SELECT name FROM teams WHERE session_id = 'sess-1'"
     ).fetchone()
+    member_rows = conn.execute(
+        "SELECT display_name, thread_id, role FROM team_members"
+    ).fetchall()
     conn.close()
     assert row is not None
     assert row[0] == "alpha"
+    assert member_rows == [("lead", "sthr_primary", "lead")]

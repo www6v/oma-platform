@@ -4,12 +4,12 @@
 > 目标仓库：`oma-platform`（Go `oma-server` + Python `oma-harness`）
 > 源仓库：`claude-code-rev/src`（Claude Code Agent Teams / Swarm）
 
-**实施状态（2026-06-16）**
+**实施状态（2026-06-17）**
 
 | 阶段 | 状态 | 说明 |
 |------|------|------|
 | Phase 1 | ✅ 已 ship | `pi_subagent` 扩展 + Console thread UI + eval + console E2E |
-| Phase 2 | 🚧 进行中 | DB + Go API + `pi_team` + Console Team Tab + Eval T13 已落地 |
+| Phase 2 | ✅ 已 ship | `pi_team` + Team Tab + smoke/eval T13（live 跑绿 2026-06-17） |
 | Phase 3+ | ⏳ 未开始 | 任务看板、worktree 隔离 |
 
 ---
@@ -54,16 +54,16 @@
 | Claude Code 能力 | oma 现状 | Gap | 迁移策略 |
 |------------------|----------|-----|----------|
 | `Agent` sub-agent | ✅ `call_agent_*` / `general_subagent`（`pi_subagent`） | 无 `resume_thread_id` | Phase 1 ✅；resume 可 Phase 1.1 |
-| Named teammate | ✅ `team_members.display_name` | Leader member 未自动注册 | Phase 2 🚧 |
-| `TeamCreate` | ✅ `teams` 表 + `team_create` 工具 | — | Phase 2 🚧 |
-| `SendMessage` | ✅ `agent_messages` + `send_team_message` | 广播 fan-out 未做 | Phase 2 🚧 |
+| Named teammate | ✅ `team_members.display_name` | — | Phase 2 ✅；lead 自动注册 ✅ Phase 2.1 |
+| `TeamCreate` | ✅ `teams` 表 + `team_create` 工具 | — | Phase 2 ✅ |
+| `SendMessage` | ✅ `agent_messages` + `send_team_message` | 广播 fan-out 未做 | Phase 2 ✅；广播 → Phase 2.1 |
 | `TaskCreate` 看板 | ❌ | 无任务依赖 | Phase 3 `team_tasks` |
 | 并行 teammate | ✅ 并行 sub-turn + 按 thread 排队 turn | 多 harness 进程 | Phase 4 |
 | Worktree 隔离 | 共享 sandbox | 无 git worktree | Phase 3 sandbox 扩展 |
 | Plan/shutdown 协议 | ✅ `shutdown_request` / `shutdown_response` + loop | 无 shutdown 状态机 | Phase 2.1 |
 | Built-in agent 类型 | 🚧 `pi_subagent/roles.py` + Go roles | Skills seed 文件未加 | Phase 1.1 |
 | Monitor 工具 | Console Team Tab ✅ | 无 Task 看板 | Phase 3 |
-| In-process teammate | ✅ spawn + 长驻 poll loop | 多 harness 进程 | Phase 2.1 `pi_team/loop.py` |
+| In-process teammate | ✅ spawn + 长驻 poll loop | 多 harness 进程 | Phase 2 ✅ `pi_team/loop.py` |
 
 参考现有文档：[subagent.md](./subagent.md)、[session-threads.md](./session-threads.md)。
 
@@ -180,7 +180,7 @@ harness/
 
 ---
 
-### Phase 2 — Team + Mailbox 🚧（进行中）
+### Phase 2 — Team + Mailbox ✅（已 ship，2026-06）
 
 **目标**：复刻 Claude Code 的 Team 编制与 SendMessage 协调，DB 持久化。
 
@@ -224,10 +224,10 @@ harness/
 
 启用方式：Agent `metadata.enable_team_tools: true` 或在 `tools[]` 中声明工具名。
 
-#### 4.2.4 长驻 Teammate 循环 ⏳
+#### 4.2.4 长驻 Teammate 循环 ✅
 
-当前：`send_team_message(run_target_turn=true)` 经 `Registry.EnqueueEvents` 唤醒目标 thread。  
-待补：`pi_team/loop.py` 后台 poll + shutdown 协议。✅ 已实现：`spawn_teammate(start_poll_loop=true)` 启动 loop；`send_team_message` 在 loop 活跃时跳过 `run_target_turn` 避免重复 enqueue。
+`send_team_message(run_target_turn=true)` 经 `Registry.EnqueueEvents` 唤醒目标 thread。  
+`pi_team/loop.py` 后台 poll + shutdown 协议：`spawn_teammate(start_poll_loop=true)` 启动 loop；`send_team_message` 在 loop 活跃时跳过 `run_target_turn` 避免重复 enqueue。
 
 #### 4.2.5 Console ✅
 
@@ -240,9 +240,14 @@ harness/
 |----|------|
 | `internal/store/teams_test.go` | ✅ |
 | `harness/tests/test_team_tools.py` | ✅ |
+| `harness/tests/test_team_tenant_isolation.py` | ✅ 租户/ session 隔离 |
+| `internal/api/teams_tenant_isolation_test.go` | ✅ API 租户隔离 |
 | `scripts/multi-agent/smoke-team-e2e.sh` | ✅ |
-| 全链路 eval + Console E2E | ⏳ |
-| 租户隔离测试 | ⏳ |
+| `scripts/multi-agent/smoke-team-console-e2e.sh` | ✅ |
+| Eval T13（live） | ✅ `T13.1-team-spawn`、`T13.2-team-send-message`；`smoke-team-live-e2e.sh` 包装 T13.1（`TEAM_LIVE_FULL=1` 含 T13.2） |
+| 租户隔离测试 | ✅ Go `teams_tenant_isolation_test.go` + harness `test_team_tenant_isolation.py` |
+
+**Phase 2 遗留（可选 2.1）**：~~`team_create` 自动注册 lead member~~ ✅、~~租户隔离测试~~ ✅、`send_team_message` 广播 `to="*"` fan-out、Agent 编辑页 `enable_team_tools`。
 
 ---
 
@@ -364,8 +369,8 @@ Leader 调用工具 `spawn_teammate` 时，Go 侧：
 | Unit | `team` store CRUD；message read/mark；delegate depth |
 | Harness | `test_call_agent.py` + 新 `test_team_tools.py` |
 | Go | `teams_test.go`, `teammessage_test.go` |
-| E2E | `smoke-team-e2e.sh`：create team → spawn → message → assert SSE |
-| Eval | 扩展 `multi-agent.ts`：team spawn + 协作完成任务 |
+| E2E | `smoke-team-e2e.sh`（unit）；`smoke-team-live-e2e.sh`（live，包装 eval T13）；`smoke-team-console-e2e.sh`（Console） |
+| Eval | `multi-agent.ts` T13：team spawn + `send_team_message` 协作（live ✅） |
 
 ---
 
@@ -386,7 +391,7 @@ Leader 调用工具 `spawn_teammate` 时，Go 侧：
 | 里程碑 | 交付 | 状态 |
 |--------|------|------|
 | M1 | Phase 1 代码 + eval 绿 | ✅ |
-| M2 | `teams` / `agent_messages` + `pi_team` + smoke | 🚧 |
+| M2 | `teams` / `agent_messages` + `pi_team` + smoke + eval T13 | ✅ |
 | M3 | Task 看板 + worktree 可选 | ⏳ |
 | M4 | Console Team 面板 + 文档 | ✅ |
 
@@ -443,4 +448,4 @@ Leader 调用工具 `spawn_teammate` 时，Go 侧：
 
 Claude Code 的多 Agent 本质是 **Team 持久化 + Mailbox 协调 + 多后端 spawn**；oma 已有 **sub-agent 委派 + session thread 观测** 作为地基。
 
-迁移路径：**Phase 1 强化 call_agent → Phase 2 引入 Team/Message 数据模型 → Phase 3 任务看板与隔离**。每阶段可独立 ship，且与现有 `subagent.md` 架构兼容扩展，无需推翻 Session/Thread 模型。
+迁移路径：**Phase 1 强化 call_agent → Phase 2 Team/Message 数据模型（已 ship）→ Phase 3 任务看板与隔离**。每阶段可独立 ship，且与现有 `subagent.md` 架构兼容扩展，无需推翻 Session/Thread 模型。

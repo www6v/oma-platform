@@ -66,6 +66,7 @@ def _insert_member(
     role: str,
     color: str,
     now: int,
+    thread_id: str | None = None,
 ) -> TeamMemberRow:
     member = TeamMemberRow(
         id=new_team_member_id(),
@@ -73,7 +74,7 @@ def _insert_member(
         agent_id=agent_id,
         display_name=display_name,
         color=color or "",
-        thread_id=new_thread_id(),
+        thread_id=thread_id or new_thread_id(),
         role=role or "",
         backend_type="in_process",
         status="idle",
@@ -106,6 +107,26 @@ async def create_team(session_id: str, args: dict[str, Any]) -> dict[str, Any]:
 
     runtime = get_team_runtime()
     lead_agent_id = runtime.lead_agent_id or sess.agent_id
+    lead_display_name = str(args.get("lead_display_name") or "lead").strip() or "lead"
+
+    raw_members = args.get("members") or []
+    if isinstance(raw_members, list):
+        for spec in raw_members:
+            if not isinstance(spec, dict):
+                continue
+            agent_id = str(spec.get("agent_id") or "").strip()
+            display_name = str(spec.get("display_name") or "").strip()
+            if not agent_id or not display_name:
+                continue
+            if display_name == lead_display_name:
+                continue
+            if agent_id == lead_agent_id:
+                continue
+            if not store.agent_exists(sess.tenant_id, agent_id):
+                raise TeamServiceError(
+                    f'agent "{agent_id}" not found in tenant'
+                )
+
     now = _now_ms()
     team = TeamRow(
         id=new_team_id(),
@@ -121,6 +142,20 @@ async def create_team(session_id: str, args: dict[str, Any]) -> dict[str, Any]:
     store.create_team(team)
 
     members: list[TeamMemberRow] = []
+    lead_member = _insert_member(
+        store,
+        team_id=team.id,
+        agent_id=lead_agent_id,
+        display_name=lead_display_name,
+        role="lead",
+        color="",
+        now=now,
+        thread_id=PRIMARY_THREAD_ID,
+    )
+    members.append(lead_member)
+    runtime.lead_member_id = lead_member.id
+    runtime.active_team_id = team.id
+
     raw_members = args.get("members") or []
     if isinstance(raw_members, list):
         for spec in raw_members:
@@ -129,6 +164,10 @@ async def create_team(session_id: str, args: dict[str, Any]) -> dict[str, Any]:
             agent_id = str(spec.get("agent_id") or "").strip()
             display_name = str(spec.get("display_name") or "").strip()
             if not agent_id or not display_name:
+                continue
+            if display_name == lead_display_name:
+                continue
+            if agent_id == lead_agent_id:
                 continue
             member = _insert_member(
                 store,
@@ -176,6 +215,9 @@ async def spawn_teammate(
     existing = store.get_member_by_display_name(team_id, display_name)
     if existing is not None:
         raise TeamServiceError(f'member "{display_name}" already exists')
+
+    if not store.agent_exists(sess.tenant_id, agent_id):
+        raise TeamServiceError(f'agent "{agent_id}" not found in tenant')
 
     now = _now_ms()
     member = _insert_member(

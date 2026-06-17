@@ -21,13 +21,15 @@ log "Python pi_team tools"
 (
   cd harness
   if command -v uv >/dev/null 2>&1; then
-    uv run pytest tests/test_team_tools.py -v
+    uv run pytest tests/test_team_tools.py tests/test_team_tenant_isolation.py -v
   else
-    python3 -m pytest tests/test_team_tools.py -v
+    python3 -m pytest tests/test_team_tools.py tests/test_team_tenant_isolation.py -v
   fi
 )
 
 log "Optional: Console Team tab Playwright E2E"
 log "  ./scripts/multi-agent/smoke-team-console-e2e.sh"
+log "Optional: live harness + LLM (eval T13 wrapper)"
+log "  ./scripts/multi-agent/smoke-team-live-e2e.sh"
 
 log "PASS: team smoke checks completed"

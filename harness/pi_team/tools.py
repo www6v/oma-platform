@@ -29,7 +29,9 @@ class TeamCreateTool:
     name = "team_create"
     description = (
         "Create a coordinated agent team within this session. "
-        "Returns team id and member ids for SendMessage-style coordination."
+        "The session lead is registered automatically as member display_name "
+        "\"lead\" on the primary thread (use its id as from_member_id for "
+        "send_team_message). Returns team id and member ids."
     )
     parameters: dict[str, Any] = {
         "type": "object",
@@ -41,6 +43,13 @@ class TeamCreateTool:
             "description": {
                 "type": "string",
                 "description": "Optional team description",
+            },
+            "lead_display_name": {
+                "type": "string",
+                "description": (
+                    "Display name for the auto-registered lead member "
+                    '(default "lead")'
+                ),
             },
             "members": {
                 "type": "array",

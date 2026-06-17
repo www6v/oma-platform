@@ -100,3 +100,45 @@ func TestTeamRepoCRUD(t *testing.T) {
 		t.Fatalf("expected no unread, got %v", unread)
 	}
 }
+
+func TestTeamRepoGetTeamScopedToSession(t *testing.T) {
+	db, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close(db)
+
+	repo := store.NewTeamRepo(db)
+	ctx := context.Background()
+	now := time.Now().UnixMilli()
+
+	team := store.Team{
+		ID:           store.NewTeamID(),
+		SessionID:    "sess-a",
+		TenantID:     "tenant-a",
+		Name:         "alpha",
+		LeadThreadID: "sthr_primary",
+		LeadAgentID:  "agt-lead",
+		Status:       "active",
+		CreatedAt:    now,
+	}
+	if err := repo.CreateTeam(ctx, team); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := repo.GetTeamByID(ctx, "sess-a", team.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil || got.ID != team.ID {
+		t.Fatalf("team=%v", got)
+	}
+
+	foreign, err := repo.GetTeamByID(ctx, "sess-b", team.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if foreign != nil {
+		t.Fatalf("expected nil for foreign session, got %v", foreign)
+	}
+}

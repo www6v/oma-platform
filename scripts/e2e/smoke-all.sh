@@ -159,6 +159,9 @@ run_core_suite() {
   run_case "sub-agent live harness" \
     run_multi_agent_shell smoke-subagent-live-e2e.sh
 
+  run_case "team live harness (eval T13)" \
+    run_multi_agent_shell smoke-team-live-e2e.sh
+
   run_case "web_search tool (API)" \
     run_shell smoke-web-search-e2e.sh
 }
