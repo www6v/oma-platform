@@ -90,18 +90,29 @@ func (r *Registry) EnqueueEvents(
 	if len(pendingEvents) == 0 {
 		return nil
 	}
+	threadID := threadIDFromPendingEvents(pendingEvents)
 	if runTurn {
 		// When idle, promote synchronously so queue-input events (including
 		// schedule wakeups fired from the background worker) appear in the
 		// session log before the async turn worker runs.
 		if !lane.machine.IsTurnActive() {
-			if _, err := lane.promoteAllPending(ctx, defaultThreadID); err != nil {
+			if _, err := lane.promoteAllPending(ctx, threadID); err != nil {
 				return err
 			}
 		}
-		lane.scheduleTurn(onDone)
+		lane.scheduleTurn(threadID, onDone)
 		return nil
 	}
-	lane.schedulePromote(onDone)
+	lane.schedulePromote(threadID, onDone)
 	return nil
+}
+
+func threadIDFromPendingEvents(events []json.RawMessage) string {
+	for _, ev := range events {
+		tid := threadIDFromPayload(ev)
+		if tid != "" {
+			return tid
+		}
+	}
+	return defaultThreadID
 }

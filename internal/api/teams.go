@@ -2,8 +2,13 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/go-chi/chi/v5"
 
 	"github.com/open-ma/oma-building/internal/store"
 )
@@ -78,6 +83,183 @@ func serializeMember(m store.TeamMember) map[string]any {
 		"status":       m.Status,
 		"joined_at":    formatISO(m.JoinedAt),
 	}
+}
+
+func (h *sessionHandlers) handleSessionTeamMessages(
+	w http.ResponseWriter,
+	req *http.Request,
+) {
+	sess, ok := h.requireSession(w, req)
+	if !ok {
+		return
+	}
+	teamID := chi.URLParam(req, "team_id")
+	limit := 100
+	if raw := req.URL.Query().Get("limit"); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	msgs, err := h.ListTeamMessages(req.Context(), sess.ID, teamID, limit)
+	if err != nil {
+		writeTeamError(w, err)
+		return
+	}
+	if msgs == nil {
+		msgs = []map[string]any{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": msgs})
+}
+
+func (h *sessionHandlers) handleSessionTeamMemberShutdown(
+	w http.ResponseWriter,
+	req *http.Request,
+) {
+	sess, ok := h.requireSession(w, req)
+	if !ok {
+		return
+	}
+	if sess.Status == store.SessionStatusArchived {
+		writeError(w, http.StatusConflict, "session archived")
+		return
+	}
+	teamID := chi.URLParam(req, "team_id")
+	memberID := chi.URLParam(req, "member_id")
+	if err := h.ShutdownTeamMember(
+		req.Context(), sess.ID, teamID, memberID,
+	); err != nil {
+		writeTeamError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// ListTeamMessages returns mailbox rows for a team (Console read path).
+func (h *sessionHandlers) ListTeamMessages(
+	ctx context.Context,
+	sessionID, teamID string,
+	limit int,
+) ([]map[string]any, error) {
+	if h.teams == nil {
+		return nil, fmt.Errorf("team tools unavailable")
+	}
+	team, err := h.teams.GetTeamByID(ctx, sessionID, teamID)
+	if err != nil {
+		return nil, err
+	}
+	if team == nil {
+		return nil, store.ErrNotFound
+	}
+	rows, err := h.teams.ListMessages(ctx, teamID, limit)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]map[string]any, 0, len(rows))
+	for _, m := range rows {
+		out = append(out, serializeMessage(m))
+	}
+	return out, nil
+}
+
+// ShutdownTeamMember queues a shutdown_request for a teammate (Console).
+func (h *sessionHandlers) ShutdownTeamMember(
+	ctx context.Context,
+	sessionID, teamID, memberID string,
+) error {
+	if h.teams == nil {
+		return fmt.Errorf("team tools unavailable")
+	}
+	team, err := h.teams.GetTeamByID(ctx, sessionID, teamID)
+	if err != nil {
+		return err
+	}
+	if team == nil {
+		return store.ErrNotFound
+	}
+	target, err := h.teams.GetMemberByID(ctx, teamID, memberID)
+	if err != nil {
+		return err
+	}
+	if target == nil {
+		return store.ErrNotFound
+	}
+	if target.Status == "shutdown" {
+		return fmt.Errorf("member already shutdown")
+	}
+	if target.BackendType != "in_process" {
+		return fmt.Errorf("shutdown only supported for in_process members")
+	}
+
+	members, err := h.teams.ListMembers(ctx, teamID)
+	if err != nil {
+		return err
+	}
+	fromMember := pickShutdownSender(members, team, memberID)
+	if fromMember == nil {
+		return fmt.Errorf("no sender member available for shutdown")
+	}
+
+	now := time.Now().UnixMilli()
+	msgID := store.NewTeamMessageID()
+	body := "Shutdown requested from Console"
+	msg := store.AgentMessage{
+		ID:           msgID,
+		TeamID:       teamID,
+		FromMemberID: fromMember.ID,
+		ToMemberID:   memberID,
+		MessageType:  "shutdown_request",
+		Body:         body,
+		CreatedAt:    now,
+	}
+	if err := h.teams.CreateMessage(ctx, msg); err != nil {
+		return err
+	}
+
+	teamMsg := map[string]any{
+		"type":              "team.message",
+		"team_id":           teamID,
+		"message_id":        msgID,
+		"from_member_id":    fromMember.ID,
+		"from_display_name": fromMember.DisplayName,
+		"to":                target.DisplayName,
+		"to_member_id":      memberID,
+		"message_type":      "shutdown_request",
+		"body":              body,
+	}
+	if target.ThreadID != "" {
+		teamMsg["session_thread_id"] = target.ThreadID
+	}
+	payload, err := json.Marshal(teamMsg)
+	if err != nil {
+		return err
+	}
+	return h.appendAndPublishBatch(
+		ctx, sessionID, []json.RawMessage{payload},
+	)
+}
+
+func pickShutdownSender(
+	members []store.TeamMember,
+	team *store.Team,
+	targetMemberID string,
+) *store.TeamMember {
+	for i := range members {
+		m := &members[i]
+		if m.ID == targetMemberID {
+			continue
+		}
+		if m.AgentID == team.LeadAgentID ||
+			m.ThreadID == team.LeadThreadID {
+			return m
+		}
+	}
+	for i := range members {
+		m := &members[i]
+		if m.ID != targetMemberID {
+			return m
+		}
+	}
+	return nil
 }
 
 func serializeMessage(m store.AgentMessage) map[string]any {

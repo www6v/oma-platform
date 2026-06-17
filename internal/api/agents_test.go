@@ -69,7 +69,7 @@ func testRouterDeps(
 		},
 		store.NewWakeupRepo(db),
 		store.NewTeamRepo(db),
-		"", "", gatewayOrigin, testInternalSecret, "", "",
+		"", "", gatewayOrigin, testInternalSecret, "", "", "",
 	)
 	memoryStores := store.NewMemoryStoreRepo(db, nil)
 	dreams := store.NewDreamRepo(db)
@@ -209,7 +209,7 @@ func testRouterSharedDB(
 			&harness.ResourceResolver{Files: files, FileBlobs: fileBlobs},
 			store.NewWakeupRepo(db),
 			store.NewTeamRepo(db),
-			"", "", "", "", "", "",
+			"", "", "", "", "", "", "",
 		),
 	})
 	return handler, reg, sessions

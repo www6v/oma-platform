@@ -122,6 +122,9 @@ run_core_suite() {
   run_case "sub-agent delegation (sim + unit)" \
     run_shell smoke-subagent-e2e.sh
 
+  run_case "team store + harness tools" \
+    run_shell smoke-team-e2e.sh
+
   run_case "internal model card key" \
     run_shell smoke-internal-model-key.sh
 
@@ -188,6 +191,7 @@ run_noncore_suite() {
     skip_case "console UI check" "SMOKE_SKIP_BROWSER=1"
     skip_case "console dogfood" "SMOKE_SKIP_BROWSER=1"
     skip_case "console comprehensive E2E" "SMOKE_SKIP_BROWSER=1"
+    skip_case "team console E2E" "SMOKE_SKIP_BROWSER=1"
   else
     _e2e_ensure_model_card
 
@@ -212,6 +216,9 @@ run_noncore_suite() {
 
     run_case "console comprehensive E2E" \
       run_with_target node "${E2E_DIR}/console-comprehensive-e2e.mjs"
+
+    run_case "team console E2E" \
+      run_shell smoke-team-console-e2e.sh
   fi
 
   if is_local_target; then

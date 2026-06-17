@@ -69,7 +69,7 @@ func TestRunTurnHarnessFailureEmitsSessionError(t *testing.T) {
 	if _, err := events.AppendEvents(ctx, sess.ID, []json.RawMessage{userEvent}); err != nil {
 		t.Fatal(err)
 	}
-	if err := machine.RunTurn(ctx); err != nil {
+	if err := machine.RunTurn(ctx, "sthr_primary"); err != nil {
 		t.Fatalf("RunTurn returned error: %v", err)
 	}
 

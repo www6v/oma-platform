@@ -15,6 +15,11 @@ import (
 func (h *sessionHandlers) mountSessionAuxRoutes(r chi.Router) {
 	r.Get("/{id}/threads", h.handleSessionThreads)
 	r.Get("/{id}/teams", h.handleSessionTeams)
+	r.Get("/{id}/teams/{team_id}/messages", h.handleSessionTeamMessages)
+	r.Post(
+		"/{id}/teams/{team_id}/members/{member_id}/shutdown",
+		h.handleSessionTeamMemberShutdown,
+	)
 	r.Get("/{id}/pending", h.handleSessionPending)
 	r.Get("/{id}/trajectory", h.handleSessionTrajectory)
 	r.Get("/{id}/outputs", h.handleSessionOutputs)

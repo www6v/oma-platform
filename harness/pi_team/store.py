@@ -60,12 +60,17 @@ class AgentMessageRow:
 
 def resolve_database_path(explicit: str | None = None) -> str:
     if explicit:
-        return explicit
-    for key in ("OMA_DATABASE_PATH", "DATABASE_PATH"):
-        value = os.environ.get(key)
-        if value:
-            return value
-    return "./data/oma.db"
+        path = explicit
+    else:
+        path = None
+        for key in ("OMA_DATABASE_PATH", "DATABASE_PATH"):
+            value = os.environ.get(key)
+            if value:
+                path = value
+                break
+        if path is None:
+            path = "./data/oma.db"
+    return os.path.abspath(path)
 
 
 class TeamStore:

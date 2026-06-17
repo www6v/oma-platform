@@ -10,6 +10,11 @@ import { Button } from "@/components/ui/button";
 import { AgentIcon, ClockIcon, DurationIcon, EnvIcon, VaultIcon } from "../components/icons";
 import { FilesPanel, ResourcePanel } from "./session-detail/Panels";
 import {
+  TeamPanel,
+  type TeamMessageRow,
+  type TeamRow,
+} from "./session-detail/TeamPanel";
+import {
   TrajectoryOutcomeChip,
   TrajectoryRewardChip,
   TrajectoryViewerModal,
@@ -50,7 +55,7 @@ import {
 } from "../components/ai-elements/prompt-input";
 import { CodeBlock } from "../components/ai-elements/code-block";
 
-type View = "chat" | "timeline";
+type View = "chat" | "timeline" | "team";
 
 /** A user.* event sitting in the server-side pending_events queue.
  *  Maintained client-side via system.user_message_pending /
@@ -156,6 +161,10 @@ export function SessionDetail() {
    *  is removed from this map and the canonical user.* event takes its
    *  place in the events array via the regular SSE broadcast. */
   const [pendingByEventId, setPendingByEventId] = useState<Map<string, PendingEntry>>(new Map());
+  const [teams, setTeams] = useState<TeamRow[]>([]);
+  const [teamMessagesByTeamId, setTeamMessagesByTeamId] = useState<
+    Record<string, TeamMessageRow[]>
+  >({});
   const [showTrajectory, setShowTrajectory] = useState(false);
   const seenKeys = useRef(new Set<string>());
   const abortRef = useRef<AbortController | null>(null);
@@ -403,9 +412,6 @@ export function SessionDetail() {
         return next;
       });
     }
-    // Live-update the thread selector when a sub-agent spawns. We don't
-    // auto-switch the operator's view — they stay on whatever they're
-    // watching; the new tab just appears alongside.
     if (ev.type === "session.thread_created") {
       const tc = ev as {
         session_thread_id?: string;
@@ -428,6 +434,67 @@ export function SessionDetail() {
                   status: "active",
                 },
               ],
+        );
+      }
+    }
+    if (ev.type === "session.team_created") {
+      const tc = ev as { team_id?: string; name?: string };
+      if (tc.team_id) {
+        void api<{ data: TeamRow[] }>(`/v1/sessions/${id}/teams`)
+          .then((res) => setTeams(res.data ?? []))
+          .catch(() => {});
+      }
+    }
+    if (ev.type === "team.message") {
+      const tm = ev as {
+        team_id?: string;
+        message_id?: string;
+        from_member_id?: string;
+        to_member_id?: string;
+        message_type?: string;
+        body?: string;
+        summary?: string | null;
+      };
+      if (tm.team_id && tm.message_id && tm.from_member_id) {
+        const row: TeamMessageRow = {
+          id: tm.message_id,
+          team_id: tm.team_id,
+          from_member_id: tm.from_member_id,
+          to_member_id: tm.to_member_id ?? null,
+          message_type: tm.message_type ?? "text",
+          body: tm.body ?? "",
+          summary: tm.summary ?? null,
+          created_at: new Date().toISOString(),
+          read_at: null,
+        };
+        setTeamMessagesByTeamId((prev) => {
+          const existing = prev[tm.team_id!] ?? [];
+          if (existing.some((m) => m.id === row.id)) {
+            return prev;
+          }
+          return {
+            ...prev,
+            [tm.team_id!]: [...existing, row],
+          };
+        });
+      }
+    }
+    if (ev.type === "team.member_shutdown") {
+      const sd = ev as { team_id?: string; member_id?: string };
+      if (sd.team_id && sd.member_id) {
+        setTeams((prev) =>
+          prev.map((team) =>
+            team.id !== sd.team_id
+              ? team
+              : {
+                  ...team,
+                  members: team.members.map((m) =>
+                    m.id === sd.member_id
+                      ? { ...m, status: "shutdown" }
+                      : m,
+                  ),
+                },
+          ),
         );
       }
     }
@@ -502,6 +569,8 @@ export function SessionDetail() {
     setActiveThreadId("sthr_primary");
     setPendingByEventId(new Map());
     setLocalPending(null);
+    setTeams([]);
+    setTeamMessagesByTeamId({});
 
     // Load session info
     api<{
@@ -638,7 +707,11 @@ export function SessionDetail() {
       })
       .catch(() => setThreads([]));
 
-    // Initial pending queue snapshot. The SSE bridge picks up live
+    api<{ data: TeamRow[] }>(`/v1/sessions/${id}/teams`)
+      .then((res) => setTeams(res.data ?? []))
+      .catch(() => setTeams([]));
+
+    // Initial pending queue snapshot.
     // changes from system.user_message_{pending,promoted,cancelled}
     // frames; this fetch seeds the map so a page-reload during an
     // in-flight queue still shows the outbox correctly. Best-effort —
@@ -902,6 +975,11 @@ export function SessionDetail() {
       <div role="tablist" aria-label="Session view" className="pl-3 pr-4 flex items-center gap-1 shrink-0">
         <ViewTab label="Conversation" active={view === "chat"} onClick={() => setView("chat")} />
         <ViewTab label="Timeline" active={view === "timeline"} onClick={() => setView("timeline")} />
+        <ViewTab
+          label={`Team${teams.length > 0 ? ` (${teams.length})` : ""}`}
+          active={view === "team"}
+          onClick={() => setView("team")}
+        />
         {view === "timeline" && (
           <span className="ml-auto text-xs text-fg-subtle font-mono">{events.length} events</span>
         )}
@@ -1284,6 +1362,25 @@ export function SessionDetail() {
             </PromptInput>
           </div>
         </>
+      ) : view === "team" ? (
+        id ? (
+          <TeamPanel
+            sessionId={id}
+            teams={teams}
+            messagesByTeamId={teamMessagesByTeamId}
+            onTeamsChange={setTeams}
+            onMessagesChange={(teamId, messages) => {
+              setTeamMessagesByTeamId((prev) => ({
+                ...prev,
+                [teamId]: messages,
+              }));
+            }}
+            onSelectThread={(threadId) => {
+              setActiveThreadId(threadId);
+              setView("chat");
+            }}
+          />
+        ) : null
       ) : (
         <TimelineView
           events={events.filter((e) => {

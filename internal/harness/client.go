@@ -41,6 +41,7 @@ type AgentSnapshot struct {
 // TurnRequest is the harness turn payload.
 type TurnRequest struct {
 	SessionID             string                     `json:"session_id"`
+	SessionThreadID       string                     `json:"session_thread_id,omitempty"`
 	TenantID              string                     `json:"tenant_id,omitempty"`
 	Agent                 AgentSnapshot              `json:"agent"`
 	SubAgents             map[string]AgentSnapshot   `json:"sub_agents,omitempty"`
@@ -56,6 +57,7 @@ type TurnRequest struct {
 	InternalSecret        string                     `json:"internal_secret,omitempty"`
 	OutboundProxyAddr     string                     `json:"outbound_proxy_addr,omitempty"`
 	OutboundProxyAPIKey   string                     `json:"outbound_proxy_api_key,omitempty"`
+	DatabasePath          string                     `json:"database_path,omitempty"`
 }
 
 // TurnResponse is the harness turn result.

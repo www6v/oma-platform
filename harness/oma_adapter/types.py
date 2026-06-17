@@ -58,6 +58,7 @@ class AgentSnapshot(BaseModel):
 
 class TurnRequest(BaseModel):
     session_id: str
+    session_thread_id: str | None = None
     tenant_id: str | None = None
     agent: AgentSnapshot
     sub_agents: dict[str, AgentSnapshot] = Field(default_factory=dict)
@@ -73,6 +74,7 @@ class TurnRequest(BaseModel):
     outbound_proxy_api_key: str | None = None
     platform_base: str | None = None
     internal_secret: str | None = None
+    database_path: str | None = None
 
 
 class TurnResponse(BaseModel):

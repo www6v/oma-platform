@@ -34,6 +34,7 @@ async def internal_turn(body: TurnRequest) -> TurnResponse:
         return await asyncio.wait_for(
             run_turn(
                 session_id=body.session_id,
+                session_thread_id=body.session_thread_id,
                 tenant_id=body.tenant_id,
                 agent=body.agent,
                 sub_agents=body.sub_agents,
@@ -49,6 +50,7 @@ async def internal_turn(body: TurnRequest) -> TurnResponse:
                 outbound_proxy_api_key=body.outbound_proxy_api_key,
                 platform_base=body.platform_base,
                 internal_secret=body.internal_secret,
+                database_path=body.database_path,
             ),
             timeout=TURN_TIMEOUT_SEC,
         )
@@ -73,6 +75,7 @@ async def internal_turn_stream(body: TurnRequest) -> StreamingResponse:
             return await asyncio.wait_for(
                 run_turn_stream(
                     session_id=body.session_id,
+                    session_thread_id=body.session_thread_id,
                     tenant_id=body.tenant_id,
                     agent=body.agent,
                     sub_agents=body.sub_agents,
@@ -88,6 +91,7 @@ async def internal_turn_stream(body: TurnRequest) -> StreamingResponse:
                     outbound_proxy_api_key=body.outbound_proxy_api_key,
                     platform_base=body.platform_base,
                     internal_secret=body.internal_secret,
+                    database_path=body.database_path,
                     on_event=on_event,
                 ),
                 timeout=TURN_TIMEOUT_SEC,

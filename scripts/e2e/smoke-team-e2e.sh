@@ -27,4 +27,7 @@ log "Python pi_team tools"
   fi
 )
 
+log "Optional: Console Team tab Playwright E2E"
+log "  ./scripts/e2e/smoke-team-console-e2e.sh"
+
 log "PASS: team smoke checks completed"

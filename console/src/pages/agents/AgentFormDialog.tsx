@@ -88,6 +88,8 @@ const INITIAL_FORM = {
   toolOverrides: {} as Record<string, ToolOverride>,
   // Opt-in to the built-in `general_subagent` tool.
   enableGeneralSubagent: false,
+  // Opt-in to team coordination tools (team_create, spawn_teammate, …).
+  enableTeamTools: false,
 };
 
 interface AgentFormDialogProps {
@@ -283,6 +285,9 @@ export function AgentFormDialog({
       if (form.enableGeneralSubagent) {
         payload.enable_general_subagent = true;
       }
+      if (form.enableTeamTools) {
+        payload.metadata = { enable_team_tools: true };
+      }
       // Local-runtime agent: opt into acp-proxy harness when both runtimeId
       // and acpAgentId are set. Partial config silently falls back to the
       // default cloud loop — same semantics as the CLI flag pair.
@@ -388,6 +393,9 @@ export function AgentFormDialog({
     if (form.enableGeneralSubagent) {
       config.enable_general_subagent = true;
     }
+    if (form.enableTeamTools) {
+      config.metadata = { enable_team_tools: true };
+    }
     return config;
   };
 
@@ -462,6 +470,9 @@ export function AgentFormDialog({
             dc.permission_policy?.type === "always_ask" ? "always_ask" : "always_allow",
           toolOverrides: overrides,
           enableGeneralSubagent: parsed.enable_general_subagent === true,
+          enableTeamTools:
+            (parsed.metadata as { enable_team_tools?: boolean } | undefined)
+              ?.enable_team_tools === true,
         });
       } catch {
         /* keep current form if parse fails */
@@ -1504,6 +1515,31 @@ function AgentsTab({
               <span className="font-mono">general</span>) inheriting this agent's model +
               sandbox, with a safe built-in tool subset
               (bash/read/write/edit/grep/glob). No roster setup needed.
+            </p>
+          </div>
+        </label>
+      </div>
+
+      {/* Team coordination — opt-in via agent metadata. */}
+      <div className="rounded-md border border-border bg-bg-surface px-3 py-3">
+        <label className="flex items-start gap-2 text-sm cursor-pointer">
+          <input
+            type="checkbox"
+            checked={form.enableTeamTools}
+            onChange={(e) => setForm({ ...form, enableTeamTools: e.target.checked })}
+            className="accent-brand mt-0.5"
+          />
+          <div>
+            <div className="font-medium text-fg">Enable team tools</div>
+            <p className="text-xs text-fg-subtle mt-0.5">
+              Exposes{" "}
+              <span className="font-mono">team_create</span>,{" "}
+              <span className="font-mono">spawn_teammate</span>,{" "}
+              <span className="font-mono">send_team_message</span>, and{" "}
+              <span className="font-mono">read_team_messages</span>. The lead agent
+              creates teams and spawns teammates from the session{" "}
+              <span className="font-medium">Conversation</span> tab; members and mailbox
+              appear under Session → <span className="font-medium">Team</span>.
             </p>
           </div>
         </label>

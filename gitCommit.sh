@@ -4,7 +4,6 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${ROOT_DIR}"
 
-BRANCH="master"
 REMOTE="origin"
 
 if ! git rev-parse --git-dir > /dev/null 2>&1; then
@@ -12,9 +11,9 @@ if ! git rev-parse --git-dir > /dev/null 2>&1; then
   exit 1
 fi
 
-current="$(git rev-parse --abbrev-ref HEAD)"
-if [[ "${current}" != "${BRANCH}" ]]; then
-  echo "error: current branch is '${current}', expected '${BRANCH}'" >&2
+BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+if [[ "${BRANCH}" == "HEAD" ]]; then
+  echo "error: detached HEAD, checkout a branch first" >&2
   exit 1
 fi
 

@@ -227,6 +227,27 @@ func (r *TeamRepo) GetMemberByID(
 	return scanMember(row)
 }
 
+// GetMemberByThreadID returns a member by session thread within a session.
+func (r *TeamRepo) GetMemberByThreadID(
+	ctx context.Context,
+	sessionID, threadID string,
+) (*TeamMember, error) {
+	if threadID == "" || threadID == "sthr_primary" {
+		return nil, nil
+	}
+	row := r.db.QueryRowContext(
+		ctx,
+		`SELECT m.id, m.team_id, m.agent_id, m.display_name, m.color,
+		        m.thread_id, m.role, m.plan_mode_required, m.backend_type,
+		        m.status, m.joined_at
+		 FROM team_members m
+		 INNER JOIN teams t ON t.id = m.team_id
+		 WHERE t.session_id = ? AND m.thread_id = ?`,
+		sessionID, threadID,
+	)
+	return scanMember(row)
+}
+
 // GetMemberByDisplayName returns a member by display name.
 func (r *TeamRepo) GetMemberByDisplayName(
 	ctx context.Context,

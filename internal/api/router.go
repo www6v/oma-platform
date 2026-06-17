@@ -337,6 +337,7 @@ func NewSessionHandlers(
 	internalSecret string,
 	outboundProxyAddr string,
 	outboundProxyKey string,
+	databasePath string,
 ) *sessionHandlers {
 	return &sessionHandlers{
 		sessions:          sessions,
@@ -358,5 +359,6 @@ func NewSessionHandlers(
 		internalSecret:    internalSecret,
 		outboundProxyAddr: outboundProxyAddr,
 		outboundProxyKey:  outboundProxyKey,
+		databasePath:      databasePath,
 	}
 }

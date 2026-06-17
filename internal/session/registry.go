@@ -73,6 +73,7 @@ type sessionLane struct {
 }
 
 type turnJob struct {
+	threadID    string
 	onDone      func(error)
 	promoteOnly bool
 }
@@ -87,12 +88,22 @@ func newSessionLane(machine *Machine) *sessionLane {
 	return lane
 }
 
-func (lane *sessionLane) scheduleTurn(onDone func(error)) {
-	lane.turnCh <- turnJob{onDone: onDone}
+func (lane *sessionLane) scheduleTurn(threadID string, onDone func(error)) {
+	if threadID == "" {
+		threadID = defaultThreadID
+	}
+	lane.turnCh <- turnJob{threadID: threadID, onDone: onDone}
 }
 
-func (lane *sessionLane) schedulePromote(onDone func(error)) {
-	lane.turnCh <- turnJob{onDone: onDone, promoteOnly: true}
+func (lane *sessionLane) schedulePromote(threadID string, onDone func(error)) {
+	if threadID == "" {
+		threadID = defaultThreadID
+	}
+	lane.turnCh <- turnJob{
+		threadID:    threadID,
+		onDone:      onDone,
+		promoteOnly: true,
+	}
 }
 
 func (lane *sessionLane) handleInterrupt(
@@ -124,13 +135,23 @@ func (lane *sessionLane) drainPendingTurns() int {
 
 func (lane *sessionLane) runTurnWorker() {
 	for job := range lane.turnCh {
+		threadID := job.threadID
+		if threadID == "" {
+			threadID = defaultThreadID
+		}
 		var err error
 		if job.promoteOnly {
-			_, err = lane.promoteAllPending(context.Background(), defaultThreadID)
+			_, err = lane.promoteAllPending(
+				context.Background(), threadID,
+			)
 		} else {
-			_, err = lane.promoteAllPending(context.Background(), defaultThreadID)
+			_, err = lane.promoteAllPending(
+				context.Background(), threadID,
+			)
 			if err == nil {
-				err = lane.machine.RunTurn(context.Background())
+				err = lane.machine.RunTurn(
+					context.Background(), threadID,
+				)
 			}
 		}
 		if job.onDone != nil {

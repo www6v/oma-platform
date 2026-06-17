@@ -21,6 +21,11 @@ func IsPendingQueueEventType(eventType string) bool {
 	}
 }
 
+// ThreadIDFromPayload reads session_thread_id from an event payload.
+func ThreadIDFromPayload(payload json.RawMessage) string {
+	return threadIDFromPayload(payload)
+}
+
 func threadIDFromPayload(payload json.RawMessage) string {
 	var meta struct {
 		SessionThreadID string `json:"session_thread_id"`

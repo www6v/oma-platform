@@ -57,6 +57,7 @@ type sessionHandlers struct {
 	internalSecret string
 	outboundProxyAddr string
 	outboundProxyKey  string
+	databasePath      string
 }
 
 func (h *sessionHandlers) registerMachine(sess *store.Session) {
@@ -65,6 +66,7 @@ func (h *sessionHandlers) registerMachine(sess *store.Session) {
 		SessionID:     sess.ID,
 		Sessions:      h.sessions,
 		Agents:        h.agents,
+		Teams:         h.teams,
 		Events:        h.events,
 		Pending:       h.pending,
 		Hub:           h.hub,
@@ -78,6 +80,7 @@ func (h *sessionHandlers) registerMachine(sess *store.Session) {
 		InternalSecret: h.internalSecret,
 		OutboundProxyAddr: h.outboundProxyAddr,
 		OutboundProxyAPIKey: h.outboundProxyKey,
+		DatabasePath: h.databasePath,
 	})
 }
 

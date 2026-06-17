@@ -14,6 +14,8 @@ export OMA_FAKE_HARNESS="${OMA_FAKE_HARNESS:-1}"
 
 export OMA_DATABASE_PATH="${OMA_DATABASE_PATH:-${DATABASE_PATH:-${ROOT_DIR}/data/oma.db}}"
 
+mkdir -p "$(dirname "${OMA_DATABASE_PATH}")"
+
 # Shell HTTP(S)_PROXY breaks piPy LLM clients (empty assistant + connection errors).
 # Sandbox outbound uses per-turn .curlrc instead (see outbound/setup.py).
 unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy ALL_PROXY all_proxy || true

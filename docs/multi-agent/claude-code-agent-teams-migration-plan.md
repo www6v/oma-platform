@@ -9,7 +9,7 @@
 | 阶段 | 状态 | 说明 |
 |------|------|------|
 | Phase 1 | ✅ 已 ship | `pi_subagent` 扩展 + Console thread UI + eval + console E2E |
-| Phase 2 | 🚧 进行中 | DB + Go internal API + `pi_team` 扩展已落地；Console Team Tab、长驻 loop、eval 待补 |
+| Phase 2 | 🚧 进行中 | DB + Go API + `pi_team` + Console Team Tab 已落地；eval 待补 |
 | Phase 3+ | ⏳ 未开始 | 任务看板、worktree 隔离 |
 
 ---
@@ -62,7 +62,7 @@
 | Worktree 隔离 | 共享 sandbox | 无 git worktree | Phase 3 sandbox 扩展 |
 | Plan/shutdown 协议 | ✅ `shutdown_request` / `shutdown_response` + loop | 无 shutdown 状态机 | Phase 2.1 |
 | Built-in agent 类型 | 🚧 `pi_subagent/roles.py` + Go roles | Skills seed 文件未加 | Phase 1.1 |
-| Monitor 工具 | Console thread tab ✅ | 无 Team 聚合视图 | Phase 2 Console |
+| Monitor 工具 | Console Team Tab ✅ | 无 Task 看板 | Phase 3 |
 | In-process teammate | ✅ spawn + 长驻 poll loop | 多 harness 进程 | Phase 2.1 `pi_team/loop.py` |
 
 参考现有文档：[subagent.md](./subagent.md)、[session-threads.md](./session-threads.md)。
@@ -229,10 +229,10 @@ harness/
 当前：`send_team_message(run_target_turn=true)` 经 `Registry.EnqueueEvents` 唤醒目标 thread。  
 待补：`pi_team/loop.py` 后台 poll + shutdown 协议。✅ 已实现：`spawn_teammate(start_poll_loop=true)` 启动 loop；`send_team_message` 在 loop 活跃时跳过 `run_target_turn` 避免重复 enqueue。
 
-#### 4.2.5 Console ⏳
+#### 4.2.5 Console ✅
 
 - Session **Team** Tab（成员、消息时间线）
-- 手动 Shutdown teammate
+- 手动 Shutdown teammate（`POST .../members/{id}/shutdown`）
 
 #### 4.2.6 验收
 
@@ -388,7 +388,7 @@ Leader 调用工具 `spawn_teammate` 时，Go 侧：
 | M1 | Phase 1 代码 + eval 绿 | ✅ |
 | M2 | `teams` / `agent_messages` + `pi_team` + smoke | 🚧 |
 | M3 | Task 看板 + worktree 可选 | ⏳ |
-| M4 | Console Team 面板 + 文档 | ⏳ |
+| M4 | Console Team 面板 + 文档 | ✅ |
 
 文档交付（本次）：
 
@@ -433,8 +433,9 @@ Leader 调用工具 `spawn_teammate` 时，Go 侧：
 | T9 | `pi_team` + `team_extension` | ✅ | `harness/pi_team/` |
 | T10 | `smoke-team-e2e.sh` | ✅ | `scripts/e2e/` |
 | T11 | 长驻 teammate loop | ✅ | `pi_team/loop.py` |
-| T12 | Console Team Tab | ⏳ | Console |
+| T12 | Console Team Tab | ✅ | `console/src/pages/session-detail/TeamPanel.tsx` |
 | T13 | Eval team 协作场景 | ⏳ | `test/eval/suites/multi-agent.ts` |
+| T14 | Console Team E2E | ✅ | `scripts/e2e/smoke-team-console-e2e.sh` |
 
 ---
 

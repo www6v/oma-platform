@@ -217,7 +217,7 @@ func testRouterWithApiKeys(t *testing.T) http.Handler {
 			&harness.ResourceResolver{},
 			store.NewWakeupRepo(db),
 			store.NewTeamRepo(db),
-			"", "", "", "", "", "",
+			"", "", "", "", "", "", "",
 		),
 	})
 }

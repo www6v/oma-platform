@@ -65,7 +65,7 @@ func TestTurnMarksSessionRunningThenIdle(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := machine.RunTurn(ctx); err != nil {
+	if err := machine.RunTurn(ctx, "sthr_primary"); err != nil {
 		t.Fatal(err)
 	}
 

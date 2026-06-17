@@ -21,7 +21,12 @@ from pi_subagent.runtime import (
 )
 from oma_adapter.emit import emit_oma_events
 from oma_adapter.platform_guidance import compose_system_prompt
-from oma_adapter.project import latest_user_text, project_oma_events
+from oma_adapter.project import (
+    PRIMARY_THREAD_ID,
+    filter_events_for_thread,
+    latest_user_text,
+    project_oma_events,
+)
 from oma_adapter.provider_env import provider_env
 from oma_adapter.sandbox_paths import patch_path_utils
 from oma_adapter.outbound.bash_ops import OutboundBashOperations
@@ -221,6 +226,7 @@ def _wire_outbound_bash_proxy(session: Any, workdir: str) -> None:
 async def _run_turn_core(
     *,
     session_id: str,
+    session_thread_id: str | None = None,
     tenant_id: str | None = None,
     agent: AgentSnapshot,
     sub_agents: dict[str, AgentSnapshot] | None = None,
@@ -236,11 +242,26 @@ async def _run_turn_core(
     outbound_proxy_api_key: str | None = None,
     platform_base: str | None = None,
     internal_secret: str | None = None,
+    database_path: str | None = None,
     create_session: CreateSessionFn | None,
     on_event: EventCallback | None,
 ) -> TurnResponse:
 
-    working_events = list(events)
+    working_events = filter_events_for_thread(
+        list(events),
+        session_thread_id,
+    )
+    thread_tag = session_thread_id or PRIMARY_THREAD_ID
+    is_subthread = thread_tag != PRIMARY_THREAD_ID
+
+    async def tagged_on_event(event: dict[str, Any]) -> None:
+        if is_subthread:
+            tagged = dict(event)
+            tagged["session_thread_id"] = thread_tag
+            event = tagged
+        if on_event is not None:
+            await on_event(event)
+
     context_window = resolve_context_window_tokens(
         model.model if model is not None else agent.model,
     )
@@ -257,9 +278,12 @@ async def _run_turn_core(
         if boundary is not None:
             working_events.append(boundary)
             if on_event is not None:
-                await on_event(boundary)
+                await tagged_on_event(boundary)
 
-    prompt = project_oma_events(working_events)
+    prompt = project_oma_events(
+        working_events,
+        session_thread_id=session_thread_id,
+    )
     if not prompt:
         return TurnResponse(events=[])
 
@@ -326,15 +350,18 @@ async def _run_turn_core(
                     enabled_tools=schedule_enabled,
                 ),
             )
-        team_runtime = build_team_runtime(
-            session_id=session_id,
-            tenant_id=tenant_id,
-            platform_base=platform_base,
-            internal_secret=internal_secret or os.environ.get(
-                "OMA_INTERNAL_SECRET"
-            ),
-            agent=agent,
-        )
+        team_runtime = None
+        if not is_subthread:
+            team_runtime = build_team_runtime(
+                session_id=session_id,
+                tenant_id=tenant_id,
+                platform_base=platform_base,
+                internal_secret=internal_secret or os.environ.get(
+                    "OMA_INTERNAL_SECRET"
+                ),
+                agent=agent,
+                database_path=database_path,
+            )
         if team_runtime is not None:
             configure_team_runtime(team_runtime)
         configure_subagent_runtime(
@@ -347,7 +374,7 @@ async def _run_turn_core(
                 model=model,
                 aux_model=aux_model,
                 environment=environment,
-                emit_event=emit_aux if on_event is not None else None,
+                emit_event=tagged_on_event if on_event is not None else None,
                 mcp_proxy_base=mcp_proxy_base,
                 mcp_proxy_api_key=mcp_proxy_api_key,
                 outbound_proxy_addr=outbound_proxy_addr,
@@ -392,7 +419,7 @@ async def _run_turn_core(
                         break
                     oma_events.append(item)
                     if on_event is not None:
-                        await on_event(item)
+                        await tagged_on_event(item)
 
             drainer = asyncio.create_task(drain_events())
 
@@ -419,7 +446,10 @@ async def _run_turn_core(
                 await session.wait_for_idle()
 
             assistant_text = _assistant_text_from_session(session)
-            user_text = latest_user_text(working_events)
+            user_text = latest_user_text(
+                working_events,
+                session_thread_id=session_thread_id,
+            )
             requested_mcp = set(mcp_tools_named_in_text(user_text))
             streamed_oma = emit_oma_events(
                 buffer,
@@ -503,6 +533,7 @@ async def _run_turn_core(
 async def run_turn(
     *,
     session_id: str,
+    session_thread_id: str | None = None,
     tenant_id: str | None = None,
     agent: AgentSnapshot,
     sub_agents: dict[str, AgentSnapshot] | None = None,
@@ -518,10 +549,12 @@ async def run_turn(
     outbound_proxy_api_key: str | None = None,
     platform_base: str | None = None,
     internal_secret: str | None = None,
+    database_path: str | None = None,
     create_session: CreateSessionFn | None = None,
 ) -> TurnResponse:
     return await _run_turn_core(
         session_id=session_id,
+        session_thread_id=session_thread_id,
         tenant_id=tenant_id,
         agent=agent,
         sub_agents=sub_agents,
@@ -537,6 +570,7 @@ async def run_turn(
         outbound_proxy_api_key=outbound_proxy_api_key,
         platform_base=platform_base,
         internal_secret=internal_secret,
+        database_path=database_path,
         create_session=create_session,
         on_event=None,
     )
@@ -545,6 +579,7 @@ async def run_turn(
 async def run_turn_stream(
     *,
     session_id: str,
+    session_thread_id: str | None = None,
     tenant_id: str | None = None,
     agent: AgentSnapshot,
     sub_agents: dict[str, AgentSnapshot] | None = None,
@@ -560,11 +595,13 @@ async def run_turn_stream(
     outbound_proxy_api_key: str | None = None,
     platform_base: str | None = None,
     internal_secret: str | None = None,
+    database_path: str | None = None,
     create_session: CreateSessionFn | None = None,
     on_event: EventCallback,
 ) -> TurnResponse:
     return await _run_turn_core(
         session_id=session_id,
+        session_thread_id=session_thread_id,
         tenant_id=tenant_id,
         agent=agent,
         sub_agents=sub_agents,
@@ -580,6 +617,7 @@ async def run_turn_stream(
         outbound_proxy_api_key=outbound_proxy_api_key,
         platform_base=platform_base,
         internal_secret=internal_secret,
+        database_path=database_path,
         create_session=create_session,
         on_event=on_event,
     )

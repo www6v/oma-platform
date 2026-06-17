@@ -29,6 +29,7 @@ type Machine struct {
 	SessionID   string
 	Sessions    *store.SessionRepo
 	Agents      *store.AgentRepo
+	Teams       *store.TeamRepo
 	Events      *store.EventRepo
 	Pending     *store.PendingRepo
 	Hub         Broadcaster
@@ -42,6 +43,7 @@ type Machine struct {
 	InternalSecret      string
 	OutboundProxyAddr   string
 	OutboundProxyAPIKey string
+	DatabasePath        string
 	appendLocker sync.Locker
 	activeTurn   string
 	activeTurnM  sync.Mutex
@@ -63,6 +65,7 @@ func (m *Machine) syncDeps(src *Machine) {
 	m.SessionID = src.SessionID
 	m.Sessions = src.Sessions
 	m.Agents = src.Agents
+	m.Teams = src.Teams
 	m.Events = src.Events
 	m.Pending = src.Pending
 	m.Hub = src.Hub
@@ -76,6 +79,7 @@ func (m *Machine) syncDeps(src *Machine) {
 	m.InternalSecret = src.InternalSecret
 	m.OutboundProxyAddr = src.OutboundProxyAddr
 	m.OutboundProxyAPIKey = src.OutboundProxyAPIKey
+	m.DatabasePath = src.DatabasePath
 }
 
 // IsTurnActive reports whether a harness turn is currently running.
@@ -86,7 +90,11 @@ func (m *Machine) IsTurnActive() bool {
 }
 
 // RunTurn executes a harness turn using persisted session history.
-func (m *Machine) RunTurn(ctx context.Context) error {
+// threadID selects the session thread (default sthr_primary).
+func (m *Machine) RunTurn(ctx context.Context, threadID string) error {
+	if threadID == "" {
+		threadID = defaultThreadID
+	}
 	turnCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -133,10 +141,9 @@ func (m *Machine) RunTurn(ctx context.Context) error {
 		eventPayloads = append(eventPayloads, ev.Payload)
 	}
 
-	var agent harness.AgentSnapshot
-	agent, err = harness.AgentSnapshotFromRaw(sess.AgentSnapshot)
+	agent, err := m.resolveAgentForThread(ctx, sess, threadID)
 	if err != nil {
-		return fmt.Errorf("parse agent snapshot: %w", err)
+		return m.failTurn(ctx, turnID, err)
 	}
 
 	subAgents, err := harness.ResolveSubAgents(
@@ -197,6 +204,7 @@ func (m *Machine) RunTurn(ctx context.Context) error {
 		m.Harness,
 		harness.TurnRequest{
 			SessionID:           m.SessionID,
+			SessionThreadID:       threadID,
 			TenantID:            m.TenantID,
 			Agent:               agent,
 			SubAgents:           subAgents,
@@ -212,6 +220,7 @@ func (m *Machine) RunTurn(ctx context.Context) error {
 			InternalSecret:      m.InternalSecret,
 			OutboundProxyAddr:   m.OutboundProxyAddr,
 			OutboundProxyAPIKey: m.OutboundProxyAPIKey,
+			DatabasePath:        m.DatabasePath,
 		},
 		func(ev json.RawMessage) error {
 			return m.publishEvents(ctx, []json.RawMessage{ev})
@@ -339,6 +348,42 @@ func (m *Machine) publishEvents(
 		})
 	}
 	return nil
+}
+
+func (m *Machine) resolveAgentForThread(
+	ctx context.Context,
+	sess *store.Session,
+	threadID string,
+) (harness.AgentSnapshot, error) {
+	if threadID == "" || threadID == defaultThreadID {
+		return harness.AgentSnapshotFromRaw(sess.AgentSnapshot)
+	}
+	if m.Teams == nil || m.Agents == nil {
+		return harness.AgentSnapshot{}, fmt.Errorf(
+			"teammate thread %s: team lookup unavailable", threadID,
+		)
+	}
+	member, err := m.Teams.GetMemberByThreadID(
+		ctx, m.SessionID, threadID,
+	)
+	if err != nil {
+		return harness.AgentSnapshot{}, err
+	}
+	if member == nil {
+		return harness.AgentSnapshot{}, fmt.Errorf(
+			"teammate thread %s: member not found", threadID,
+		)
+	}
+	agent, err := m.Agents.Get(ctx, m.TenantID, member.AgentID)
+	if err != nil {
+		return harness.AgentSnapshot{}, err
+	}
+	if agent == nil {
+		return harness.AgentSnapshot{}, fmt.Errorf(
+			"teammate agent %q not found", member.AgentID,
+		)
+	}
+	return harness.AgentSnapshotFromConfig(agent.AgentConfig), nil
 }
 
 func (m *Machine) resolveModel(

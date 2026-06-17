@@ -9,9 +9,40 @@ from oma_adapter.compaction import (
     latest_compaction_boundary,
 )
 
+PRIMARY_THREAD_ID = "sthr_primary"
 
-def latest_user_text(events: list[dict[str, Any]]) -> str:
-    for event in reversed(events):
+
+def event_thread_id(event: dict[str, Any]) -> str:
+    tid = event.get("session_thread_id")
+    if isinstance(tid, str) and tid.strip():
+        return tid.strip()
+    return PRIMARY_THREAD_ID
+
+
+def filter_events_for_thread(
+    events: list[dict[str, Any]],
+    session_thread_id: str | None,
+) -> list[dict[str, Any]]:
+    if not session_thread_id or session_thread_id == PRIMARY_THREAD_ID:
+        return [
+            ev
+            for ev in events
+            if event_thread_id(ev) == PRIMARY_THREAD_ID
+        ]
+    return [
+        ev
+        for ev in events
+        if event_thread_id(ev) == session_thread_id
+    ]
+
+
+def latest_user_text(
+    events: list[dict[str, Any]],
+    *,
+    session_thread_id: str | None = None,
+) -> str:
+    scoped = filter_events_for_thread(events, session_thread_id)
+    for event in reversed(scoped):
         if event.get("type") != "user.message":
             continue
         parts: list[str] = []
@@ -74,20 +105,28 @@ def _history_slice(events: list[dict[str, Any]], end_index: int) -> list[dict[st
     return events[boundary_index + 1 : end_index]
 
 
-def project_oma_events(events: list[dict[str, Any]]) -> str:
+def project_oma_events(
+    events: list[dict[str, Any]],
+    *,
+    session_thread_id: str | None = None,
+) -> str:
     """Return prompt text for a stateless turn."""
 
-    user_text = latest_user_text(events)
+    scoped = filter_events_for_thread(events, session_thread_id)
+    user_text = latest_user_text(
+        scoped,
+        session_thread_id=session_thread_id,
+    )
     if not user_text:
         return ""
 
-    last_user_index = _last_user_message_index(events)
+    last_user_index = _last_user_message_index(scoped)
     if last_user_index < 0:
         return user_text
 
     parts: list[str] = []
-    history_events = _history_slice(events, last_user_index)
-    boundary = latest_compaction_boundary(events[:last_user_index])
+    history_events = _history_slice(scoped, last_user_index)
+    boundary = latest_compaction_boundary(scoped[:last_user_index])
     if boundary is not None:
         summary = _summary_text(boundary)
         if summary:

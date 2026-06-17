@@ -31,6 +31,11 @@ import (
 func main() {
 	addr := envOrDefault("OMA_LISTEN_ADDR", ":8787")
 	dbPath := envOrDefault("DATABASE_PATH", "./data/oma.db")
+	absDbPath, err := filepath.Abs(dbPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	dbPath = absDbPath
 	workdirBase := envOrDefault("SANDBOX_WORKDIR", "./data/sandboxes")
 	skillsDataDir := envOrDefault("SKILLS_DATA_DIR", "./data/skills")
 	filesDataDir := envOrDefault("FILES_DATA_DIR", "./data/files")
@@ -169,6 +174,7 @@ func main() {
 		harnessPlatformBase, apiKey,
 		harnessPlatformBase, internalSecret,
 		outbound.HostForHarness(outboundAddr), apiKey,
+		dbPath,
 	)
 	if os.Getenv("OMA_WAKEUP_WORKER_DISABLED") != "1" {
 		wakeupWorker := &api.WakeupWorker{

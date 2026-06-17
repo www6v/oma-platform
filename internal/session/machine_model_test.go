@@ -72,7 +72,7 @@ func TestRunTurnResolvesModelCardByModelID(t *testing.T) {
 	if _, err := events.AppendEvents(ctx, sess.ID, []json.RawMessage{userEvent}); err != nil {
 		t.Fatal(err)
 	}
-	if err := machine.RunTurn(ctx); err != nil {
+	if err := machine.RunTurn(ctx, "sthr_primary"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -150,7 +150,7 @@ func TestRunTurnUsesDefaultCardForProviderModel(t *testing.T) {
 	if _, err := events.AppendEvents(ctx, sess.ID, []json.RawMessage{userEvent}); err != nil {
 		t.Fatal(err)
 	}
-	if err := machine.RunTurn(ctx); err != nil {
+	if err := machine.RunTurn(ctx, "sthr_primary"); err != nil {
 		t.Fatal(err)
 	}
 

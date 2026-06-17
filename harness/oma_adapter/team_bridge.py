@@ -13,18 +13,22 @@ def build_team_runtime(
     platform_base: str | None,
     internal_secret: str | None,
     agent: AgentSnapshot,
+    database_path: str | None = None,
 ) -> TeamRuntime | None:
     if not _needs_team_tools(agent):
         return None
     import os
+
+    resolved_db = database_path or os.environ.get("OMA_DATABASE_PATH") or os.environ.get(
+        "DATABASE_PATH"
+    )
 
     return TeamRuntime(
         session_id=session_id,
         tenant_id=tenant_id,
         platform_base=platform_base,
         internal_secret=internal_secret,
-        database_path=os.environ.get("OMA_DATABASE_PATH")
-        or os.environ.get("DATABASE_PATH"),
+        database_path=resolved_db,
         lead_agent_id=agent.id,
         enabled_tools=TEAM_TOOL_NAMES,
     )
