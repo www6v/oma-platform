@@ -21,9 +21,9 @@ log "Python pi_team tools"
 (
   cd harness
   if command -v uv >/dev/null 2>&1; then
-    uv run pytest tests/test_team_tools.py tests/test_team_tenant_isolation.py -v
+    uv run pytest tests/test_team_tools.py tests/test_team_tenant_isolation.py tests/test_team_broadcast.py tests/test_team_shutdown.py -v
   else
-    python3 -m pytest tests/test_team_tools.py tests/test_team_tenant_isolation.py -v
+    python3 -m pytest tests/test_team_tools.py tests/test_team_tenant_isolation.py tests/test_team_broadcast.py tests/test_team_shutdown.py -v
   fi
 )
 

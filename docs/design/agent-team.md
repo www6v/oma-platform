@@ -77,7 +77,7 @@ Team 记录包含：
 | `agent_id` | 绑定的 Agent 配置（system prompt、tools 等） |
 | `thread_id` | 该队友独占的 Session Thread（`sthr_*`） |
 | `role` | 可选角色标签，如 `coder`、`tester` |
-| `status` | `idle` → `listening` → `active` → `shutdown` |
+| `status` | `idle` → `listening` → `active` → `shutting_down` → `shutdown` |
 | `backend_type` | 当前为 `in_process`（同 harness 进程内） |
 
 `spawn_teammate` 时会：
@@ -92,7 +92,7 @@ Team 记录包含：
 
 | 字段 | 含义 |
 |------|------|
-| `from_member_id` / `to_member_id` | 发件人 / 收件人（`*` 表示广播，待完善） |
+| `from_member_id` / `to_member_id` | 发件人 / 收件人（`to="*"` 广播时为每位队友各写一条消息） |
 | `message_type` | `text`（普通）、`shutdown_request`、`shutdown_response`、`plan_approval_request` 等 |
 | `body` / `summary` | 正文 / 摘要 |
 | `read_at` | 已读时间；未读消息会被 poll loop 或 `read_team_messages` 消费 |
@@ -162,9 +162,10 @@ Leader 调用 send_team_message({ to: "coder-1", body: "实现 JWT 中间件" })
 
 ```
 Console → POST /v1/sessions/{id}/teams/{team_id}/members/{member_id}/shutdown
+    ├─ member status → shutting_down
     ├─ 写入 shutdown_request 消息
-    ├─ SSE: team.message
-    └─ 队友 loop 收到后退出，status → shutdown
+    ├─ SSE: team.member_shutting_down + team.message
+    └─ Harness drain（下一 turn 或 poll loop）→ shutdown_response + status → shutdown
 ```
 
 ## 架构分层
@@ -313,7 +314,8 @@ OMA 的 Agent Team 设计参考 Claude Code 的 Agent Teams / Swarm，做了平�
 | E2E / smoke 测试 | ✅ `smoke-team-e2e.sh` 等 |
 | 任务看板（TaskCreate 等价） | ⏳ Phase 3 |
 | Git worktree 隔离 | ⏳ Phase 3 |
-| 广播 fan-out（`to="*"`） | 🚧 部分支持 |
+| Shutdown 状态机（`shutting_down` → `shutdown`） | ✅ `pi_team/shutdown.py` |
+| 广播 fan-out（`to="*"`） | ✅ 每位队友独立 `agent_messages` 行 |
 | 独立 harness 进程队友 | ⏳ Phase 4 |
 
 ## 关键文件索引
@@ -327,6 +329,7 @@ OMA 的 Agent Team 设计参考 Claude Code 的 Agent Teams / Swarm，做了平�
 | Go API | `internal/api/teams.go` | 只读列表、消息、Shutdown |
 | Harness 核心 | `harness/pi_team/service.py` | create / spawn / send / read |
 | Harness 循环 | `harness/pi_team/loop.py` | Poll Loop、shutdown 处理 |
+| Harness 状态机 | `harness/pi_team/shutdown.py` | `shutting_down` → `shutdown` |
 | Harness 工具 | `harness/pi_team/tools.py` | piPy 工具定义 |
 | Harness 桥接 | `harness/oma_adapter/team_bridge.py` | 按 Agent 配置启用 |
 | Console | `console/src/pages/session-detail/TeamPanel.tsx` | Team Tab UI |

@@ -164,7 +164,7 @@ async def test_loop_enqueues_turn_on_unread(tmp_path) -> None:
 
     with (
         patch("pi_team.loop.enqueue_session_events", enqueue_mock),
-        patch("pi_team.loop.append_session_events", append_mock),
+        patch("pi_team.shutdown.append_session_events", append_mock),
     ):
         started = await manager.start(
             _member(),
@@ -284,7 +284,7 @@ async def test_loop_shutdown_stops_and_responds(tmp_path) -> None:
 
     with (
         patch("pi_team.loop.enqueue_session_events", enqueue_mock),
-        patch("pi_team.loop.append_session_events", append_mock),
+        patch("pi_team.shutdown.append_session_events", append_mock),
     ):
         await manager.start(_member(), session_id="sess-1", config=cfg)
         await asyncio.sleep(0.25)

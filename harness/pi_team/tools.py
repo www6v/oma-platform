@@ -138,7 +138,9 @@ class SendTeamMessageTool:
     name = "send_team_message"
     description = (
         "Send a mailbox message to a teammate (by display_name) or broadcast "
-        "with to=\"*\". Wakes the target thread to run a turn by default."
+        "with to=\"*\". Use message_type shutdown_request to shut down a "
+        "teammate (runs shutdown state machine). Wakes the target thread "
+        "to run a turn by default."
     )
     parameters: dict[str, Any] = {
         "type": "object",

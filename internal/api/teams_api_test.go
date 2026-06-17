@@ -100,6 +100,17 @@ func TestSessionTeamMessagesAndShutdown(t *testing.T) {
 		t.Fatalf("shutdown status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
+	updated, err := teams.GetMemberByID(ctx, team.ID, worker.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated == nil {
+		t.Fatal("worker member missing after shutdown")
+	}
+	if updated.Status != "shutting_down" {
+		t.Fatalf("worker status=%q want shutting_down", updated.Status)
+	}
+
 	req = httptest.NewRequest(http.MethodGet, msgURL, nil)
 	rec = httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)

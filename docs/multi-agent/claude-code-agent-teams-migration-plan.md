@@ -56,11 +56,11 @@
 | `Agent` sub-agent | ✅ `call_agent_*` / `general_subagent`（`pi_subagent`） | 无 `resume_thread_id` | Phase 1 ✅；resume 可 Phase 1.1 |
 | Named teammate | ✅ `team_members.display_name` | — | Phase 2 ✅；lead 自动注册 ✅ Phase 2.1 |
 | `TeamCreate` | ✅ `teams` 表 + `team_create` 工具 | — | Phase 2 ✅ |
-| `SendMessage` | ✅ `agent_messages` + `send_team_message` | 广播 fan-out 未做 | Phase 2 ✅；广播 → Phase 2.1 |
+| `SendMessage` | ✅ `agent_messages` + `send_team_message` | — | Phase 2 ✅；广播 fan-out ✅ Phase 2.1 |
 | `TaskCreate` 看板 | ❌ | 无任务依赖 | Phase 3 `team_tasks` |
 | 并行 teammate | ✅ 并行 sub-turn + 按 thread 排队 turn | 多 harness 进程 | Phase 4 |
 | Worktree 隔离 | 共享 sandbox | 无 git worktree | Phase 3 sandbox 扩展 |
-| Plan/shutdown 协议 | ✅ `shutdown_request` / `shutdown_response` + loop | 无 shutdown 状态机 | Phase 2.1 |
+| Plan/shutdown 协议 | ✅ `shutdown_request` / `shutdown_response` + 状态机 | — | Phase 2 ✅；状态机 ✅ Phase 2.1 |
 | Built-in agent 类型 | 🚧 `pi_subagent/roles.py` + Go roles | Skills seed 文件未加 | Phase 1.1 |
 | Monitor 工具 | Console Team Tab ✅ | 无 Task 看板 | Phase 3 |
 | In-process teammate | ✅ spawn + 长驻 poll loop | 多 harness 进程 | Phase 2 ✅ `pi_team/loop.py` |
@@ -247,7 +247,7 @@ harness/
 | Eval T13（live） | ✅ `T13.1-team-spawn`、`T13.2-team-send-message`；`smoke-team-live-e2e.sh` 包装 T13.1（`TEAM_LIVE_FULL=1` 含 T13.2） |
 | 租户隔离测试 | ✅ Go `teams_tenant_isolation_test.go` + harness `test_team_tenant_isolation.py` |
 
-**Phase 2 遗留（可选 2.1）**：~~`team_create` 自动注册 lead member~~ ✅、~~租户隔离测试~~ ✅、`send_team_message` 广播 `to="*"` fan-out、Agent 编辑页 `enable_team_tools`。
+**Phase 2 遗留（可选 2.1）**：~~`team_create` 自动注册 lead member~~ ✅、~~租户隔离测试~~ ✅、~~`send_team_message` 广播 `to="*"` fan-out~~ ✅、~~Shutdown 状态机~~ ✅、Agent 编辑页 `enable_team_tools`（暂缓；创建页 `AgentFormDialog` 仍可用）。
 
 ---
 

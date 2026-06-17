@@ -16,6 +16,11 @@ from pi_team.ids import (
 from pi_team.platform import append_session_events, enqueue_session_events
 from pi_team.runtime import get_team_runtime
 from pi_team.serialize import serialize_member, serialize_message, serialize_team
+from pi_team.shutdown import (
+    MemberShutdownError,
+    member_can_receive_messages,
+    request_teammate_shutdown,
+)
 from pi_team.store import (
     AgentMessageRow,
     TeamMemberRow,
@@ -258,6 +263,79 @@ async def spawn_teammate(
     return serialize_member(member)
 
 
+def _is_broadcast_to(to: str) -> bool:
+    return not to or to == "*"
+
+
+async def _deliver_team_message(
+    *,
+    session_id: str,
+    store: TeamStore,
+    team_id: str,
+    from_member: TeamMemberRow,
+    recipient: TeamMemberRow,
+    to_label: str,
+    body: str,
+    summary: str,
+    msg_type: str,
+    run_turn: bool,
+) -> tuple[str, dict[str, Any], dict[str, Any] | None]:
+    """Persist one message, build SSE payload, optional user.message enqueue."""
+    now = _now_ms()
+    msg_id = new_team_message_id()
+    msg = AgentMessageRow(
+        id=msg_id,
+        team_id=team_id,
+        from_member_id=from_member.id,
+        to_member_id=recipient.id,
+        message_type=msg_type,
+        body=body,
+        summary=summary,
+        read_at=None,
+        created_at=now,
+    )
+    store.create_message(msg)
+
+    team_msg: dict[str, Any] = {
+        "type": "team.message",
+        "team_id": team_id,
+        "message_id": msg_id,
+        "from_member_id": from_member.id,
+        "from_display_name": from_member.display_name,
+        "to": to_label,
+        "to_member_id": recipient.id,
+        "message_type": msg_type,
+        "summary": summary or None,
+        "body": body,
+    }
+    target_thread_id = recipient.thread_id
+    if target_thread_id:
+        team_msg["session_thread_id"] = target_thread_id
+
+    user_msg: dict[str, Any] | None = None
+    if run_turn and target_thread_id and msg_type != "shutdown_request":
+        from pi_team.loop import get_loop_manager
+
+        if get_loop_manager().is_running(session_id, recipient.id):
+            pass
+        else:
+            prompt = body
+            if summary:
+                prompt = f"{summary}\n\n{body}"
+            user_msg = {
+                "type": "user.message",
+                "session_thread_id": target_thread_id,
+                "content": [{"type": "text", "text": prompt}],
+                "metadata": {
+                    "harness": "team",
+                    "team_id": team_id,
+                    "message_id": msg_id,
+                },
+            }
+
+    return msg_id, team_msg, user_msg
+
+
 async def send_team_message(
     session_id: str,
     args: dict[str, Any],
@@ -281,84 +359,105 @@ async def send_team_message(
 
     msg_type = str(args.get("message_type") or "").strip() or "text"
     to = str(args.get("to") or "").strip()
-
-    to_member_id = ""
-    target_thread_id = ""
-    if to and to != "*":
-        recipient = store.get_member_by_display_name(team_id, to)
-        if recipient is None:
-            raise TeamServiceError(f'recipient "{to}" not found')
-        to_member_id = recipient.id
-        target_thread_id = recipient.thread_id
-
-    now = _now_ms()
-    msg_id = new_team_message_id()
     summary = str(args.get("summary") or "").strip()
-    msg = AgentMessageRow(
-        id=msg_id,
-        team_id=team_id,
-        from_member_id=from_id,
-        to_member_id=to_member_id,
-        message_type=msg_type,
-        body=body,
-        summary=summary,
-        read_at=None,
-        created_at=now,
-    )
-    store.create_message(msg)
-
-    team_msg: dict[str, Any] = {
-        "type": "team.message",
-        "team_id": team_id,
-        "message_id": msg_id,
-        "from_member_id": from_id,
-        "from_display_name": from_member.display_name,
-        "to": to,
-        "message_type": msg_type,
-        "summary": summary or None,
-        "body": body,
-    }
-    if to_member_id:
-        team_msg["to_member_id"] = to_member_id
-    if target_thread_id:
-        team_msg["session_thread_id"] = target_thread_id
-    await append_session_events([team_msg])
 
     run_turn = args.get("run_target_turn", True)
     if run_turn is None:
         run_turn = True
-    if to_member_id:
-        from pi_team.loop import get_loop_manager
-
-        if get_loop_manager().is_running(session_id, to_member_id):
-            run_turn = False
-    if (
-        run_turn
-        and target_thread_id
-        and msg_type != "shutdown_request"
-    ):
-        prompt = body
-        if summary:
-            prompt = f"{summary}\n\n{body}"
-        user_msg = {
-            "type": "user.message",
-            "session_thread_id": target_thread_id,
-            "content": [{"type": "text", "text": prompt}],
-            "metadata": {
-                "harness": "team",
-                "team_id": team_id,
-                "message_id": msg_id,
-            },
-        }
-        await enqueue_session_events([user_msg], run_turn=True)
 
     from pi_team.serialize import null_if_empty
+
+    if msg_type == "shutdown_request":
+        if _is_broadcast_to(to):
+            raise TeamServiceError(
+                "shutdown_request does not support broadcast"
+            )
+        recipient = store.get_member_by_display_name(team_id, to)
+        if recipient is None:
+            raise TeamServiceError(f'recipient "{to}" not found')
+        try:
+            return await request_teammate_shutdown(
+                session_id,
+                store=store,
+                team_id=team_id,
+                target_member_id=recipient.id,
+                from_member_id=from_id,
+                body=body,
+                summary=summary,
+            )
+        except MemberShutdownError as exc:
+            raise TeamServiceError(str(exc)) from exc
+
+    if _is_broadcast_to(to):
+        members = store.list_members(team_id)
+        recipients = [
+            m
+            for m in members
+            if m.id != from_id and member_can_receive_messages(m.status)
+        ]
+        team_events: list[dict[str, Any]] = []
+        user_events: list[dict[str, Any]] = []
+        message_ids: list[str] = []
+
+        for recipient in recipients:
+            msg_id, team_msg, user_msg = await _deliver_team_message(
+                session_id=session_id,
+                store=store,
+                team_id=team_id,
+                from_member=from_member,
+                recipient=recipient,
+                to_label="*",
+                body=body,
+                summary=summary,
+                msg_type=msg_type,
+                run_turn=run_turn,
+            )
+            message_ids.append(msg_id)
+            team_events.append(team_msg)
+            if user_msg is not None:
+                user_events.append(user_msg)
+
+        await append_session_events(team_events)
+        if user_events:
+            await enqueue_session_events(user_events, run_turn=True)
+
+        return {
+            "message_id": message_ids[0] if message_ids else None,
+            "message_ids": message_ids,
+            "team_id": team_id,
+            "broadcast": True,
+            "recipient_count": len(recipients),
+        }
+
+    recipient = store.get_member_by_display_name(team_id, to)
+    if recipient is None:
+        raise TeamServiceError(f'recipient "{to}" not found')
+    if not member_can_receive_messages(recipient.status):
+        raise TeamServiceError(
+            f'recipient "{to}" is not accepting messages'
+        )
+
+    msg_id, team_msg, user_msg = await _deliver_team_message(
+        session_id=session_id,
+        store=store,
+        team_id=team_id,
+        from_member=from_member,
+        recipient=recipient,
+        to_label=to,
+        body=body,
+        summary=summary,
+        msg_type=msg_type,
+        run_turn=run_turn,
+    )
+    await append_session_events([team_msg])
+    if user_msg is not None:
+        await enqueue_session_events([user_msg], run_turn=True)
 
     return {
         "message_id": msg_id,
         "team_id": team_id,
-        "to_member_id": null_if_empty(to_member_id),
-        "session_thread_id": null_if_empty(target_thread_id),
+        "to_member_id": null_if_empty(recipient.id),
+        "session_thread_id": null_if_empty(recipient.thread_id),
     }
 
 

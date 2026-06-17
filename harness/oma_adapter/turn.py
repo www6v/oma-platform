@@ -384,6 +384,14 @@ async def _run_turn_core(
             )
         if team_runtime is not None:
             configure_team_runtime(team_runtime)
+            from pi_team.shutdown import drain_pending_shutdowns
+
+            try:
+                asyncio.get_running_loop().create_task(
+                    drain_pending_shutdowns(team_runtime.session_id or "")
+                )
+            except RuntimeError:
+                pass
         configure_subagent_runtime(
             build_subagent_runtime(
                 session_id=session_id,

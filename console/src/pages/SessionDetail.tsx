@@ -479,6 +479,25 @@ export function SessionDetail() {
         });
       }
     }
+    if (ev.type === "team.member_shutting_down") {
+      const sd = ev as { team_id?: string; member_id?: string };
+      if (sd.team_id && sd.member_id) {
+        setTeams((prev) =>
+          prev.map((team) =>
+            team.id !== sd.team_id
+              ? team
+              : {
+                  ...team,
+                  members: team.members.map((m) =>
+                    m.id === sd.member_id
+                      ? { ...m, status: "shutting_down" }
+                      : m,
+                  ),
+                },
+          ),
+        );
+      }
+    }
     if (ev.type === "team.member_shutdown") {
       const sd = ev as { team_id?: string; member_id?: string };
       if (sd.team_id && sd.member_id) {

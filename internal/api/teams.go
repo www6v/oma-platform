@@ -186,6 +186,9 @@ func (h *sessionHandlers) ShutdownTeamMember(
 	if target.Status == "shutdown" {
 		return fmt.Errorf("member already shutdown")
 	}
+	if target.Status == "shutting_down" {
+		return fmt.Errorf("member shutdown already in progress")
+	}
 	if target.BackendType != "in_process" {
 		return fmt.Errorf("shutdown only supported for in_process members")
 	}
@@ -197,6 +200,12 @@ func (h *sessionHandlers) ShutdownTeamMember(
 	fromMember := pickShutdownSender(members, team, memberID)
 	if fromMember == nil {
 		return fmt.Errorf("no sender member available for shutdown")
+	}
+
+	if err := h.teams.UpdateMemberStatus(
+		ctx, memberID, "shutting_down",
+	); err != nil {
+		return err
 	}
 
 	now := time.Now().UnixMilli()
@@ -215,6 +224,13 @@ func (h *sessionHandlers) ShutdownTeamMember(
 		return err
 	}
 
+	shuttingDown := map[string]any{
+		"type":              "team.member_shutting_down",
+		"team_id":           teamID,
+		"member_id":         memberID,
+		"display_name":      target.DisplayName,
+		"session_thread_id": target.ThreadID,
+	}
 	teamMsg := map[string]any{
 		"type":              "team.message",
 		"team_id":           teamID,
@@ -229,13 +245,15 @@ func (h *sessionHandlers) ShutdownTeamMember(
 	if target.ThreadID != "" {
 		teamMsg["session_thread_id"] = target.ThreadID
 	}
-	payload, err := json.Marshal(teamMsg)
-	if err != nil {
-		return err
+	payloads := make([]json.RawMessage, 0, 2)
+	for _, ev := range []map[string]any{shuttingDown, teamMsg} {
+		raw, err := json.Marshal(ev)
+		if err != nil {
+			return err
+		}
+		payloads = append(payloads, raw)
 	}
-	return h.appendAndPublishBatch(
-		ctx, sessionID, []json.RawMessage{payload},
-	)
+	return h.appendAndPublishBatch(ctx, sessionID, payloads)
 }
 
 func pickShutdownSender(

@@ -9,7 +9,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from pi_team.platform import append_session_events, enqueue_session_events
+from pi_team.platform import enqueue_session_events
 from pi_team.runtime import get_team_runtime
 from pi_team.store import AgentMessageRow, TeamMemberRow, TeamStore, resolve_database_path
 
@@ -207,20 +207,19 @@ async def _run_teammate_loop(
 
             last_activity = time.monotonic()
             shutdown_msgs, work_msgs = _split_shutdown_messages(messages)
+            if refreshed.status == "shutting_down":
+                work_msgs = []
             all_ids = [m.id for m in messages]
 
             if shutdown_msgs:
-                await _handle_shutdown(
+                from pi_team.shutdown import complete_teammate_shutdown
+
+                await complete_teammate_shutdown(
                     store,
                     session_id=session_id,
                     member=member,
                     requests=shutdown_msgs,
-                )
-                await asyncio.to_thread(
-                    store.mark_messages_read,
-                    member.team_id,
-                    member.id,
-                    all_ids,
+                    mark_read_ids=all_ids,
                 )
                 break
 
@@ -283,77 +282,6 @@ async def _enqueue_mailbox_turn(
     }
     await enqueue_session_events([user_msg], run_turn=True)
     store.update_member_status(member.id, "listening")
-
-
-async def _handle_shutdown(
-    store: TeamStore,
-    *,
-    session_id: str,
-    member: TeamMemberRow,
-    requests: list[AgentMessageRow],
-) -> None:
-    store.update_member_status(member.id, "shutdown")
-    for req in requests:
-        await _send_shutdown_response(
-            store,
-            session_id=session_id,
-            member=member,
-            to_member_id=req.from_member_id,
-            approved=True,
-        )
-    await append_session_events(
-        [
-            {
-                "type": "team.member_shutdown",
-                "team_id": member.team_id,
-                "member_id": member.id,
-                "display_name": member.display_name,
-                "session_thread_id": member.thread_id,
-            }
-        ]
-    )
-
-
-async def _send_shutdown_response(
-    store: TeamStore,
-    *,
-    session_id: str,
-    member: TeamMemberRow,
-    to_member_id: str,
-    approved: bool,
-) -> None:
-    from pi_team.ids import new_team_message_id
-
-    body = "approved" if approved else "rejected"
-    now = int(time.time() * 1000)
-    msg = AgentMessageRow(
-        id=new_team_message_id(),
-        team_id=member.team_id,
-        from_member_id=member.id,
-        to_member_id=to_member_id,
-        message_type="shutdown_response",
-        body=body,
-        summary="",
-        read_at=None,
-        created_at=now,
-    )
-    store.create_message(msg)
-    recipient = store.get_member_by_id(member.team_id, to_member_id)
-    team_msg: dict[str, Any] = {
-        "type": "team.message",
-        "team_id": member.team_id,
-        "message_id": msg.id,
-        "from_member_id": member.id,
-        "from_display_name": member.display_name,
-        "to": recipient.display_name if recipient else to_member_id,
-        "message_type": "shutdown_response",
-        "body": body,
-    }
-    if recipient is not None:
-        team_msg["to_member_id"] = recipient.id
-        if recipient.thread_id:
-            team_msg["session_thread_id"] = recipient.thread_id
-    await append_session_events([team_msg])
 
 
 def _member_name_map(

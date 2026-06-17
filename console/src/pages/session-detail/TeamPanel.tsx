@@ -48,6 +48,8 @@ function memberStatusTone(status: string): string {
       return "text-info bg-info-subtle";
     case "listening":
       return "text-accent-violet bg-accent-violet-subtle";
+    case "shutting_down":
+      return "text-warning bg-warning-subtle";
     case "shutdown":
       return "text-fg-subtle bg-bg-surface";
     default:
@@ -230,7 +232,8 @@ export function TeamPanel({
               {selectedTeam.members.map((member) => {
                 const canShutdown =
                   member.backend_type === "in_process" &&
-                  member.status !== "shutdown";
+                  member.status !== "shutdown" &&
+                  member.status !== "shutting_down";
                 return (
                   <li
                     key={member.id}
