@@ -17,14 +17,17 @@ import {
   toolUsed,
 } from "@open-managed-agents/shared";
 
-const TEAM_LEAD_SYSTEM = `You are a team lead coordinating agents via team tools:
+const TEAM_LEAD_SYSTEM = `You are a team lead that coordinates other agents using these tools:
 team_create, spawn_teammate, send_team_message, read_team_messages.
 
-Rules:
-- team_create registers you automatically as member display_name "lead"; use that member's id as from_member_id for send_team_message.
-- Use the exact agent_id values from the user message — never invent IDs.
-- After team_create, read the returned members list to find your from_member_id for send_team_message.
-- Complete all steps in the user message before finishing.`;
+Critical rules — follow exactly:
+1. When asked to call team_create, call it immediately with the provided name. Read the response to get team_id and your lead member id.
+2. When asked to call spawn_teammate, call it immediately with the exact team_id from step 1, the exact agent_id from the user message, and the display_name specified.
+3. spawn_teammate MUST be called as a tool call — never skip it or describe it in text.
+4. The tools you MUST use are: team_create (creates the team), spawn_teammate (adds a teammate to the team).
+5. Use the exact agent_id values from the user message — never invent IDs.
+6. Complete ALL steps in the user message in order before finishing.
+7. Never skip a tool call step. If told to call bash, call bash after all team tool steps are done.`;
 
 const TEAM_CODER_SYSTEM =
   "You are a team coder teammate. When you receive mailbox instructions, follow them exactly " +
@@ -258,10 +261,14 @@ Then ask the helper again to read and summarize it.`,
       {
         message: (ctx) => {
           const workerId = ctx.teamWorkers.coder;
-          return `Using team tools, do exactly this in order:
-1. team_create with name "eval-alpha"
-2. spawn_teammate with team_id from step 1, agent_id "${workerId}", display_name "coder", start_poll_loop true
-3. bash: echo ${TEAM_MARKER_SPAWN}`;
+          return `You MUST call these tools in order. Do not skip any tool call.
+
+Step 1: Call team_create tool with arguments: { name: "eval-alpha" }
+Step 2: From the team_create response, get the team_id value.
+Step 3: Call spawn_teammate tool with arguments: { team_id: <team_id from step 2>, agent_id: "${workerId}", display_name: "coder", start_poll_loop: true }
+Step 4: Call bash tool with command: echo ${TEAM_MARKER_SPAWN}
+
+All 4 steps are mandatory. Call each one as a real tool call.`;
         },
         verify: (events) => {
           const teamEvt = assertMinEvents(events, "session.team_created", 1);
@@ -314,10 +321,14 @@ Then ask the helper again to read and summarize it.`,
       {
         message: (ctx) => {
           const workerId = ctx.teamWorkers.coder;
-          return `Using team tools, do exactly this in order (do not verify the file yet):
-1. team_create with name "eval-mailbox"
-2. spawn_teammate with team_id from step 1, agent_id "${workerId}", display_name "coder", start_poll_loop true
-3. send_team_message with team_id, from_member_id = your lead member id from step 1, to "coder", body "Write ${TEAM_MARKER_FILE} with exactly the text ${TEAM_MARKER_SENDMSG} using the write tool."`;
+          return `You MUST call these tools in order. Do not skip any tool call.
+
+Step 1: Call team_create tool with arguments: { name: "eval-mailbox" }
+Step 2: From the team_create response, note the team_id and your lead member's id (members[0].id).
+Step 3: Call spawn_teammate tool with arguments: { team_id: <team_id from step 2>, agent_id: "${workerId}", display_name: "coder", start_poll_loop: true }
+Step 4: Call send_team_message tool with arguments: { team_id: <team_id from step 2>, from_member_id: <your lead member id from step 2>, to: "coder", body: "Write ${TEAM_MARKER_FILE} with exactly the text ${TEAM_MARKER_SENDMSG} using the write tool." }
+
+All 4 steps are mandatory. Call each one as a real tool call. Do not verify any files.`;
         },
         verify: (events) => {
           const teamEvt = assertMinEvents(events, "session.team_created", 1);

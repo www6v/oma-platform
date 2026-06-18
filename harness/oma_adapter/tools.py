@@ -60,11 +60,27 @@ SCHEDULE_EXTENSION_PATH = (
 MCP_LOADER_EXTENSION_PATH = (
     Path(__file__).resolve().parent / "extensions" / "mcp_loader.py"
 )
+TEAM_EXTENSION_PATH = (
+    Path(__file__).resolve().parent / "extensions" / "team_extension.py"
+)
+SUBAGENT_EXTENSION_PATH = (
+    Path(__file__).resolve().parent / "extensions" / "subagent_extension.py"
+)
+
+
 def resolve_subagent_extension_path() -> Path:
-    """Resolve piPy subagent extension path (env override or sibling repo)."""
+    """Resolve piPy subagent extension path.
+
+    Search order:
+    1. PIPY_SUBAGENT_EXTENSION env var (explicit override)
+    2. Bundled copy inside oma_adapter/extensions/ (Docker / installed)
+    3. Sibling repo piPy-subagent/extensions/ (local dev)
+    """
     explicit = os.environ.get("PIPY_SUBAGENT_EXTENSION")
     if explicit:
         return Path(explicit)
+    if SUBAGENT_EXTENSION_PATH.is_file():
+        return SUBAGENT_EXTENSION_PATH
     return (
         Path(__file__).resolve().parents[3]
         / "piPy-subagent"
@@ -74,10 +90,18 @@ def resolve_subagent_extension_path() -> Path:
 
 
 def resolve_teams_extension_path() -> Path:
-    """Resolve piPy teams extension path (env override or sibling repo)."""
+    """Resolve piPy teams extension path.
+
+    Search order:
+    1. PIPY_TEAMS_EXTENSION env var (explicit override)
+    2. Bundled copy inside oma_adapter/extensions/ (Docker / installed)
+    3. Sibling repo piPy-teams/extensions/ (local dev)
+    """
     explicit = os.environ.get("PIPY_TEAMS_EXTENSION")
     if explicit:
         return Path(explicit)
+    if TEAM_EXTENSION_PATH.is_file():
+        return TEAM_EXTENSION_PATH
     return (
         Path(__file__).resolve().parents[3]
         / "piPy-teams"
