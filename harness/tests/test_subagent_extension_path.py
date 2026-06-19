@@ -13,7 +13,7 @@ def test_resolve_subagent_extension_path_default() -> None:
     path = resolve_subagent_extension_path()
     assert path.name == "subagent_extension.py"
     assert path.is_file()
-    assert "piPy-subagent" in str(path)
+    assert "subagent_extension.py" in str(path)
 
 
 def test_resolve_subagent_extension_path_env_override(

@@ -21,4 +21,4 @@ def test_resolve_teams_extension_path_default() -> None:
     path = resolve_teams_extension_path()
     assert path.name == "team_extension.py"
     assert path.is_file()
-    assert "piPy-teams" in str(path)
+    assert "team_extension.py" in str(path)

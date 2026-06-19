@@ -433,8 +433,8 @@ requires-dist = [
     { name = "mcp", specifier = ">=1.27.2" },
     { name = "pi-ai", git = "https://gitee.com/www6v6v/piPy.git?subdirectory=packages%2Fpi_ai&branch=v0.2.0" },
     { name = "pi-coding-agent", git = "https://gitee.com/www6v6v/piPy.git?subdirectory=packages%2Fpi_coding_agent&branch=v0.2.0" },
-    { name = "pi-subagent", git = "https://gitee.com/www6v6v/pipy-subagent.git?subdirectory=packages%2Fpi_subagent&branch=master" },
-    { name = "pi-team", git = "https://gitee.com/www6v6v/pipy-teams.git?subdirectory=packages%2Fpi_team&branch=master" },
+    { name = "pi-subagent", git = "https://gitee.com/www6v6v/pipy-subagent.git?subdirectory=packages%2Fpi_subagent&branch=v0.1.0" },
+    { name = "pi-team", git = "https://gitee.com/www6v6v/pipy-teams.git?subdirectory=packages%2Fpi_team&branch=v0.1.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32.0" },
 ]
 
@@ -483,7 +483,7 @@ dependencies = [
 [[package]]
 name = "pi-subagent"
 version = "0.0.1"
-source = { git = "https://gitee.com/www6v6v/pipy-subagent.git?subdirectory=packages%2Fpi_subagent&branch=master#b462c9866d90b3d7632180cb19ad800e823f33dc" }
+source = { git = "https://gitee.com/www6v6v/pipy-subagent.git?subdirectory=packages%2Fpi_subagent&branch=v0.1.0#b462c9866d90b3d7632180cb19ad800e823f33dc" }
 dependencies = [
     { name = "pi-agent" },
     { name = "pi-ai" },
@@ -493,7 +493,7 @@ dependencies = [
 [[package]]
 name = "pi-team"
 version = "0.0.1"
-source = { git = "https://gitee.com/www6v6v/pipy-teams.git?subdirectory=packages%2Fpi_team&branch=master#d3cd5ce1bfd61a68e158bdc089969f55ce5ab96b" }
+source = { git = "https://gitee.com/www6v6v/pipy-teams.git?subdirectory=packages%2Fpi_team&branch=v0.1.0#d3cd5ce1bfd61a68e158bdc089969f55ce5ab96b" }
 dependencies = [
     { name = "pi-agent" },
     { name = "pi-ai" },

@@ -195,13 +195,16 @@ def _needs_team_extension(agent: AgentSnapshot) -> bool:
 
 
 def _needs_subagent_extension(agent: AgentSnapshot) -> bool:
-    from pi_subagent.roles_resolve import has_default_subagent_roles
-
     if agent.callable_agents:
         return True
     if agent.enable_general_subagent:
         return True
-    return has_default_subagent_roles(agent.metadata)
+    try:
+        from pi_subagent.roles_resolve import has_default_subagent_roles
+        return has_default_subagent_roles(agent.metadata)
+    except ImportError:
+        # pi_subagent not available, assume no default roles
+        return False
 
 
 def _pipy_name(raw: str) -> str | None:

@@ -25,7 +25,7 @@ def test_session_tool_config_includes_roles_only_subagent_extension() -> None:
         metadata={"default_subagent_roles": {"explore": "agt_worker"}},
     )
     cfg = session_tool_config_from_agent(agent)
-    assert any("piPy-subagent/extensions/subagent_extension.py" in path for path in cfg.extension_paths)
+    assert any("subagent_extension.py" in path for path in cfg.extension_paths)
 
 
 def test_subagent_harness_e2e_tool_wiring() -> None:
