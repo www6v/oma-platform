@@ -88,25 +88,31 @@ for evt in events:
     if evt.get("type") == "session.error":
         print(evt.get("message") or evt.get("error") or "session.error")
         sys.exit(3)
-    # Look for any github MCP tool use (e.g., mcp__github__list_repositories or similar)
-    if evt.get("type") == "agent.tool_use" and evt.get("name", "").startswith("mcp__github"):
-        saw_tool_use=True
+    # Look for github MCP repository listing tool use (not user info tools)
+    if evt.get("type") == "agent.tool_use":
+        tool_name = evt.get("name", "")
+        # Reject user info tools, require repository-related tools
+        if tool_name.startswith("mcp__github") and "get_me" not in tool_name and "user" not in tool_name:
+            saw_tool_use=True
     # Also check for tool use in agent.message text (function_calls format)
     if evt.get("type") == "agent.message":
         for block in evt.get("content") or []:
             text = block.get("text", "")
             if "mcp_github" in text or "mcp__github" in text:
                 saw_tool_use=True
-            # Check if we got a successful response with repository information
-            if "repository" in text.lower() or "repo" in text.lower() or len(text) > 50:
+            # Check if we got a successful response with actual repository data
+            # Require either numbers (count) or actual repository names
+            text_lower = text.lower()
+            if ("repository" in text_lower or "repo" in text_lower) and (any(c.isdigit() for c in text) or len(text) > 100):
                 saw_result=True
                 break
     if evt.get("type") != "agent.tool_result":
         continue
     for block in evt.get("content") or []:
         text=(block.get("text") or "").strip()
-        # Check if we got a successful response with repository information
-        if text and len(text) > 10:
+        # Check if we got a successful response with actual repository data
+        # Require substantial content with repository information
+        if text and len(text) > 50 and ("repository" in text.lower() or "repo" in text.lower()):
             saw_result=True
             break
 if saw_tool_use and saw_result:
@@ -147,7 +153,7 @@ AID="$(
 print(json.dumps({
     "name": "smoke-github-agent",
     "model": sys.argv[1],
-    "system_prompt": "You are a smoke test agent for GitHub. When asked, call GitHub MCP tools to list repositories and return the repository count.",
+    "system_prompt": "You are a smoke test agent for GitHub. When asked to list repositories, you MUST use GitHub MCP tools to fetch repository information. Call the appropriate repository listing tool (not user info tools) and return the actual repository count and names.",
     "description": "GitHub e2e smoke test - list repositories",
     "tools": [{"type": "agent_toolset_20260401", "default_config": {"enabled": False}}],
     "mcp_servers": [{
@@ -175,7 +181,7 @@ echo "SID=${SID}"
 
 echo "==> send turn: list all repositories in my GitHub account"
 api_post_json "/v1/sessions/${SID}/events" \
-  '{"events":[{"type":"user.message","content":[{"type":"text","text":"List all repositories in my GitHub account. Use the GitHub MCP tools to retrieve this information. Return the total count of repositories and list their names."}]}]}' \
+  '{"events":[{"type":"user.message","content":[{"type":"text","text":"Use GitHub MCP tools to list all repositories in my GitHub account. You must call a repository listing tool (like list_repositories or similar). Return the exact count and the actual repository names. Do not just say you will retrieve them - actually retrieve and show them."}]}]}' \
   >/dev/null
 
 echo "==> wait for GitHub MCP tool response (timeout=${SMOKE_TOOL_TIMEOUT_SEC}s)"
@@ -187,8 +193,11 @@ events=json.load(sys.stdin)["data"]
 tool_use=""
 tool_result=""
 for evt in events:
-    if evt.get("type") == "agent.tool_use" and evt.get("name", "").startswith("mcp__github"):
-        tool_use=evt.get("name")
+    if evt.get("type") == "agent.tool_use":
+        tool_name = evt.get("name", "")
+        # Reject user info tools, require repository tools
+        if tool_name.startswith("mcp__github") and "get_me" not in tool_name and "user" not in tool_name:
+            tool_use=tool_name
     # Also check for tool use in agent.message text (function_calls format)
     if evt.get("type") == "agent.message":
         for block in evt.get("content") or []:
@@ -196,7 +205,9 @@ for evt in events:
             if "mcp_github" in text or "mcp__github" in text:
                 tool_use="mcp_github_tool"
             # Extract the actual repository list from the response
-            if "repository" in text.lower() or "repo" in text.lower() or len(text) > 50:
+            # Require either numbers (count) or substantial repository information
+            text_lower = text.lower()
+            if ("repository" in text_lower or "repo" in text_lower) and (any(c.isdigit() for c in text) or len(text) > 100):
                 tool_result=text
                 break
     if evt.get("type") == "agent.tool_result":
@@ -207,9 +218,13 @@ for evt in events:
                     tool_result=text
                     break
 if not tool_use:
-    raise SystemExit("missing agent.tool_use for GitHub MCP tool")
+    raise SystemExit("missing agent.tool_use for GitHub MCP repository tool")
+if "get_me" in tool_use or "user" in tool_use:
+    raise SystemExit(f"wrong tool used: {tool_use} (expected repository listing tool)")
 if not tool_result:
     raise SystemExit("missing tool_result from GitHub MCP tool")
+if len(tool_result) < 50:
+    raise SystemExit(f"tool_result too short: {len(tool_result)} chars (expected actual repository data)")
 print(f"GITHUB_E2E_OK tool_use={tool_use!r}")
 print("GitHub repositories retrieved successfully:")
 print(tool_result)' <<<"${EVENTS}"
