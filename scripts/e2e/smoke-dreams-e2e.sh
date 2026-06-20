@@ -4,6 +4,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
+SMOKE_UTILS="${ROOT}/scripts/e2e/smoke_utils.py"
 
 if [[ -f "${ROOT}/.env" ]]; then
   set -a
@@ -51,7 +52,7 @@ fi
 store_id="$(
   curl -sf "${auth[@]}" -H "Content-Type: application/json" \
     -d '{"name":"dream-smoke-input"}' \
-    "${BASE_URL}/v1/memory_stores" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])'
+    "${BASE_URL}/v1/memory_stores" | python3 "${SMOKE_UTILS}" json-id
 )"
 echo "input memory store: ${store_id}"
 
@@ -64,7 +65,7 @@ dream_id="$(
     -H "Content-Type: application/json" \
     -H "anthropic-beta: ${BETA}" \
     -d "{\"inputs\":[{\"type\":\"memory_store\",\"memory_store_id\":\"${store_id}\"}],\"model\":\"claude-sonnet-4-6\"}" \
-    "${BASE_URL}/v1/dreams" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])'
+    "${BASE_URL}/v1/dreams" | python3 "${SMOKE_UTILS}" json-id
 )"
 echo "dream: ${dream_id}"
 
@@ -72,7 +73,7 @@ for _ in $(seq 1 40); do
   status="$(
     curl -sf "${auth[@]}" -H "anthropic-beta: ${BETA}" \
       "${BASE_URL}/v1/dreams/${dream_id}" \
-      | python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])'
+      | python3 "${SMOKE_UTILS}" json-status
   )"
   if [[ "${status}" == "completed" ]]; then
     echo "dream completed"
@@ -92,6 +93,6 @@ curl -sf "${auth[@]}" -H "anthropic-beta: ${BETA}" \
 report="$(
   curl -sf "${auth[@]}" "${BASE_URL}/v1/cost_report?days=30"
 )"
-echo "${report}" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get("type")=="cost_report"; print("cost_report ok", d.get("span_count"))'
+echo "${report}" | python3 "${SMOKE_UTILS}" check-cost-report
 
 echo "dreams smoke passed"

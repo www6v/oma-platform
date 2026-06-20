@@ -18,6 +18,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT_DIR}"
+SMOKE_UTILS="${ROOT_DIR}/scripts/e2e/smoke_utils.py"
 
 if [[ -f "${ROOT_DIR}/.env" ]]; then
   set -a
@@ -84,7 +85,7 @@ INTERNAL_HEADERS=(-H "x-internal-secret: ${INTERNAL_SECRET}")
 
 json_field() {
   local field="$1"
-  python3 -c 'import json,sys; print(json.load(sys.stdin)[sys.argv[1]])' "$field"
+  python3 "${SMOKE_UTILS}" json-field "$field"
 }
 
 api_get() {
@@ -130,25 +131,7 @@ internal_delete() {
 }
 
 normalize_events_response() {
-  python3 -c 'import json,sys
-raw=json.load(sys.stdin)
-out=[]
-for item in raw.get("data", []):
-    typ=item.get("type")
-    inner=item.get("data")
-    if isinstance(inner, dict):
-        evt=dict(inner)
-        if typ and "type" not in evt:
-            evt["type"]=typ
-        out.append(evt)
-    elif isinstance(inner, str):
-        evt=json.loads(inner)
-        if typ and "type" not in evt:
-            evt["type"]=typ
-        out.append(evt)
-    else:
-        out.append(item)
-print(json.dumps({"data": out}))'
+  python3 "${SMOKE_UTILS}" normalize-events
 }
 
 wait_for_span_scheduled() {
@@ -158,15 +141,7 @@ wait_for_span_scheduled() {
   while (( SECONDS < deadline )); do
     local events
     events="$(api_get "/v1/sessions/${sid}/events?limit=200" | normalize_events_response)"
-    if python3 -c 'import json,sys
-events=json.load(sys.stdin)["data"]
-want=sys.argv[1]
-for evt in events:
-    if evt.get("type") != "span.wakeup_scheduled":
-        continue
-    if evt.get("schedule_id") == want:
-        sys.exit(0)
-sys.exit(2)' "${schedule_id}" <<<"${events}"; then
+    if python3 "${SMOKE_UTILS}" check-events-span-scheduled "${schedule_id}" <<<"${events}"; then
       return 0
     fi
     sleep "${POLL_SEC}"
@@ -182,19 +157,7 @@ wait_for_wakeup_message() {
   while (( SECONDS < deadline )); do
     local events
     events="$(api_get "/v1/sessions/${sid}/events?limit=200" | normalize_events_response)"
-    if python3 -c 'import json,sys
-events=json.load(sys.stdin)["data"]
-want=sys.argv[1]
-for evt in events:
-    if evt.get("type") != "user.message":
-        continue
-    meta=evt.get("metadata") or {}
-    if meta.get("harness") != "schedule" or meta.get("kind") != "wakeup":
-        continue
-    for block in evt.get("content") or []:
-        if (block.get("text") or "") == want:
-            sys.exit(0)
-sys.exit(2)' "${prompt}" <<<"${events}"; then
+    if python3 "${SMOKE_UTILS}" check-events-wakeup-message "${prompt}" <<<"${events}"; then
       echo "${events}"
       return 0
     fi
@@ -228,11 +191,7 @@ AGENT_ID="$(
 )"
 SID="$(
   api_post_json "/v1/sessions" \
-    "$(python3 -c 'import json,sys; print(json.dumps({
-        "agent": sys.argv[1],
-        "environment_id": "env-local-default",
-        "title": "schedule-e2e",
-    }))' "${AGENT_ID}")" \
+    "$(python3 "${SMOKE_UTILS}" make-session-body "${AGENT_ID}" "env-local-default" "schedule-e2e")" \
     | json_field id
 )"
 log "AGENT_ID=${AGENT_ID} SID=${SID}"
@@ -270,30 +229,14 @@ log "SCHEDULE_ID=${SCHEDULE_ID}"
 wait_for_span_scheduled "${SID}" "${SCHEDULE_ID}"
 
 LIST_JSON="$(internal_get "/v1/internal/sessions/${SID}/wakeups")"
-python3 -c 'import json,sys
-body=json.load(sys.stdin)
-schedules=body.get("schedules") or []
-want=sys.argv[1]
-found=any(s.get("id")==want for s in schedules)
-if not found:
-    print("error: schedule missing from list", schedules)
-    sys.exit(1)' "${SCHEDULE_ID}" <<<"${LIST_JSON}"
+python3 "${SMOKE_UTILS}" check-schedule-list "${SCHEDULE_ID}" <<<"${LIST_JSON}"
 
 log "cancel scheduled wakeup"
 CANCEL_JSON="$(internal_delete "/v1/internal/sessions/${SID}/wakeups/${SCHEDULE_ID}")"
-python3 -c 'import json,sys
-body=json.load(sys.stdin)
-if body.get("cancelled") is not True:
-    print("error: cancel expected true", body)
-    sys.exit(1)' <<<"${CANCEL_JSON}"
+python3 "${SMOKE_UTILS}" check-schedule-cancel <<<"${CANCEL_JSON}"
 
 LIST_AFTER_CANCEL="$(internal_get "/v1/internal/sessions/${SID}/wakeups")"
-python3 -c 'import json,sys
-schedules=json.load(sys.stdin).get("schedules") or []
-want=sys.argv[1]
-if any(s.get("id")==want for s in schedules):
-    print("error: schedule still listed after cancel", schedules)
-    sys.exit(1)' "${SCHEDULE_ID}" <<<"${LIST_AFTER_CANCEL}"
+python3 "${SMOKE_UTILS}" check-schedule-absent "${SCHEDULE_ID}" <<<"${LIST_AFTER_CANCEL}"
 
 log "schedule cron + list + cancel"
 CRON_JSON="$(
@@ -306,35 +249,21 @@ if [[ "$(echo "${CRON_JSON}" | json_field kind)" != "cron" ]]; then
   exit 1
 fi
 CRON_LIST="$(internal_get "/v1/internal/sessions/${SID}/wakeups")"
-python3 -c 'import json,sys
-schedules=json.load(sys.stdin).get("schedules") or []
-want=sys.argv[1]
-row=next((s for s in schedules if s.get("id")==want), None)
-if not row or row.get("cron") != "0 9 * * *":
-    print("error: cron row missing", schedules)
-    sys.exit(1)' "${CRON_ID}" <<<"${CRON_LIST}"
+python3 "${SMOKE_UTILS}" check-cron-list "${CRON_ID}" <<<"${CRON_LIST}"
 internal_delete "/v1/internal/sessions/${SID}/wakeups/${CRON_ID}" >/dev/null
 
 WAKE_PROMPT="SCHEDULE_E2E_WAKEUP_PAYLOAD"
 log "schedule short delay for worker fire (delay_seconds=6)"
 FIRE_JSON="$(
   internal_post_json "/v1/internal/sessions/${SID}/wakeups" \
-    "$(python3 -c 'import json,sys; print(json.dumps({
-        "delay_seconds": 6,
-        "prompt": sys.argv[1],
-    }))' "${WAKE_PROMPT}")"
+    "$(python3 "${SMOKE_UTILS}" make-schedule-body 6 "${WAKE_PROMPT}")"
 )"
 FIRE_ID="$(echo "${FIRE_JSON}" | json_field id)"
 
 wait_for_wakeup_message "${SID}" "${WAKE_PROMPT}"
 
 LIST_AFTER_FIRE="$(internal_get "/v1/internal/sessions/${SID}/wakeups")"
-python3 -c 'import json,sys
-schedules=json.load(sys.stdin).get("schedules") or []
-want=sys.argv[1]
-if any(s.get("id")==want for s in schedules):
-    print("error: one_shot schedule still present after fire", schedules)
-    sys.exit(1)' "${FIRE_ID}" <<<"${LIST_AFTER_FIRE}"
+python3 "${SMOKE_UTILS}" check-schedule-absent "${FIRE_ID}" <<<"${LIST_AFTER_FIRE}"
 
 echo ""
 echo "Schedule E2E passed (unit + live)"

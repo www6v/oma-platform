@@ -4,6 +4,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT_DIR}"
+SMOKE_UTILS="${ROOT_DIR}/scripts/e2e/smoke_utils.py"
 
 if [[ -f "${ROOT_DIR}/.env" ]]; then
   set -a
@@ -34,7 +35,7 @@ API_HEADERS=(-H "x-api-key: ${OMA_API_KEY}")
 
 json_field() {
   local field="$1"
-  python3 -c 'import json,sys; print(json.load(sys.stdin)[sys.argv[1]])' "$field"
+  python3 "${SMOKE_UTILS}" json-field "$field"
 }
 
 api_get() {
@@ -51,18 +52,7 @@ api_post_json() {
 }
 
 normalize_events_response() {
-  python3 -c 'import json,sys
-raw=json.load(sys.stdin)
-out=[]
-for item in raw.get("data", []):
-    inner=item.get("data")
-    if isinstance(inner, dict):
-        out.append(inner)
-    elif isinstance(inner, str):
-        out.append(json.loads(inner))
-    else:
-        out.append(item)
-print(json.dumps({"data": out}))'
+  python3 "${SMOKE_UTILS}" normalize-events
 }
 
 wait_for_mcp_ping_chain() {
@@ -78,26 +68,7 @@ wait_for_mcp_ping_chain() {
     )"
     status=0
     CHAIN_ERR="$(
-      python3 -c 'import json,sys
-events=json.load(sys.stdin)["data"]
-saw_tool_use=False
-saw_result=False
-for evt in events:
-    if evt.get("type") == "session.error":
-        print(evt.get("message") or evt.get("error") or "session.error")
-        sys.exit(3)
-    if evt.get("type") == "agent.tool_use" and evt.get("name") == "mcp__smoke__ping":
-        saw_tool_use=True
-    if evt.get("type") != "agent.tool_result":
-        continue
-    for block in evt.get("content") or []:
-        text=(block.get("text") or "").strip()
-        if "pong-from-mcp-smoke" in text:
-            saw_result=True
-            break
-if saw_tool_use and saw_result:
-    sys.exit(0)
-sys.exit(2)' <<<"${events}"
+      python3 "${SMOKE_UTILS}" check-events-mcp-ping <<<"${events}"
     )" || status=$?
 
     if [[ "${status}" -eq 0 ]]; then
@@ -141,29 +112,12 @@ sleep 0.5
 curl -sf -X POST "${MCP_MOCK_URL}" \
   -H "content-type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
-  | python3 -c 'import json,sys
-r=json.load(sys.stdin)
-tools=(r.get("result") or {}).get("tools") or []
-assert any(t.get("name")=="ping" for t in tools), r
-print("mock tools/list ok")'
+  | python3 "${SMOKE_UTILS}" check-mock-tools
 
 echo "==> create MCP agent"
 AID="$(
   api_post_json "/v1/agents" \
-    "$(python3 -c 'import json,os,sys
-print(json.dumps({
-    "name": "smoke-mcp-agent",
-    "model": sys.argv[1],
-    "system_prompt": "You are a smoke test agent. When asked, call MCP tools exactly as instructed.",
-    "description": "MCP e2e smoke",
-    "tools": [{"type": "agent_toolset_20260401", "default_config": {"enabled": False}}],
-    "mcp_servers": [{
-        "name": "smoke",
-        "type": "url",
-        "url": os.environ["MCP_MOCK_URL"],
-        "authorization_token": "smoke-local-token",
-    }],
-}))' "${SMOKE_MODEL}")" \
+    "$(python3 "${SMOKE_UTILS}" make-mcp-agent-body "${SMOKE_MODEL}")" \
     | json_field id
 )"
 echo "AID=${AID}"
@@ -171,11 +125,7 @@ echo "AID=${AID}"
 echo "==> create session"
 SID="$(
   api_post_json "/v1/sessions" \
-    "$(python3 -c 'import json,sys; print(json.dumps({
-        "agent": sys.argv[1],
-        "environment_id": "env-local-default",
-        "title": "mcp-smoke",
-    }))' "${AID}")" \
+    "$(python3 "${SMOKE_UTILS}" make-session-body "${AID}" "env-local-default" "mcp-smoke")" \
     | json_field id
 )"
 echo "SID=${SID}"
@@ -193,10 +143,7 @@ if [[ "${PROXY_HTTP}" != "200" ]]; then
   cat /tmp/oma-mcp-proxy-smoke.json >&2 || true
   exit 1
 fi
-python3 -c 'import json,sys
-r=json.load(open("/tmp/oma-mcp-proxy-smoke.json"))
-assert "result" in r, r
-print("mcp-proxy initialize ok")'
+python3 "${SMOKE_UTILS}" check-mcp-proxy
 
 echo "==> send turn: call mcp__smoke__ping"
 api_post_json "/v1/sessions/${SID}/events" \
@@ -206,21 +153,6 @@ api_post_json "/v1/sessions/${SID}/events" \
 echo "==> wait for mcp tool_use + pong result (timeout=${SMOKE_TOOL_TIMEOUT_SEC}s)"
 EVENTS="$(wait_for_mcp_ping_chain "${SID}")"
 
-python3 -c 'import json,sys
-events=json.load(sys.stdin)["data"]
-tool_use=""
-tool_result=""
-for evt in events:
-    if evt.get("type") == "agent.tool_use" and evt.get("name") == "mcp__smoke__ping":
-        tool_use=evt.get("name")
-    if evt.get("type") == "agent.tool_result":
-        for block in evt.get("content") or []:
-            if block.get("type") == "text" and "pong-from-mcp-smoke" in block.get("text", ""):
-                tool_result=block.get("text", "").strip()
-if not tool_use:
-    raise SystemExit("missing agent.tool_use mcp__smoke__ping")
-if not tool_result:
-    raise SystemExit("missing tool_result with pong-from-mcp-smoke")
-print(f"MCP_E2E_OK tool_use={tool_use!r} tool_result={tool_result!r}")' <<<"${EVENTS}"
+python3 "${SMOKE_UTILS}" check-mcp-events-result <<<"${EVENTS}"
 
 echo "MCP end-to-end smoke passed"

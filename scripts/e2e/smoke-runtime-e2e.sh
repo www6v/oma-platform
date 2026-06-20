@@ -18,6 +18,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 MONOREPO_DIR="$(cd "${ROOT_DIR}/../open-managed-agents" && pwd)"
 CLI_ENTRY="${OMA_CLI_ENTRY:-${MONOREPO_DIR}/packages/cli/dist/index.js}"
+SMOKE_UTILS="${ROOT_DIR}/scripts/e2e/smoke_utils.py"
 
 if [[ -f "${ROOT_DIR}/.env" ]]; then
   _saved_anthropic_key="${ANTHROPIC_API_KEY:-}"
@@ -54,7 +55,7 @@ USER_HEADERS=(
 
 json_field() {
   local field="$1"
-  python3 -c 'import json,sys; print(json.load(sys.stdin)[sys.argv[1]])' "$field"
+  python3 "${SMOKE_UTILS}" json-field "$field"
 }
 
 log() {
@@ -113,14 +114,7 @@ phase_registration() {
 
   local list_resp
   list_resp="$(curl -sf "${PLATFORM_URL}/v1/runtimes" "${USER_HEADERS[@]}")"
-  python3 -c '
-import json, sys
-data = json.load(sys.stdin)
-ids = [r["id"] for r in data.get("runtimes", [])]
-rid = sys.argv[1]
-assert rid in ids, f"runtime {rid} not in list"
-print("runtime listed ok")
-' "${RUNTIME_ID}" <<< "${list_resp}"
+  python3 "${SMOKE_UTILS}" check-runtimes-list "${RUNTIME_ID}" <<< "${list_resp}"
 }
 
 # ── Phase 2: daemon WS hello/ping (inline node) ───────────────────────────
@@ -194,7 +188,7 @@ write_bridge_creds() {
   chmod 700 "${creds_dir}"
   local machine_id="${creds_dir}/machine-id"
   if [[ ! -f "${machine_id}" ]]; then
-    python3 -c 'import uuid; print(uuid.uuid4())' > "${machine_id}"
+    python3 "${SMOKE_UTILS}" gen-uuid > "${machine_id}"
   fi
   local mid
   mid="$(tr -d '\n' < "${machine_id}")"
@@ -205,27 +199,7 @@ write_bridge_creds() {
   AGENT_API_KEY="${AGENT_API_KEY}" \
   MID="${mid}" \
   CREDS_FILE="${creds_file}" \
-  python3 - <<'PY'
-import json, time, os
-creds = {
-  "v": 2,
-  "serverUrl": os.environ["PLATFORM_URL"],
-  "runtimeId": os.environ["RUNTIME_ID"],
-  "token": os.environ["RUNTIME_TOKEN"],
-  "tenants": [{
-    "id": "default",
-    "name": "Default",
-    "agentApiKey": os.environ["AGENT_API_KEY"],
-  }],
-  "machineId": os.environ["MID"],
-  "createdAt": int(time.time()),
-}
-path = os.environ["CREDS_FILE"]
-with open(path, "w") as f:
-    json.dump(creds, f, indent=2)
-os.chmod(path, 0o600)
-print(path)
-PY
+  python3 "${SMOKE_UTILS}" write-bridge-creds
   log "wrote credentials ${creds_file} (OMA_PROFILE=${OMA_PROFILE})"
 }
 
@@ -240,7 +214,7 @@ phase_acp_turn() {
   if ! command -v claude >/dev/null 2>&1; then
     fail "claude not on PATH — install Claude Code first"
   fi
-  if ! claude auth status 2>/dev/null | python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get("loggedIn") else 1)' 2>/dev/null; then
+  if ! claude auth status 2>/dev/null | python3 "${SMOKE_UTILS}" check-claude-auth 2>/dev/null; then
     fail "Claude Code not logged in — run: claude auth login"
   fi
   if ! command -v claude-agent-acp >/dev/null 2>&1; then

@@ -8,6 +8,7 @@
 #   # edit URLs, then run smoke scripts as usual
 
 _e2e_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_E2E_SMOKE_UTILS="${_e2e_dir}/smoke_utils.py"
 
 if [[ -f "${_e2e_dir}/target.env" ]]; then
   set -a
@@ -139,7 +140,7 @@ _e2e_start_outbound_mock() {
 
 _e2e_json_field() {
   local field="$1"
-  python3 -c 'import json,sys; print(json.load(sys.stdin)[sys.argv[1]])' "$field"
+  python3 "${_E2E_SMOKE_UTILS}" json-field "$field"
 }
 
 # POST JSON with retry on session-create rate limits (429).
@@ -192,16 +193,7 @@ _e2e_ensure_model_card() {
   local api_key="${OMA_API_KEY:-dev-key}"
   local card_body row_id http_code card_list
 
-  card_body="$(
-    python3 -c 'import json,os,sys
-print(json.dumps({
-    "model_id": sys.argv[1],
-    "model": sys.argv[2],
-    "provider": "ant",
-    "api_key": os.environ["ANTHROPIC_API_KEY"],
-    "is_default": True,
-}))' "${card_id}" "${model}"
-  )"
+  card_body="$(python3 "${_E2E_SMOKE_UTILS}" make-model-card-body "${card_id}" "${model}")"
 
   http_code="$(
     curl -s -o /tmp/oma-e2e-card.json -w "%{http_code}" -X POST \
@@ -224,22 +216,11 @@ print(json.dumps({
     curl -sf "${PLATFORM_URL}/v1/model_cards" -H "x-api-key: ${api_key}"
   )"
   row_id="$(
-    python3 -c 'import json,sys
-target=sys.argv[1]
-for row in json.load(sys.stdin).get("data", []):
-    if row.get("model_id") == target:
-        print(row["id"])
-        raise SystemExit(0)
-raise SystemExit(1)' "${card_id}" <<<"${card_list}"
+    python3 "${_E2E_SMOKE_UTILS}" find-model-card "${card_id}" <<<"${card_list}"
   )" || return 0
 
   curl -sf -X POST "${PLATFORM_URL}/v1/model_cards/${row_id}" \
     -H "content-type: application/json" \
     -H "x-api-key: ${api_key}" \
-    -d "$(python3 -c 'import json,os,sys; print(json.dumps({
-        "model": sys.argv[1],
-        "provider": "ant",
-        "api_key": os.environ["ANTHROPIC_API_KEY"],
-        "is_default": True,
-    }))' "${model}")" >/dev/null || true
+    -d "$(python3 "${_E2E_SMOKE_UTILS}" make-model-card-update-body "${model}")" >/dev/null || true
 }
