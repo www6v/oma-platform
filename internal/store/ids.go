@@ -7,6 +7,7 @@ const (
 	teamPrefix     = "team-"
 	memberPrefix   = "tmem-"
 	tmsgPrefix     = "tmsg-"
+	ttaskPrefix    = "ttsk-"
 	threadPrefix   = "sthr_"
 )
 
@@ -32,6 +33,10 @@ func generateTeamMemberID() string {
 
 func generateTeamMessageID() string {
 	return tmsgPrefix + randomString(idLength)
+}
+
+func generateTeamTaskID() string {
+	return ttaskPrefix + randomString(idLength)
 }
 
 func generateThreadID() string {
@@ -61,6 +66,11 @@ func NewTeamMemberID() string {
 // NewTeamMessageID returns a unique team mailbox message id.
 func NewTeamMessageID() string {
 	return generateTeamMessageID()
+}
+
+// NewTeamTaskID returns a unique team task id.
+func NewTeamTaskID() string {
+	return generateTeamTaskID()
 }
 
 // NewThreadID returns a unique session thread id (non-primary).

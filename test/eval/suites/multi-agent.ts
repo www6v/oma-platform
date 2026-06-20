@@ -368,4 +368,88 @@ All 4 steps are mandatory. Call each one as a real tool call. Do not verify any 
     ),
     timeoutMs: 600_000,
   },
+
+  // T14.1 — Team task create + list (Medium)
+  {
+    id: "T14.1-team-task-create-list",
+    category: "multi-agent",
+    difficulty: "medium",
+    description: "Lead creates a team, creates a task, and lists it via task board tools",
+    agentConfig: {
+      system: `You coordinate agent teams and manage their task boards.
+Tools available: team_create, team_task_create, team_task_list.
+Follow every step exactly as instructed.`,
+      tools: DEFAULT_TOOLS,
+      metadata: { enable_team_tools: true },
+    },
+    turns: [
+      {
+        message: `You MUST call these tools in order. Do not skip any.
+
+Step 1: Call team_create with { name: "task-eval" }. Note the team_id from the response.
+Step 2: Call team_task_create with { team_id: <team_id>, subject: "Implement feature X", description: "Add the X feature to the codebase" }.
+Step 3: Call team_task_list with { team_id: <team_id> }.
+
+All 3 steps are mandatory.`,
+        verify: (events) => {
+          const teamEvt = assertMinEvents(events, "session.team_created", 1);
+          const createTool = assertToolUsed(events, "team_task_create");
+          const listTool = assertToolUsed(events, "team_task_list");
+          const noError = assertIdleNoError(events);
+          return allOf(teamEvt, createTool, listTool, noError);
+        },
+      },
+    ],
+    scorer: all(
+      teamCreated(1),
+      toolUsed("team_task_create"),
+      toolUsed("team_task_list"),
+      idleNoError(),
+    ),
+    timeoutMs: 300_000,
+  },
+
+  // T14.2 — Team task update with dependencies (Hard)
+  {
+    id: "T14.2-team-task-dependencies",
+    category: "multi-agent",
+    difficulty: "hard",
+    description: "Lead creates two tasks, sets a blocked_by dependency, and verifies via get",
+    agentConfig: {
+      system: `You coordinate agent teams and manage their task boards.
+Tools available: team_create, team_task_create, team_task_update, team_task_get.
+Follow every step exactly as instructed.`,
+      tools: DEFAULT_TOOLS,
+      metadata: { enable_team_tools: true },
+    },
+    turns: [
+      {
+        message: `You MUST call these tools in order. Do not skip any.
+
+Step 1: Call team_create with { name: "dep-eval" }. Note the team_id.
+Step 2: Call team_task_create with { team_id: <team_id>, subject: "Step A" }. Note the task id as task_a.
+Step 3: Call team_task_create with { team_id: <team_id>, subject: "Step B" }. Note the task id as task_b.
+Step 4: Call team_task_update with { team_id: <team_id>, task_id: <task_b>, add_blocked_by: [<task_a>] }.
+Step 5: Call team_task_get with { team_id: <team_id>, task_id: <task_b> } and confirm task_a appears in blocked_by.
+
+All 5 steps are mandatory.`,
+        verify: (events) => {
+          const teamEvt = assertMinEvents(events, "session.team_created", 1);
+          const createTool = assertToolUsed(events, "team_task_create");
+          const updateTool = assertToolUsed(events, "team_task_update");
+          const getTool = assertToolUsed(events, "team_task_get");
+          const noError = assertIdleNoError(events);
+          return allOf(teamEvt, createTool, updateTool, getTool, noError);
+        },
+      },
+    ],
+    scorer: all(
+      teamCreated(1),
+      toolUsed("team_task_create"),
+      toolUsed("team_task_update"),
+      toolUsed("team_task_get"),
+      idleNoError(),
+    ),
+    timeoutMs: 300_000,
+  },
 ];
