@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import os
+
 import anthropic
+
+_KEEP = os.getenv("OMA_KEEP_RESOURCES", "0") == "1"
 
 
 def test_vaults_create_and_retrieve(client: anthropic.Anthropic):
@@ -15,7 +19,10 @@ def test_vaults_create_and_retrieve(client: anthropic.Anthropic):
         got = client.beta.vaults.retrieve(vault.id)
         assert got.id == vault.id
     finally:
-        client.beta.vaults.archive(vault.id)
+        if not _KEEP:
+            client.beta.vaults.archive(vault.id)
+        else:
+            print(f"\n[KEEP] vault {vault.id} (sdk-e2e-vault-create) — archive manually when done")
 
 
 def test_vaults_list(client: anthropic.Anthropic):
@@ -32,7 +39,10 @@ def test_vaults_credentials_list(client: anthropic.Anthropic):
         page = client.beta.vaults.credentials.list(vault.id)
         assert isinstance(list(page), list)
     finally:
-        client.beta.vaults.archive(vault.id)
+        if not _KEEP:
+            client.beta.vaults.archive(vault.id)
+        else:
+            print(f"\n[KEEP] vault {vault.id} (sdk-e2e-vault-creds) — archive manually when done")
 
 
 def test_vaults_archive(client: anthropic.Anthropic):

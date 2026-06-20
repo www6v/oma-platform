@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import os
+
 import anthropic
+
+_KEEP = os.getenv("OMA_KEEP_RESOURCES", "0") == "1"
 
 
 def test_memory_stores_create_and_retrieve(client: anthropic.Anthropic):
@@ -12,7 +16,10 @@ def test_memory_stores_create_and_retrieve(client: anthropic.Anthropic):
         got = client.beta.memory_stores.retrieve(ms.id)
         assert got.id == ms.id
     finally:
-        client.beta.memory_stores.archive(ms.id)
+        if not _KEEP:
+            client.beta.memory_stores.archive(ms.id)
+        else:
+            print(f"\n[KEEP] memory_store {ms.id} (sdk-e2e-ms-create) — archive manually when done")
 
 
 def test_memory_stores_list(client: anthropic.Anthropic):
@@ -26,7 +33,10 @@ def test_memory_stores_update(client: anthropic.Anthropic):
         updated = client.beta.memory_stores.update(ms.id, name="sdk-e2e-ms-after")
         assert updated.name == "sdk-e2e-ms-after"
     finally:
-        client.beta.memory_stores.archive(ms.id)
+        if not _KEEP:
+            client.beta.memory_stores.archive(ms.id)
+        else:
+            print(f"\n[KEEP] memory_store {ms.id} (sdk-e2e-ms-after) — archive manually when done")
 
 
 def test_memory_stores_memories_create_and_list(client: anthropic.Anthropic):
@@ -43,7 +53,10 @@ def test_memory_stores_memories_create_and_list(client: anthropic.Anthropic):
         mems = list(page)
         assert any(m.id == mem.id for m in mems)
     finally:
-        client.beta.memory_stores.archive(ms.id)
+        if not _KEEP:
+            client.beta.memory_stores.archive(ms.id)
+        else:
+            print(f"\n[KEEP] memory_store {ms.id} (sdk-e2e-ms-memories) — archive manually when done")
 
 
 def test_memory_stores_memory_versions(client: anthropic.Anthropic):
@@ -52,7 +65,10 @@ def test_memory_stores_memory_versions(client: anthropic.Anthropic):
         page = client.beta.memory_stores.memory_versions.list(ms.id)
         assert isinstance(list(page), list)
     finally:
-        client.beta.memory_stores.archive(ms.id)
+        if not _KEEP:
+            client.beta.memory_stores.archive(ms.id)
+        else:
+            print(f"\n[KEEP] memory_store {ms.id} (sdk-e2e-ms-versions) — archive manually when done")
 
 
 def test_memory_stores_archive(client: anthropic.Anthropic):

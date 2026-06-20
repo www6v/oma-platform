@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import os
+
 import anthropic
+
+_KEEP = os.getenv("OMA_KEEP_RESOURCES", "0") == "1"
 
 
 def test_sessions_create_retrieve_and_list(client: anthropic.Anthropic, tmp_agent, tmp_env):
@@ -16,7 +20,10 @@ def test_sessions_create_retrieve_and_list(client: anthropic.Anthropic, tmp_agen
         page = client.beta.sessions.list()
         assert any(s.id == sess.id for s in page)
     finally:
-        client.beta.sessions.archive(sess.id)
+        if not _KEEP:
+            client.beta.sessions.archive(sess.id)
+        else:
+            print(f"\n[KEEP] session {sess.id} left active — archive manually when done")
 
 
 def test_sessions_events_send_and_list(client: anthropic.Anthropic, tmp_agent, tmp_env):
@@ -32,7 +39,10 @@ def test_sessions_events_send_and_list(client: anthropic.Anthropic, tmp_agent, t
         events = list(page)
         assert isinstance(events, list)
     finally:
-        client.beta.sessions.archive(sess.id)
+        if not _KEEP:
+            client.beta.sessions.archive(sess.id)
+        else:
+            print(f"\n[KEEP] session {sess.id} (with events) left active — archive manually when done")
 
 
 def test_sessions_archive(client: anthropic.Anthropic, tmp_agent, tmp_env):

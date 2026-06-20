@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import os
+
 import anthropic
+
+_KEEP = os.getenv("OMA_KEEP_RESOURCES", "0") == "1"
 
 MODEL = {"id": "claude-sonnet-4-6"}
 
@@ -17,7 +21,10 @@ def test_agents_create_and_retrieve(client: anthropic.Anthropic):
         assert got.id == agent.id
         assert got.name == agent.name
     finally:
-        client.beta.agents.archive(agent.id)
+        if not _KEEP:
+            client.beta.agents.archive(agent.id)
+        else:
+            print(f"\n[KEEP] agent {agent.id} (sdk-e2e-create) — archive manually when done")
 
 
 def test_agents_list(client: anthropic.Anthropic):
@@ -32,7 +39,10 @@ def test_agents_update(client: anthropic.Anthropic):
         updated = client.beta.agents.update(agent.id, version=1, name="sdk-e2e-update-after")
         assert updated.name == "sdk-e2e-update-after"
     finally:
-        client.beta.agents.archive(agent.id)
+        if not _KEEP:
+            client.beta.agents.archive(agent.id)
+        else:
+            print(f"\n[KEEP] agent {agent.id} (sdk-e2e-update-after) — archive manually when done")
 
 
 def test_agents_versions(client: anthropic.Anthropic):
@@ -42,7 +52,10 @@ def test_agents_versions(client: anthropic.Anthropic):
         versions = list(page)
         assert isinstance(versions, list)
     finally:
-        client.beta.agents.archive(agent.id)
+        if not _KEEP:
+            client.beta.agents.archive(agent.id)
+        else:
+            print(f"\n[KEEP] agent {agent.id} (sdk-e2e-versions) — archive manually when done")
 
 
 def test_agents_archive(client: anthropic.Anthropic):

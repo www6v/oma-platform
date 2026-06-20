@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import io
+import os
 import zipfile
 
 import anthropic
 import httpx
+
+_KEEP = os.getenv("OMA_KEEP_RESOURCES", "0") == "1"
 
 
 def _make_skill_zip(name: str = "sdk-e2e-skill") -> bytes:
@@ -51,4 +54,7 @@ def test_skills_upload_and_delete(client: anthropic.Anthropic):
         versions_page = client.beta.skills.versions.list(skill_id)
         assert isinstance(list(versions_page), list)
     finally:
-        client.beta.skills.delete(skill_id)
+        if not _KEEP:
+            client.beta.skills.delete(skill_id)
+        else:
+            print(f"\n[KEEP] skill {skill_id} (sdk-e2e-skill) left — delete manually when done")
