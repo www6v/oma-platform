@@ -5,7 +5,8 @@ from __future__ import annotations
 import io
 import zipfile
 
-from oma_sdk import OMAClient
+import anthropic
+import httpx
 
 
 def _make_skill_zip(name: str = "sdk-e2e-skill") -> bytes:
@@ -18,33 +19,36 @@ def _make_skill_zip(name: str = "sdk-e2e-skill") -> bytes:
     return buf.getvalue()
 
 
-async def test_skills_list(client: OMAClient):
-    page = client.skills.list()
+def test_skills_list(client: anthropic.Anthropic):
+    page = client.beta.skills.list()
     skills = list(page)
     assert isinstance(skills, list)
     assert len(skills) >= 1  # at least built-in skills exist
 
 
-async def test_skills_retrieve_builtin(client: OMAClient):
-    # builtin_xlsx is always present
-    skill = client.skills.retrieve("builtin_xlsx")
+def test_skills_retrieve_builtin(client: anthropic.Anthropic):
+    skill = client.beta.skills.retrieve("builtin_xlsx")
     assert skill.id == "builtin_xlsx"
 
 
-async def test_skills_upload_and_delete(client: OMAClient):
+def test_skills_upload_and_delete(client: anthropic.Anthropic):
     zip_bytes = _make_skill_zip()
-    r = await client._http.post(
+    resp = client.post(
         "/v1/skills/upload",
+        cast_to=httpx.Response,
         files={"file": ("sdk-e2e-skill.zip", zip_bytes, "application/zip")},
-        headers={"X-Display-Title": "sdk-e2e-skill"},
+        options={"headers": {
+            "Content-Type": "multipart/form-data",
+            "X-Display-Title": "sdk-e2e-skill",
+        }},
     )
-    assert r.status_code in (200, 201), r.text
-    skill_id = r.json()["id"]
+    assert resp.status_code in (200, 201), resp.text
+    skill_id = resp.json()["id"]
     try:
-        retrieved = client.skills.retrieve(skill_id)
+        retrieved = client.beta.skills.retrieve(skill_id)
         assert retrieved.id == skill_id
 
-        versions_page = client.skills.versions.list(skill_id)
+        versions_page = client.beta.skills.versions.list(skill_id)
         assert isinstance(list(versions_page), list)
     finally:
-        client.skills.delete(skill_id)
+        client.beta.skills.delete(skill_id)

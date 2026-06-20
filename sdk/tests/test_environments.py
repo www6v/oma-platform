@@ -2,37 +2,37 @@
 
 from __future__ import annotations
 
-from oma_sdk import OMAClient
+import anthropic
 
 
-async def test_environments_create_and_retrieve(client: OMAClient):
-    env = client.environments.create(name="sdk-e2e-env-create")
+def test_environments_create_and_retrieve(client: anthropic.Anthropic):
+    env = client.beta.environments.create(name="sdk-e2e-env-create")
     try:
         assert env.id
-        got = client.environments.retrieve(env.id)
+        got = client.beta.environments.retrieve(env.id)
         assert got.id == env.id
         assert got.name == env.name
     finally:
-        client.environments.archive(env.id)
+        client.beta.environments.archive(env.id)
 
 
-async def test_environments_list(client: OMAClient):
-    page = client.environments.list()
+def test_environments_list(client: anthropic.Anthropic):
+    page = client.beta.environments.list()
     envs = list(page)
     assert isinstance(envs, list)
     assert len(envs) >= 1  # at least the default env exists
 
 
-async def test_environments_update(client: OMAClient):
-    env = client.environments.create(name="sdk-e2e-env-before")
+def test_environments_update(client: anthropic.Anthropic):
+    env = client.beta.environments.create(name="sdk-e2e-env-before")
     try:
-        updated = client.environments.update(env.id, name="sdk-e2e-env-after")
+        updated = client.beta.environments.update(env.id, name="sdk-e2e-env-after")
         assert updated.name == "sdk-e2e-env-after"
     finally:
-        client.environments.archive(env.id)
+        client.beta.environments.archive(env.id)
 
 
-async def test_environments_archive(client: OMAClient):
-    env = client.environments.create(name="sdk-e2e-env-archive")
-    archived = client.environments.archive(env.id)
+def test_environments_archive(client: anthropic.Anthropic):
+    env = client.beta.environments.create(name="sdk-e2e-env-archive")
+    archived = client.beta.environments.archive(env.id)
     assert archived.id == env.id
