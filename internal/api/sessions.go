@@ -230,6 +230,55 @@ func mountSessionRoutes(
 		writeJSON(w, http.StatusAccepted, map[string]string{"status": "queued"})
 	})
 
+	// POST /{id}/messages — wire-compatible with Anthropic Managed Agents API.
+	// Wraps a user message as a user.message event and streams the response.
+	r.Post("/{id}/messages", func(w http.ResponseWriter, req *http.Request) {
+		id := chi.URLParam(req, "id")
+		sess, err := h.sessions.Get(req.Context(), tenantID(req), id)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if sess == nil {
+			writeError(w, http.StatusNotFound, "not found")
+			return
+		}
+		if sess.Status == store.SessionStatusArchived {
+			writeError(w, http.StatusConflict, "session archived")
+			return
+		}
+		h.registerMachine(sess)
+
+		var body struct {
+			Content interface{} `json:"content"`
+			Role    string      `json:"role"`
+		}
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid json")
+			return
+		}
+		if body.Role != "" && body.Role != "user" {
+			writeError(w, http.StatusBadRequest, "only role=user is supported")
+			return
+		}
+
+		evData, err := json.Marshal(map[string]interface{}{
+			"type":    "user.message",
+			"content": body.Content,
+		})
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if err := h.registry.EnqueueEvents(
+			req.Context(), id, []json.RawMessage{evData}, true, false, nil,
+		); err != nil {
+			writeError(w, http.StatusConflict, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusAccepted, map[string]string{"status": "queued"})
+	})
+
 	r.Post("/{id}/archive", func(w http.ResponseWriter, req *http.Request) {
 		id := chi.URLParam(req, "id")
 		sess, err := h.sessions.Archive(req.Context(), tenantID(req), id)

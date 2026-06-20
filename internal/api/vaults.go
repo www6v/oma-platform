@@ -26,11 +26,15 @@ func vaultHTTPClient(deps vaultDeps) *http.Client {
 func mountVaultRoutes(r chi.Router, deps vaultDeps) {
 	r.Post("/", func(w http.ResponseWriter, req *http.Request) {
 		var body struct {
-			Name string `json:"name"`
+			Name        string `json:"name"`
+			DisplayName string `json:"display_name"` // alias used by anthropic SDK
 		}
 		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid json")
 			return
+		}
+		if body.Name == "" {
+			body.Name = body.DisplayName
 		}
 		if body.Name == "" {
 			writeError(w, http.StatusBadRequest, "name is required")
