@@ -171,14 +171,25 @@ def _web_search_type_tools(agent: AgentSnapshot) -> set[str]:
 
 
 def _extension_paths_for_agent(agent: AgentSnapshot) -> list[str]:
+    import logging
+    _logger = logging.getLogger("oma.tools")
     paths = _extension_paths_for_names(_resolved_tool_names(agent))
     if agent.mcp_servers and MCP_LOADER_EXTENSION_PATH.is_file():
         paths.append(str(MCP_LOADER_EXTENSION_PATH))
     subagent_path = resolve_subagent_extension_path()
     if _needs_subagent_extension(agent) and subagent_path.is_file():
         paths.append(str(subagent_path))
-    if _needs_team_extension(agent) and resolve_teams_extension_path().is_file():
-        paths.append(str(resolve_teams_extension_path()))
+    needs_team = _needs_team_extension(agent)
+    team_ext_path = resolve_teams_extension_path()
+    _logger.warning(
+        "[tools] _extension_paths_for_agent: enable_team_tools=%s needs_team=%s team_path=%s is_file=%s",
+        agent.enable_team_tools,
+        needs_team,
+        team_ext_path,
+        team_ext_path.is_file(),
+    )
+    if needs_team and team_ext_path.is_file():
+        paths.append(str(team_ext_path))
     return paths
 
 

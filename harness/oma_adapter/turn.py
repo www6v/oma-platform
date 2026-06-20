@@ -370,9 +370,17 @@ async def _run_turn_core(
                     enabled_tools=schedule_enabled,
                 ),
             )
+        import logging as _logging
+        _logger = _logging.getLogger("oma.turn")
         team_runtime = None
         team_runtime_token = None
         if not is_subthread:
+            _logger.warning(
+                "[turn] build_team_runtime: session=%s enable_team_tools=%s metadata=%s",
+                session_id,
+                agent.enable_team_tools,
+                agent.metadata,
+            )
             team_runtime = build_team_runtime(
                 session_id=session_id,
                 tenant_id=tenant_id,
@@ -382,6 +390,10 @@ async def _run_turn_core(
                 ),
                 agent=agent,
                 database_path=database_path,
+            )
+            _logger.warning(
+                "[turn] build_team_runtime result: %s",
+                type(team_runtime).__name__ if team_runtime is not None else "None",
             )
         if team_runtime is not None:
             team_runtime_token = configure_team_runtime(team_runtime)

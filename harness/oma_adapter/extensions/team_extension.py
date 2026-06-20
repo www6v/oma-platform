@@ -22,7 +22,14 @@ from pi_team.tools import (
 
 
 def register(api: Any) -> None:
+    import logging
+    logger = logging.getLogger("oma.team_extension")
     runtime = get_team_runtime()
+    logger.warning(
+        "[team_extension] register() called: runtime=%s session_id=%s",
+        type(runtime).__name__ if runtime is not None else "None",
+        getattr(runtime, "session_id", None) if runtime is not None else "N/A",
+    )
     if runtime is None or runtime.session_id is None:
         return
 
