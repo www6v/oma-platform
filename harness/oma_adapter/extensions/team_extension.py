@@ -14,6 +14,10 @@ from pi_team.tools import (
     SendTeamMessageTool,
     SpawnTeammateTool,
     TeamCreateTool,
+    TeamTaskCreateTool,
+    TeamTaskGetTool,
+    TeamTaskListTool,
+    TeamTaskUpdateTool,
 )
 
 
@@ -28,6 +32,10 @@ def register(api: Any) -> None:
         SpawnTeammateTool(),
         SendTeamMessageTool(),
         ReadTeamMessagesTool(),
+        TeamTaskCreateTool(),
+        TeamTaskUpdateTool(),
+        TeamTaskListTool(),
+        TeamTaskGetTool(),
     ]
     for tool in tools:
         if tool.name in enabled:

@@ -4,13 +4,13 @@
 > 目标仓库：`oma-platform`（Go `oma-server` + Python `oma-harness`）
 > 源仓库：`claude-code-rev/src`（Claude Code Agent Teams / Swarm）
 
-**实施状态（2026-06-17）**
+**实施状态（2026-06-20）**
 
 | 阶段 | 状态 | 说明 |
 |------|------|------|
 | Phase 1 | ✅ 已 ship | `pi_subagent` 扩展 + Console thread UI + eval + console E2E |
 | Phase 2 | ✅ 已 ship | `pi_team` + Team Tab + smoke/eval T13（live 跑绿 2026-06-17） |
-| Phase 3+ | ⏳ 未开始 | 任务看板、worktree 隔离 |
+| Phase 3+ | 🚧 进行中 | 任务看板 ✅ ship；worktree 隔离 ⏳ |
 
 ---
 
@@ -263,6 +263,7 @@ CREATE TABLE team_tasks (
   team_id TEXT NOT NULL,
   subject TEXT NOT NULL,
   description TEXT,
+  active_form TEXT,
   owner_member_id TEXT,
   status TEXT NOT NULL,  -- pending | in_progress | completed
   blocks_json TEXT,      -- task id 数组
@@ -273,7 +274,9 @@ CREATE TABLE team_tasks (
 );
 ```
 
-Harness 工具：`team_task_create`, `team_task_update`, `team_task_list`（对齐 CC Task* 工具）。
+**状态**：✅ 已实现（`018_team_tasks.sql` + `pi_team/store.py` + `pi_team/service.py`）
+
+Harness 工具：`team_task_create`, `team_task_update`, `team_task_list`, `team_task_get`（已注册于 `team_extension.py`，对齐 CC Task* 工具）。
 
 #### 4.3.2 Worktree 沙箱（可选）
 
@@ -392,7 +395,7 @@ Leader 调用工具 `spawn_teammate` 时，Go 侧：
 |--------|------|------|
 | M1 | Phase 1 代码 + eval 绿 | ✅ |
 | M2 | `teams` / `agent_messages` + `pi_team` + smoke + eval T13 | ✅ |
-| M3 | Task 看板 + worktree 可选 | ⏳ |
+| M3 | Task 看板 + worktree 可选 | 🚧 Task 看板 ✅；worktree ⏳ |
 | M4 | Console Team 面板 + 文档 | ✅ |
 
 文档交付（本次）：

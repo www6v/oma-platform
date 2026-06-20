@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 )
@@ -46,6 +47,22 @@ type AgentMessage struct {
 	Summary      string
 	ReadAt       *int64
 	CreatedAt    int64
+}
+
+// TeamTask is a task on a team's task board.
+type TeamTask struct {
+	ID            string
+	TeamID        string
+	Subject       string
+	Description   string
+	ActiveForm    string
+	OwnerMemberID string
+	Status        string
+	Blocks        []string
+	BlockedBy     []string
+	Metadata      map[string]any
+	CreatedAt     int64
+	UpdatedAt     int64
 }
 
 // TeamRepo persists teams, members, and mailbox messages.
@@ -529,3 +546,138 @@ func nullInt64(v *int64) sql.NullInt64 {
 	}
 	return sql.NullInt64{Int64: *v, Valid: true}
 }
+
+// ── team tasks ────────────────────────────────────────────────────────────────
+
+// TeamTaskRepo persists team task board rows.
+type TeamTaskRepo struct {
+	db *sql.DB
+}
+
+// NewTeamTaskRepo returns a team task repository.
+func NewTeamTaskRepo(db *sql.DB) *TeamTaskRepo {
+	return &TeamTaskRepo{db: db}
+}
+
+// CreateTask inserts a new task.
+func (r *TeamTaskRepo) CreateTask(ctx context.Context, t TeamTask) error {
+	blocks, _ := json.Marshal(t.Blocks)
+	blockedBy, _ := json.Marshal(t.BlockedBy)
+	var metaJSON sql.NullString
+	if t.Metadata != nil {
+		b, _ := json.Marshal(t.Metadata)
+		metaJSON = sql.NullString{String: string(b), Valid: true}
+	}
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO team_tasks (
+			id, team_id, subject, description, active_form,
+			owner_member_id, status, blocks_json, blocked_by_json,
+			metadata_json, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		t.ID, t.TeamID, t.Subject,
+		nullString(t.Description), nullString(t.ActiveForm),
+		nullString(t.OwnerMemberID), t.Status,
+		string(blocks), string(blockedBy),
+		metaJSON, t.CreatedAt, t.UpdatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("create team task: %w", err)
+	}
+	return nil
+}
+
+// GetTask returns a task by id, scoped to teamID.
+func (r *TeamTaskRepo) GetTask(ctx context.Context, teamID, taskID string) (*TeamTask, error) {
+	row := r.db.QueryRowContext(ctx,
+		`SELECT id, team_id, subject, description, active_form,
+		        owner_member_id, status, blocks_json, blocked_by_json,
+		        metadata_json, created_at, updated_at
+		 FROM team_tasks WHERE team_id = ? AND id = ?`,
+		teamID, taskID,
+	)
+	return scanTask(row)
+}
+
+// ListTasks returns all tasks for a team ordered by created_at.
+func (r *TeamTaskRepo) ListTasks(ctx context.Context, teamID string) ([]TeamTask, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, team_id, subject, description, active_form,
+		        owner_member_id, status, blocks_json, blocked_by_json,
+		        metadata_json, created_at, updated_at
+		 FROM team_tasks WHERE team_id = ? ORDER BY created_at ASC`,
+		teamID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list team tasks: %w", err)
+	}
+	defer rows.Close()
+	var out []TeamTask
+	for rows.Next() {
+		t, err := scanTask(rows)
+		if err != nil {
+			return nil, err
+		}
+		if t != nil {
+			out = append(out, *t)
+		}
+	}
+	return out, rows.Err()
+}
+
+// UpdateTaskStatus updates only the status and updated_at of a task.
+func (r *TeamTaskRepo) UpdateTaskStatus(ctx context.Context, teamID, taskID, status string) error {
+	now := time.Now().UnixMilli()
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE team_tasks SET status = ?, updated_at = ? WHERE team_id = ? AND id = ?`,
+		status, now, teamID, taskID,
+	)
+	return err
+}
+
+// DeleteTask permanently removes a task.
+func (r *TeamTaskRepo) DeleteTask(ctx context.Context, teamID, taskID string) (bool, error) {
+	res, err := r.db.ExecContext(ctx,
+		`DELETE FROM team_tasks WHERE team_id = ? AND id = ?`,
+		teamID, taskID,
+	)
+	if err != nil {
+		return false, fmt.Errorf("delete team task: %w", err)
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
+type taskScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanTask(s taskScanner) (*TeamTask, error) {
+	var t TeamTask
+	var desc, activeForm, owner, blocksJSON, blockedByJSON, metaJSON sql.NullString
+	if err := s.Scan(
+		&t.ID, &t.TeamID, &t.Subject, &desc, &activeForm,
+		&owner, &t.Status, &blocksJSON, &blockedByJSON,
+		&metaJSON, &t.CreatedAt, &t.UpdatedAt,
+	); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	t.Description = desc.String
+	t.ActiveForm = activeForm.String
+	t.OwnerMemberID = owner.String
+	_ = json.Unmarshal([]byte(blocksJSON.String), &t.Blocks)
+	_ = json.Unmarshal([]byte(blockedByJSON.String), &t.BlockedBy)
+	if metaJSON.Valid && metaJSON.String != "" {
+		_ = json.Unmarshal([]byte(metaJSON.String), &t.Metadata)
+	}
+	if t.Blocks == nil {
+		t.Blocks = []string{}
+	}
+	if t.BlockedBy == nil {
+		t.BlockedBy = []string{}
+	}
+	return &t, nil
+}
+
