@@ -327,8 +327,9 @@ Step 1: Call team_create tool with arguments: { name: "eval-mailbox" }
 Step 2: From the team_create response, note the team_id and your lead member's id (members[0].id).
 Step 3: Call spawn_teammate tool with arguments: { team_id: <team_id from step 2>, agent_id: "${workerId}", display_name: "coder", start_poll_loop: true }
 Step 4: Call send_team_message tool with arguments: { team_id: <team_id from step 2>, from_member_id: <your lead member id from step 2>, to: "coder", body: "Write ${TEAM_MARKER_FILE} with exactly the text ${TEAM_MARKER_SENDMSG} using the write tool." }
+Step 5: Call send_team_message tool with arguments: { team_id: <team_id from step 2>, from_member_id: <your lead member id from step 2>, to: "coder", body: "shutdown", message_type: "shutdown_request" }
 
-All 4 steps are mandatory. Call each one as a real tool call. Do not verify any files.`;
+All 5 steps are mandatory. Call each one as a real tool call. Do not verify any files.`;
         },
         verify: (events) => {
           const teamEvt = assertMinEvents(events, "session.team_created", 1);
