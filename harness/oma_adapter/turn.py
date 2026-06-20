@@ -192,7 +192,7 @@ async def _default_create_session(
         cwd=Path(workdir),
         model=model,
         provider=pi_provider,
-        api_key=api_key,
+        api_key=None,  # let piPy resolve from ~/.pi/agent/auth.json; platform key may be stale
         system_prompt=system_prompt,
         tools=builtin_tools,
         extension_paths=extension_paths or None,
@@ -460,6 +460,11 @@ async def _run_turn_core(
             seen_agent_text: set[str] = set()
             oma_events: list[dict[str, Any]] = []
 
+            import logging as _tlog
+            _tl = _tlog.getLogger("oma.turn")
+            _tl.warning("[turn_exec] session type=%s has_subscribe=%s has_on=%s session_id=%s",
+                type(session).__name__, hasattr(session, "subscribe"), hasattr(session, "on"), session_id)
+
             async def drain_events() -> None:
                 while True:
                     item = await queue.get()
@@ -489,9 +494,19 @@ async def _run_turn_core(
 
             _wire_outbound_bash_proxy(session, workdir)
 
+            _tl.warning("[turn_exec] calling session.prompt session_id=%s prompt_len=%d", session_id, len(prompt))
             await session.prompt(prompt)
+            _tl.warning("[turn_exec] prompt() done, buffer=%d session_id=%s", len(buffer), session_id)
             if hasattr(session, "wait_for_idle"):
                 await session.wait_for_idle()
+            _tl.warning("[turn_exec] idle, buffer=%d oma_events=%d session_id=%s", len(buffer), len(oma_events), session_id)
+            if not oma_events and buffer:
+                import json as _json
+                event_types = [e.get("type") or e.get("event", "?") for e in buffer]
+                _tl.warning("[turn_exec] buffer event types: %s", event_types[:30])
+                # log first and last event content for diagnosis
+                for idx in range(min(len(buffer), 30)):
+                    _tl.warning("[turn_exec] buffer[%d]: %s", idx, _json.dumps(buffer[idx], default=str)[:800])
 
             assistant_text = _assistant_text_from_session(session)
             user_text = latest_user_text(
