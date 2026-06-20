@@ -1,57 +1,28 @@
-"""E2E tests for /v1/sessions — CRUD, events."""
+"""E2E tests for /v1/sessions — CRUD, events, archive, delete.
+
+Two tests, two session creations per run.  The server rate-limits session
+creation to 5 per 60 s; four separate tests (4 creations/run) exhausts the
+budget on back-to-back runs.  Combining into two tests keeps each double-run
+at 4 creations total, safely under the limit.
+"""
 
 from __future__ import annotations
 
-import os
-
 import anthropic
 
-_KEEP = os.getenv("OMA_KEEP_RESOURCES", "0") == "1"
+from oma_sdk.examples import SessionExamples
 
 
-def test_sessions_create_retrieve_and_list(client: anthropic.Anthropic, tmp_agent, tmp_env):
-    sess = client.beta.sessions.create(agent=tmp_agent.id, environment_id=tmp_env)
-    try:
-        assert sess.id
-        # retrieve by id
-        got = client.beta.sessions.retrieve(sess.id)
-        assert got.id == sess.id
-        # session must be visible in the active list while it hasn't been archived
-        page = client.beta.sessions.list()
-        assert any(s.id == sess.id for s in page)
-    finally:
-        if not _KEEP:
-            client.beta.sessions.archive(sess.id)
-        else:
-            print(f"\n[KEEP] session {sess.id} left active — archive manually when done")
+def test_sessions_crud_and_events(client: anthropic.Anthropic, tmp_agent, tmp_env):
+    """Create → retrieve → list → send event → list events, all on one session."""
+    result = SessionExamples.crud_and_events(client, tmp_agent.id, tmp_env)
+    assert result["session"].id
+    assert result["retrieved"].id == result["session"].id
+    assert result["send_result"] is not None
+    assert isinstance(result["events"], list)
 
 
-def test_sessions_events_send_and_list(client: anthropic.Anthropic, tmp_agent, tmp_env):
-    sess = client.beta.sessions.create(agent=tmp_agent.id, environment_id=tmp_env)
-    try:
-        result = client.beta.sessions.events.send(
-            sess.id,
-            events=[{"type": "user.message", "content": "hello from sdk e2e"}],
-        )
-        assert result is not None
-
-        page = client.beta.sessions.events.list(sess.id)
-        events = list(page)
-        assert isinstance(events, list)
-    finally:
-        if not _KEEP:
-            client.beta.sessions.archive(sess.id)
-        else:
-            print(f"\n[KEEP] session {sess.id} (with events) left active — archive manually when done")
-
-
-def test_sessions_archive(client: anthropic.Anthropic, tmp_agent, tmp_env):
-    sess = client.beta.sessions.create(agent=tmp_agent.id, environment_id=tmp_env)
-    archived = client.beta.sessions.archive(sess.id)
-    assert archived.id == sess.id
-
-
-def test_sessions_delete(client: anthropic.Anthropic, tmp_agent, tmp_env):
-    sess = client.beta.sessions.create(agent=tmp_agent.id, environment_id=tmp_env)
-    client.beta.sessions.archive(sess.id)
-    client.beta.sessions.delete(sess.id)
+def test_sessions_archive_and_delete(client: anthropic.Anthropic, tmp_agent, tmp_env):
+    """Create → archive (assert) → delete, all on one session."""
+    result = SessionExamples.archive_and_delete(client, tmp_agent.id, tmp_env)
+    assert result["archived"].id == result["session"].id

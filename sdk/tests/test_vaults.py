@@ -2,53 +2,27 @@
 
 from __future__ import annotations
 
-import os
-
 import anthropic
 
-_KEEP = os.getenv("OMA_KEEP_RESOURCES", "0") == "1"
+from oma_sdk.examples import VaultExamples
 
 
 def test_vaults_create_and_retrieve(client: anthropic.Anthropic):
-    vault = client.beta.vaults.create(
-        display_name="sdk-e2e-vault-create",
-        extra_body={"name": "sdk-e2e-vault-create"},
-    )
-    try:
-        assert vault.id
-        got = client.beta.vaults.retrieve(vault.id)
-        assert got.id == vault.id
-    finally:
-        if not _KEEP:
-            client.beta.vaults.archive(vault.id)
-        else:
-            print(f"\n[KEEP] vault {vault.id} (sdk-e2e-vault-create) — archive manually when done")
+    result = VaultExamples.create_and_retrieve(client)
+    assert result["vault"].id
+    assert result["retrieved"].id == result["vault"].id
 
 
 def test_vaults_list(client: anthropic.Anthropic):
-    page = client.beta.vaults.list()
-    assert isinstance(list(page), list)
+    vaults = VaultExamples.list_vaults(client)
+    assert isinstance(vaults, list)
 
 
 def test_vaults_credentials_list(client: anthropic.Anthropic):
-    vault = client.beta.vaults.create(
-        display_name="sdk-e2e-vault-creds",
-        extra_body={"name": "sdk-e2e-vault-creds"},
-    )
-    try:
-        page = client.beta.vaults.credentials.list(vault.id)
-        assert isinstance(list(page), list)
-    finally:
-        if not _KEEP:
-            client.beta.vaults.archive(vault.id)
-        else:
-            print(f"\n[KEEP] vault {vault.id} (sdk-e2e-vault-creds) — archive manually when done")
+    result = VaultExamples.list_credentials(client)
+    assert isinstance(result["credentials"], list)
 
 
 def test_vaults_archive(client: anthropic.Anthropic):
-    vault = client.beta.vaults.create(
-        display_name="sdk-e2e-vault-archive",
-        extra_body={"name": "sdk-e2e-vault-archive"},
-    )
-    archived = client.beta.vaults.archive(vault.id)
-    assert archived.id == vault.id
+    result = VaultExamples.archive_vault(client)
+    assert result["archived"].id == result["vault"].id

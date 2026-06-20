@@ -24,6 +24,9 @@ export no_proxy="${no_proxy:-$NO_PROXY}"
 
 cd "${ROOT_DIR}/harness"
 
+# Kill any process occupying port 8090
+lsof -ti:8090 | xargs kill -9 2>/dev/null || true
+
 if [[ ! -x "${ROOT_DIR}/harness/.venv/bin/uvicorn" ]]; then
   if ! command -v uv >/dev/null 2>&1; then
     echo "error: uv is required to install harness dependencies" >&2

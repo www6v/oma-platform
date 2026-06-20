@@ -2,47 +2,29 @@
 
 from __future__ import annotations
 
-import os
-
 import anthropic
 
-_KEEP = os.getenv("OMA_KEEP_RESOURCES", "0") == "1"
+from oma_sdk.examples import EnvironmentExamples
 
 
 def test_environments_create_and_retrieve(client: anthropic.Anthropic):
-    env = client.beta.environments.create(name="sdk-e2e-env-create")
-    try:
-        assert env.id
-        got = client.beta.environments.retrieve(env.id)
-        assert got.id == env.id
-        assert got.name == env.name
-    finally:
-        if not _KEEP:
-            client.beta.environments.archive(env.id)
-        else:
-            print(f"\n[KEEP] environment {env.id} (sdk-e2e-env-create) — archive manually when done")
+    result = EnvironmentExamples.create_and_retrieve(client)
+    assert result["environment"].id
+    assert result["retrieved"].id == result["environment"].id
+    assert result["retrieved"].name == result["environment"].name
 
 
 def test_environments_list(client: anthropic.Anthropic):
-    page = client.beta.environments.list()
-    envs = list(page)
+    envs = EnvironmentExamples.list_environments(client)
     assert isinstance(envs, list)
     assert len(envs) >= 1  # at least the default env exists
 
 
 def test_environments_update(client: anthropic.Anthropic):
-    env = client.beta.environments.create(name="sdk-e2e-env-before")
-    try:
-        updated = client.beta.environments.update(env.id, name="sdk-e2e-env-after")
-        assert updated.name == "sdk-e2e-env-after"
-    finally:
-        if not _KEEP:
-            client.beta.environments.archive(env.id)
-        else:
-            print(f"\n[KEEP] environment {env.id} (sdk-e2e-env-after) — archive manually when done")
+    result = EnvironmentExamples.update_environment(client)
+    assert result["updated"].name == "sdk-e2e-env-after"
 
 
 def test_environments_archive(client: anthropic.Anthropic):
-    env = client.beta.environments.create(name="sdk-e2e-env-archive")
-    archived = client.beta.environments.archive(env.id)
-    assert archived.id == env.id
+    result = EnvironmentExamples.archive_environment(client)
+    assert result["archived"].id == result["environment"].id
