@@ -298,3 +298,72 @@ func serializeMessage(m store.AgentMessage) map[string]any {
 	}
 	return out
 }
+
+func (h *sessionHandlers) handleSessionTeamTasks(
+	w http.ResponseWriter,
+	req *http.Request,
+) {
+	sess, ok := h.requireSession(w, req)
+	if !ok {
+		return
+	}
+	teamID := chi.URLParam(req, "team_id")
+	tasks, err := h.listTeamTasks(req.Context(), sess.ID, teamID)
+	if err != nil {
+		writeTeamError(w, err)
+		return
+	}
+	if tasks == nil {
+		tasks = []map[string]any{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": tasks})
+}
+
+func (h *sessionHandlers) listTeamTasks(
+	ctx context.Context,
+	sessionID, teamID string,
+) ([]map[string]any, error) {
+	if h.tasks == nil {
+		return nil, fmt.Errorf("task board unavailable")
+	}
+	team, err := h.teams.GetTeamByID(ctx, sessionID, teamID)
+	if err != nil {
+		return nil, err
+	}
+	if team == nil {
+		return nil, store.ErrNotFound
+	}
+	rows, err := h.tasks.ListTasks(ctx, teamID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]map[string]any, 0, len(rows))
+	for _, t := range rows {
+		out = append(out, serializeTask(t))
+	}
+	return out, nil
+}
+
+func serializeTask(t store.TeamTask) map[string]any {
+	blocks := t.Blocks
+	if blocks == nil {
+		blocks = []string{}
+	}
+	blockedBy := t.BlockedBy
+	if blockedBy == nil {
+		blockedBy = []string{}
+	}
+	return map[string]any{
+		"id":              t.ID,
+		"team_id":         t.TeamID,
+		"subject":         t.Subject,
+		"description":     nullIfEmpty(t.Description),
+		"active_form":     nullIfEmpty(t.ActiveForm),
+		"owner_member_id": nullIfEmpty(t.OwnerMemberID),
+		"status":          t.Status,
+		"blocks":          blocks,
+		"blocked_by":      blockedBy,
+		"created_at":      formatISO(t.CreatedAt),
+		"updated_at":      formatISO(t.UpdatedAt),
+	}
+}

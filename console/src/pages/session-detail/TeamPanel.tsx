@@ -41,6 +41,20 @@ export interface TeamMessageRow {
   read_at?: string | null;
 }
 
+export interface TaskBoardRow {
+  id: string;
+  team_id: string;
+  subject: string;
+  description?: string | null;
+  active_form?: string | null;
+  owner_member_id?: string | null;
+  status: string;
+  blocks: string[];
+  blocked_by: string[];
+  created_at: string;
+  updated_at: string;
+}
+
 function memberStatusTone(status: string): string {
   switch (status) {
     case "active":
@@ -62,6 +76,21 @@ function messageTypeLabel(messageType: string): string {
     return "text";
   }
   return messageType.replace(/_/g, " ");
+}
+
+function taskStatusTone(status: string): string {
+  switch (status) {
+    case "completed":
+      return "text-success bg-success-subtle";
+    case "in_progress":
+      return "text-info bg-info-subtle";
+    case "blocked":
+      return "text-warning bg-warning-subtle";
+    case "deleted":
+      return "text-fg-subtle bg-bg-surface";
+    default:
+      return "text-fg-muted bg-bg-surface/60";
+  }
 }
 
 export function TeamPanel({
@@ -86,6 +115,8 @@ export function TeamPanel({
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [shutdownBusy, setShutdownBusy] = useState<string | null>(null);
+  const [rightView, setRightView] = useState<"mailbox" | "tasks">("mailbox");
+  const [tasks, setTasks] = useState<TaskBoardRow[]>([]);
 
   const selectedTeam = useMemo(
     () => teams.find((t) => t.id === selectedTeamId) ?? teams[0] ?? null,
@@ -127,6 +158,25 @@ export function TeamPanel({
       void loadMessages(selectedTeam.id);
     }
   }, [selectedTeam, messagesByTeamId, loadMessages]);
+
+  useEffect(() => {
+    if (!selectedTeam || rightView !== "tasks") {
+      return;
+    }
+    const fetchTasks = async () => {
+      try {
+        const res = await api<{ data: TaskBoardRow[] }>(
+          `/v1/sessions/${sessionId}/teams/${selectedTeam.id}/tasks`,
+        );
+        setTasks(res.data ?? []);
+      } catch {
+        setTasks([]);
+      }
+    };
+    void fetchTasks();
+    const id = setInterval(() => { void fetchTasks(); }, 5000);
+    return () => clearInterval(id);
+  }, [selectedTeam?.id, rightView, api, sessionId]);
 
   const memberNames = useMemo(() => {
     const map = new Map<string, string>();
@@ -289,66 +339,123 @@ export function TeamPanel({
 
           <section className="flex-1 min-h-0 flex flex-col pl-3 pr-4 py-4">
             <div className="flex items-center justify-between gap-2 mb-3 shrink-0">
-              <h3 className="text-[10px] uppercase tracking-wide text-fg-subtle font-mono">
-                Mailbox
-              </h3>
-              <button
-                type="button"
-                onClick={() => void loadMessages(selectedTeam.id)}
-                disabled={loadingMessages}
-                className="text-xs text-fg-muted hover:text-fg disabled:opacity-50"
-              >
-                {loadingMessages ? "Refreshing…" : "Refresh"}
-              </button>
+              <div className="flex gap-1">
+                {(["mailbox", "tasks"] as const).map((view) => (
+                  <button
+                    key={view}
+                    type="button"
+                    onClick={() => setRightView(view)}
+                    className={`px-2.5 py-1 text-[10px] uppercase tracking-wide font-mono rounded transition-colors duration-[var(--dur-quick)] ease-[var(--ease-soft)] ${
+                      rightView === view
+                        ? "bg-bg-surface text-brand font-semibold"
+                        : "text-fg-subtle hover:text-fg-muted hover:bg-bg-surface/60"
+                    }`}
+                  >
+                    {view}
+                  </button>
+                ))}
+              </div>
+              {rightView === "mailbox" && (
+                <button
+                  type="button"
+                  onClick={() => void loadMessages(selectedTeam.id)}
+                  disabled={loadingMessages}
+                  className="text-xs text-fg-muted hover:text-fg disabled:opacity-50"
+                >
+                  {loadingMessages ? "Refreshing…" : "Refresh"}
+                </button>
+              )}
             </div>
 
-            <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-1">
-              {messages.length === 0 && !loadingMessages && (
-                <p className="text-sm text-fg-muted">No mailbox messages yet.</p>
-              )}
-              {messages.map((msg) => {
-                const fromName =
-                  memberNames.get(msg.from_member_id) ?? msg.from_member_id;
-                const toName = msg.to_member_id
-                  ? memberNames.get(msg.to_member_id) ?? msg.to_member_id
-                  : "broadcast";
-                const createdMs = Date.parse(msg.created_at);
-                const rel = Number.isFinite(createdMs)
-                  ? formatRelative(Date.now() - createdMs)
-                  : msg.created_at;
-                return (
-                  <article
-                    key={msg.id}
-                    className="rounded-lg border border-border/30 bg-bg-surface/40 px-3 py-2.5"
-                  >
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-                      <span className="font-medium text-fg">{fromName}</span>
-                      <span className="text-fg-subtle">→</span>
-                      <span className="text-fg-muted">{toName}</span>
-                      <span
-                        className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-bg-surface text-fg-subtle"
-                      >
-                        {messageTypeLabel(msg.message_type)}
-                      </span>
-                      <span className="ml-auto text-[10px] text-fg-subtle font-mono">
-                        {rel}
-                      </span>
-                    </div>
-                    {msg.summary && (
-                      <p className="text-xs font-medium text-fg-muted mt-1.5">
-                        {msg.summary}
+            {rightView === "mailbox" ? (
+              <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-1">
+                {messages.length === 0 && !loadingMessages && (
+                  <p className="text-sm text-fg-muted">No mailbox messages yet.</p>
+                )}
+                {messages.map((msg) => {
+                  const fromName =
+                    memberNames.get(msg.from_member_id) ?? msg.from_member_id;
+                  const toName = msg.to_member_id
+                    ? memberNames.get(msg.to_member_id) ?? msg.to_member_id
+                    : "broadcast";
+                  const createdMs = Date.parse(msg.created_at);
+                  const rel = Number.isFinite(createdMs)
+                    ? formatRelative(Date.now() - createdMs)
+                    : msg.created_at;
+                  return (
+                    <article
+                      key={msg.id}
+                      className="rounded-lg border border-border/30 bg-bg-surface/40 px-3 py-2.5"
+                    >
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                        <span className="font-medium text-fg">{fromName}</span>
+                        <span className="text-fg-subtle">→</span>
+                        <span className="text-fg-muted">{toName}</span>
+                        <span
+                          className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-bg-surface text-fg-subtle"
+                        >
+                          {messageTypeLabel(msg.message_type)}
+                        </span>
+                        <span className="ml-auto text-[10px] text-fg-subtle font-mono">
+                          {rel}
+                        </span>
+                      </div>
+                      {msg.summary && (
+                        <p className="text-xs font-medium text-fg-muted mt-1.5">
+                          {msg.summary}
+                        </p>
+                      )}
+                      <p className="text-sm text-fg mt-1 whitespace-pre-wrap break-words">
+                        {msg.body}
                       </p>
-                    )}
-                    <p className="text-sm text-fg mt-1 whitespace-pre-wrap break-words">
-                      {msg.body}
-                    </p>
-                    {!msg.read_at && msg.message_type !== "shutdown_response" && (
-                      <p className="text-[10px] text-accent-violet mt-1.5">Unread</p>
-                    )}
-                  </article>
-                );
-              })}
-            </div>
+                      {!msg.read_at && msg.message_type !== "shutdown_response" && (
+                        <p className="text-[10px] text-accent-violet mt-1.5">Unread</p>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1">
+                {tasks.length === 0 && (
+                  <p className="text-sm text-fg-muted">No tasks yet.</p>
+                )}
+                {tasks.map((task) => {
+                  const updatedMs = Date.parse(task.updated_at);
+                  const rel = Number.isFinite(updatedMs)
+                    ? formatRelative(Date.now() - updatedMs)
+                    : task.updated_at;
+                  return (
+                    <article
+                      key={task.id}
+                      className="rounded-lg border border-border/30 bg-bg-surface/40 px-3 py-2.5"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-medium text-fg leading-snug">
+                          {task.subject}
+                        </p>
+                        <span
+                          className={`shrink-0 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded ${taskStatusTone(task.status)}`}
+                        >
+                          {task.status.replace(/_/g, " ")}
+                        </span>
+                      </div>
+                      {task.active_form && (
+                        <p className="text-xs text-info mt-1">{task.active_form}</p>
+                      )}
+                      {task.description && (
+                        <p className="text-xs text-fg-muted mt-1 whitespace-pre-wrap break-words">
+                          {task.description}
+                        </p>
+                      )}
+                      <p className="text-[10px] text-fg-subtle font-mono mt-1.5">
+                        updated {rel}
+                      </p>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
           </section>
         </div>
       )}

@@ -29,6 +29,7 @@ func testTeamRouterWithAPIKeys(
 	*store.AgentRepo,
 	*store.SessionRepo,
 	*store.TeamRepo,
+	*store.TeamTaskRepo,
 ) {
 	t.Helper()
 	agents := store.NewAgentRepo(db)
@@ -47,6 +48,7 @@ func testTeamRouterWithAPIKeys(
 	outputs := sessionoutputs.NewStore(t.TempDir())
 	models := &modelresolve.Resolver{Cards: modelCards}
 	teams := store.NewTeamRepo(db)
+	tasks := store.NewTeamTaskRepo(db)
 	fileBlobs := fileblob.NewStore(t.TempDir())
 	files := store.NewFileRepo(db)
 
@@ -63,10 +65,11 @@ func testTeamRouterWithAPIKeys(
 			&harness.ResourceResolver{Files: files, FileBlobs: fileBlobs},
 			store.NewWakeupRepo(db),
 			teams,
+			tasks,
 			"", "", "", "", "", "", "",
 		),
 	})
-	return handler, apiKeys, agents, sessions, teams
+	return handler, apiKeys, agents, sessions, teams, tasks
 }
 
 func ensureEnvForTenant(
@@ -98,7 +101,7 @@ func TestSessionTeamRoutesTenantIsolation(t *testing.T) {
 	}
 	defer store.Close(db)
 
-	handler, apiKeys, agents, sessions, teams := testTeamRouterWithAPIKeys(t, db)
+	handler, apiKeys, agents, sessions, teams, tasks := testTeamRouterWithAPIKeys(t, db)
 	envs := store.NewEnvironmentRepo(db)
 	envA := ensureEnvForTenant(t, envs, "tenant-a")
 	envB := ensureEnvForTenant(t, envs, "tenant-b")
@@ -202,6 +205,30 @@ func TestSessionTeamRoutesTenantIsolation(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// seed one task per team so the task route has data to protect
+	taskA := store.TeamTask{
+		ID:        store.NewTeamTaskID(),
+		TeamID:    teamA.ID,
+		Subject:   "task-a",
+		Status:    "pending",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	taskB := store.TeamTask{
+		ID:        store.NewTeamTaskID(),
+		TeamID:    teamB.ID,
+		Subject:   "task-b",
+		Status:    "pending",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := tasks.CreateTask(ctx, taskA); err != nil {
+		t.Fatal(err)
+	}
+	if err := tasks.CreateTask(ctx, taskB); err != nil {
+		t.Fatal(err)
+	}
+
 	assertTeamListOK := func(t *testing.T, key, sessionID string) {
 		t.Helper()
 		url := "/v1/sessions/" + sessionID + "/teams"
@@ -254,6 +281,18 @@ func TestSessionTeamRoutesTenantIsolation(t *testing.T) {
 		}
 	}
 
+	assertTasksNotFound := func(t *testing.T, key, sessionID, teamID string) {
+		t.Helper()
+		url := "/v1/sessions/" + sessionID + "/teams/" + teamID + "/tasks"
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		req.Header.Set("x-api-key", key)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got status=%d body=%s", rec.Code, rec.Body.String())
+		}
+	}
+
 	// Same tenant: allowed.
 	assertTeamListOK(t, keyA.Key, sessA.ID)
 	assertTeamListOK(t, keyB.Key, sessB.ID)
@@ -271,4 +310,11 @@ func TestSessionTeamRoutesTenantIsolation(t *testing.T) {
 	// Same tenant but wrong session for team id → 404.
 	assertMessagesNotFound(t, keyA.Key, sessA.ID, teamB.ID)
 	assertShutdownNotFound(t, keyA.Key, sessA.ID, teamB.ID, workerB.ID)
+
+	// Cross-tenant: tasks on foreign session+team → 404.
+	assertTasksNotFound(t, keyA.Key, sessB.ID, teamB.ID)
+	assertTasksNotFound(t, keyB.Key, sessA.ID, teamA.ID)
+
+	// Same tenant but wrong session for team id → 404 on tasks too.
+	assertTasksNotFound(t, keyA.Key, sessA.ID, teamB.ID)
 }

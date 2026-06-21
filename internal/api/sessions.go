@@ -51,6 +51,7 @@ type sessionHandlers struct {
 	resources    *harness.ResourceResolver
 	wakeups      *store.WakeupRepo
 	teams        *store.TeamRepo
+	tasks        *store.TeamTaskRepo
 	mcpProxyBase string
 	mcpProxyKey  string
 	platformBase string

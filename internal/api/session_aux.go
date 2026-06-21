@@ -20,6 +20,7 @@ func (h *sessionHandlers) mountSessionAuxRoutes(r chi.Router) {
 		"/{id}/teams/{team_id}/members/{member_id}/shutdown",
 		h.handleSessionTeamMemberShutdown,
 	)
+	r.Get("/{id}/teams/{team_id}/tasks", h.handleSessionTeamTasks)
 	r.Get("/{id}/pending", h.handleSessionPending)
 	r.Get("/{id}/trajectory", h.handleSessionTrajectory)
 	r.Get("/{id}/outputs", h.handleSessionOutputs)
