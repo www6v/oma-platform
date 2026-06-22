@@ -26,6 +26,9 @@
 
 import type { ReactNode, ComponentType } from "react";
 
+// Import plugin definitions
+import dynamicWorkflowsPlugin from "./dynamic-workflows";
+
 export interface PluginNavItem {
   to: string;
   label: string;
@@ -54,4 +57,4 @@ export interface ConsolePlugin {
   navGroups?: PluginNavGroup[];
 }
 
-export const consolePlugins: ConsolePlugin[] = [];
+export const consolePlugins: ConsolePlugin[] = [dynamicWorkflowsPlugin];

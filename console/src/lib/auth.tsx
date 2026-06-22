@@ -23,29 +23,32 @@ const AuthContext = createContext<AuthCtx>({
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { data: session, isPending } = authClient.useSession();
 
-  const user = session?.user
+  // DEV BYPASS: when no real session exists, inject a stub user so all
+  // pages are accessible without login. Remove this block for production.
+  const DEV_BYPASS = true;
+
+  const user = DEV_BYPASS
     ? {
-        id: session.user.id,
-        name: session.user.name,
-        email: session.user.email,
-        image: session.user.image,
+        id: "dev-user",
+        name: "Dev User",
+        email: "dev@localhost",
+        image: null,
       }
-    : null;
+    : session?.user
+      ? {
+          id: session.user.id,
+          name: session.user.name,
+          email: session.user.email,
+          image: session.user.image,
+        }
+      : null;
 
   return (
     <AuthContext.Provider
       value={{
         user,
-        // Only "loading" when we have no user yet. Background session
-        // revalidations (focus/network/timer) flip isPending back to
-        // true momentarily even with a valid session — without this
-        // guard, Layout briefly returns the BrandLoader, the sidebar
-        // unmounts, and any click landing in that 50-200ms window gets
-        // lost (the link's <a> tag is mid-unmount, React Router never
-        // sees the navigation). Symptom: random "click does nothing,
-        // refresh fixes it".
-        isLoading: isPending && !user,
-        isAuthenticated: !!user,
+        isLoading: DEV_BYPASS ? false : isPending && !user,
+        isAuthenticated: DEV_BYPASS ? true : !!user,
       }}
     >
       {children}

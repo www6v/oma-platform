@@ -18,9 +18,20 @@ from oma_adapter.types import (
     TurnResponse,
 )
 
+# Load piPy extensions
+try:
+    from pipy_dynamic_workflows import register_extension
+    _workflows_ext = register_extension()
+except ImportError:
+    _workflows_ext = None
+
 TURN_TIMEOUT_SEC = float(os.environ.get("HARNESS_TURN_TIMEOUT_SEC", "300"))
 
 app = FastAPI(title="oma-harness")
+
+# Include workflows extension if available
+if _workflows_ext is not None:
+    app.include_router(_workflows_ext.router)
 
 
 @app.get("/health")

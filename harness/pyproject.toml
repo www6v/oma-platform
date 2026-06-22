@@ -20,6 +20,7 @@ pi-coding-agent = { git = "https://gitee.com/www6v6v/piPy.git", branch = "v0.2.0
 pi-ai = { git = "https://gitee.com/www6v6v/piPy.git", branch = "v0.2.0", subdirectory = "packages/pi_ai" }
 pi-subagent = { git = "https://gitee.com/www6v6v/pipy-subagent.git", branch = "v0.1.0", subdirectory = "packages/pi_subagent" }
 pi-team = { git = "https://gitee.com/www6v6v/pipy-teams.git", branch = "v0.1.0", subdirectory = "packages/pi_team" }
+pipy-dynamic-workflows = { path = "../../piPy-dynamic-workflows", editable = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
