@@ -13,6 +13,8 @@ PRIMARY_THREAD_ID = "sthr_primary"
 
 
 def event_thread_id(event: dict[str, Any]) -> str:
+    if not isinstance(event, dict):
+        return PRIMARY_THREAD_ID
     tid = event.get("session_thread_id")
     if isinstance(tid, str) and tid.strip():
         return tid.strip()
@@ -43,10 +45,14 @@ def latest_user_text(
 ) -> str:
     scoped = filter_events_for_thread(events, session_thread_id)
     for event in reversed(scoped):
+        if not isinstance(event, dict):
+            continue
         if event.get("type") != "user.message":
             continue
         parts: list[str] = []
         for block in event.get("content") or []:
+            if not isinstance(block, dict):
+                continue
             if block.get("type") == "text" and block.get("text"):
                 parts.append(str(block["text"]))
         if parts:
@@ -57,9 +63,13 @@ def latest_user_text(
 def _last_user_message_index(events: list[dict[str, Any]]) -> int:
     for index in range(len(events) - 1, -1, -1):
         event = events[index]
+        if not isinstance(event, dict):
+            continue
         if event.get("type") != "user.message":
             continue
         for block in event.get("content") or []:
+            if not isinstance(block, dict):
+                continue
             if block.get("type") == "text" and block.get("text"):
                 return index
     return -1
@@ -68,6 +78,8 @@ def _last_user_message_index(events: list[dict[str, Any]]) -> int:
 def _summary_text(boundary: dict[str, Any]) -> str:
     parts: list[str] = []
     for block in boundary.get("summary") or []:
+        if not isinstance(block, dict):
+            continue
         if block.get("type") == "text" and block.get("text"):
             parts.append(str(block["text"]))
     return "\n".join(parts).strip()

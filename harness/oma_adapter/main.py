@@ -5,8 +5,15 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from pathlib import Path
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
+
+# Load .env from oma-platform root (contains OMA_API_KEY, etc.)
+_env_path = Path(__file__).parent.parent.parent / ".env"
+if _env_path.exists():
+    load_dotenv(_env_path)
 from fastapi.responses import StreamingResponse
 
 from oma_adapter.outcome_evaluator import OutcomeRubric, evaluate_outcome

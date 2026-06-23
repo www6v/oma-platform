@@ -7,6 +7,8 @@ var allowedClientEventTypes = map[string]struct{}{
 	"user.tool_confirmation":  {},
 	"user.custom_tool_result": {},
 	"user.define_outcome":     {},
+	// agent.message is allowed for internal/harness use and programmatic sync
+	"agent.message":           {},
 }
 
 // turnTriggerEventTypes cause a harness turn after append.

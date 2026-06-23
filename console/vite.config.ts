@@ -5,6 +5,8 @@ import path from "node:path";
 
 const API_TARGET = process.env.VITE_API_TARGET || "http://localhost:8090";
 const AUTH_TARGET = process.env.VITE_AUTH_TARGET || "http://localhost:8788";
+// OMA platform serves /v1/* resources (agents, sessions, environments, etc.)
+const OMA_PLATFORM_TARGET = process.env.VITE_OMA_PLATFORM_TARGET || "http://localhost:8787";
 
 // Shared proxy config. cookieDomainRewrite makes Set-Cookie headers from
 // any non-localhost API target (staging / prod) land on localhost so
@@ -55,7 +57,12 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": proxyOpts,
-      "/v1": proxyOpts,
+      "/v1": {
+        target: OMA_PLATFORM_TARGET,
+        changeOrigin: true,
+        secure: true,
+        cookieDomainRewrite: "localhost",
+      },
       "/auth": authProxyOpts,
       "/health": proxyOpts,
       "/linear": proxyOpts,

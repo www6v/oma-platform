@@ -140,24 +140,45 @@ function WorkflowGeneratorModal({ onClose, onCreated }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt }),
       });
-      if (!res.ok) throw new Error('Generation failed');
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(typeof errorData.detail === 'string' ? errorData.detail : JSON.stringify(errorData.detail));
+      }
       const data = await res.json();
+
+      // Validate response data
+      if (!data.yaml) {
+        throw new Error('Generated workflow is empty');
+      }
 
       // Create the workflow
       const createRes = await fetch('/api/workflows', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: data.parsed.name || 'Untitled Workflow',
-          description: data.parsed.description || '',
+          name: data.parsed?.name || 'Untitled Workflow',
+          description: data.parsed?.description || '',
           yaml: data.yaml,
         }),
       });
-      if (!createRes.ok) throw new Error('Failed to create workflow');
+      if (!createRes.ok) {
+        const errorData = await createRes.json();
+        const errorMsg = typeof errorData.detail === 'string' ? errorData.detail : JSON.stringify(errorData.detail);
+        throw new Error(errorMsg);
+      }
       const workflow = await createRes.json();
       onCreated(workflow);
-    } catch (err) {
-      setError(err.message);
+    } catch (err: any) {
+      // Handle different error types properly
+      if (err instanceof Error) {
+        setError(err.message);
+      } else if (typeof err === 'object' && err !== null) {
+        setError(JSON.stringify(err));
+      } else if (typeof err === 'string') {
+        setError(err);
+      } else {
+        setError('Unknown error');
+      }
     } finally {
       setGenerating(false);
     }

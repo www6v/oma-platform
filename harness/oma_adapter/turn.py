@@ -153,6 +153,9 @@ def _events_include_tool_result(
         return False
     saw_use: set[str] = set()
     for item in events:
+        # Skip non-dict items (defensive)
+        if not isinstance(item, dict):
+            continue
         kind = item.get("type")
         if kind == "agent.tool_use":
             name = item.get("name")
@@ -484,6 +487,9 @@ async def _run_turn_core(
                     seen_agent_text=seen_agent_text,
                 )
                 raw_cursor = len(buffer)
+                # Debug: log what we got and what we emitted
+                import sys
+                print(f"DEBUG listener: buffer_len={len(buffer)}, delta_len={len(delta)}, last_event_type={buffer[-1].get('type') if buffer and isinstance(buffer[-1], dict) else 'N/A'}", file=sys.stderr, flush=True)
                 for ev in delta:
                     queue.put_nowait(ev)
 
@@ -502,7 +508,11 @@ async def _run_turn_core(
             _tl.warning("[turn_exec] idle, buffer=%d oma_events=%d session_id=%s", len(buffer), len(oma_events), session_id)
             if not oma_events and buffer:
                 import json as _json
-                event_types = [e.get("type") or e.get("event", "?") for e in buffer]
+                # Defensive: filter out non-dict items before calling .get()
+                event_types = [
+                    (e.get("type") or e.get("event", "?")) if isinstance(e, dict) else f"<{type(e).__name__}>"
+                    for e in buffer
+                ]
                 _tl.warning("[turn_exec] buffer event types: %s", event_types[:30])
                 # log first and last event content for diagnosis
                 for idx in range(min(len(buffer), 30)):
@@ -514,6 +524,9 @@ async def _run_turn_core(
                 session_thread_id=session_thread_id,
             )
             requested_mcp = set(mcp_tools_named_in_text(user_text))
+            # Debug: log buffer types before emit_oma_events
+            buffer_types = set(type(x).__name__ for x in buffer)
+            _tl.warning("[turn_exec] buffer types before emit: %s", buffer_types)
             streamed_oma = emit_oma_events(
                 buffer,
                 seen_agent_text=seen_agent_text,

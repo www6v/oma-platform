@@ -14,7 +14,13 @@ def emit_oma_events(
 ) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     seen_agent_text = seen_agent_text if seen_agent_text is not None else set()
-    for item in raw_events:
+    for idx, item in enumerate(raw_events):
+        # Skip non-dict items (defensive: pi events should be dicts but may include strings)
+        if not isinstance(item, dict):
+            # Log unexpected types for debugging
+            import sys
+            print(f"DEBUG emit_oma_events: Skipping non-dict at index {idx}: type={type(item).__name__}, value={item!r}", file=sys.stderr, flush=True)
+            continue
         kind = item.get("type") or item.get("event")
         if kind in {"assistant_message", "agent.message"}:
             text = _extract_text(item)
