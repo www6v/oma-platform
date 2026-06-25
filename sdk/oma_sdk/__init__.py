@@ -37,7 +37,18 @@ from .resources.model_cards import ModelCardsResource
 from .resources.models import ModelsResource
 from .resources.runtimes import RuntimesResource
 
-__all__ = ["OMAClient"]
+from .subagent import (
+    build_multiagent,
+    count_thread_created,
+    events_of_type,
+)
+
+__all__ = [
+    "OMAClient",
+    "build_multiagent",
+    "count_thread_created",
+    "events_of_type",
+]
 
 
 class OMAClient:

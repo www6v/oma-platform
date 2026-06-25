@@ -7,6 +7,8 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
 
+import httpx
+
 if TYPE_CHECKING:
     import anthropic
 
@@ -59,6 +61,24 @@ class AgentExamples:
         page = client.beta.agents.list()
         agents = list(page)
         assert isinstance(agents, list)
+        return agents
+
+    @staticmethod
+    def list_all_agents(
+        client: anthropic.Anthropic,
+        *,
+        include_archived: bool = True,
+    ) -> list:
+        """
+        List all agents across cursor pages.
+
+        The default ``beta.agents.list()`` only returns active agents.
+        Cleanup and console parity require ``include_archived=True``.
+        """
+        agents: list = []
+        page = client.beta.agents.list(include_archived=include_archived, limit=100)
+        for current_page in page.iter_pages():
+            agents.extend(current_page.data)
         return agents
 
     @staticmethod
@@ -129,3 +149,58 @@ class AgentExamples:
         archived = client.beta.agents.archive(agent.id)
         assert archived.id == agent.id
         return {"agent": agent, "archived": archived}
+
+    @staticmethod
+    def archive_and_delete_by_id(client: anthropic.Anthropic, agent_id: str) -> dict:
+        """
+        Archive an agent and permanently delete it.
+
+        The Anthropic SDK exposes ``beta.agents.archive`` but not ``delete``;
+        deletion uses ``DELETE /v1/agents/:id`` via the raw HTTP client.
+
+        Args:
+            client: Anthropic client instance
+            agent_id: ID of the agent to delete
+
+        Returns:
+            Dictionary with archived agent and delete response
+        """
+        archived = client.beta.agents.archive(agent_id)
+        resp = client.delete(f"/v1/agents/{agent_id}", cast_to=httpx.Response)
+        assert resp.status_code == 200
+        deleted = resp.json()
+        assert deleted["type"] == "agent_deleted"
+        assert deleted["id"] == agent_id
+        return {"archived": archived, "deleted": deleted}
+
+    @staticmethod
+    def cleanup_agent(client: anthropic.Anthropic, agent_id: str) -> None:
+        """
+        Best-effort archive and delete for cleanup scripts.
+
+        Args:
+            client: Anthropic client instance
+            agent_id: ID of the agent to remove
+        """
+        try:
+            client.beta.agents.archive(agent_id)
+        except Exception:
+            pass
+        resp = client.delete(f"/v1/agents/{agent_id}", cast_to=httpx.Response)
+        resp.raise_for_status()
+
+    @staticmethod
+    def delete_agent(client: anthropic.Anthropic, name: str = "sdk-e2e-delete") -> dict:
+        """
+        Create an agent, archive it, and permanently delete it.
+
+        Args:
+            client: Anthropic client instance
+            name: Name for the agent
+
+        Returns:
+            Dictionary with agent, archived, and deleted details
+        """
+        agent = client.beta.agents.create(name=name, model=MODEL)
+        result = AgentExamples.archive_and_delete_by_id(client, agent.id)
+        return {"agent": agent, **result}

@@ -32,3 +32,11 @@ def test_agents_versions(client: anthropic.Anthropic):
 def test_agents_archive(client: anthropic.Anthropic):
     result = AgentExamples.archive_agent(client)
     assert result["archived"].id == result["agent"].id
+
+
+def test_agents_delete(client: anthropic.Anthropic):
+    result = AgentExamples.delete_agent(client)
+    assert result["agent"].name == "sdk-e2e-delete"
+    assert result["archived"].id == result["agent"].id
+    assert result["deleted"]["type"] == "agent_deleted"
+    assert result["deleted"]["id"] == result["agent"].id

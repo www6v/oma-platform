@@ -9,20 +9,40 @@ including agents, sessions, environments, vaults, memory stores, and skills.
 import argparse
 import os
 import sys
+from pathlib import Path
 from typing import Optional
 
 import anthropic
 
+# Allow importing oma_sdk from oma-platform/sdk without a pip install.
+_SDK_DIR = Path(__file__).resolve().parents[2] / "sdk"
+if str(_SDK_DIR) not in sys.path:
+    sys.path.insert(0, str(_SDK_DIR))
+
+from oma_sdk.examples import AgentExamples
+
+_DEFAULT_BASE_URL = "http://127.0.0.1:8787"
+_DEFAULT_API_KEY = "dev-key"
+
+
+def _load_dotenv() -> None:
+    """Load oma-platform/.env when present."""
+    dotenv = Path(__file__).resolve().parents[2] / ".env"
+    if not dotenv.exists():
+        return
+    for line in dotenv.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip())
+
 
 def get_client(base_url: Optional[str] = None) -> anthropic.Anthropic:
-    """Initialize and return the Anthropic client."""
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise ValueError("ANTHROPIC_API_KEY environment variable is not set")
-    
-    if base_url:
-        return anthropic.Anthropic(api_key=api_key, base_url=base_url)
-    return anthropic.Anthropic(api_key=api_key)
+    """Initialize and return the OMA API client (anthropic SDK + custom base URL)."""
+    api_key = os.getenv("OMA_API_KEY", _DEFAULT_API_KEY)
+    resolved_base_url = base_url or os.getenv("OMA_BASE_URL", _DEFAULT_BASE_URL)
+    return anthropic.Anthropic(api_key=api_key, base_url=resolved_base_url)
 
 
 def delete_all_sessions(client: anthropic.Anthropic, user_id: Optional[str] = None, dry_run: bool = False) -> int:
@@ -57,33 +77,31 @@ def delete_all_agents(client: anthropic.Anthropic, user_id: Optional[str] = None
     """Archive and delete all agents, optionally filtered by user_id."""
     count = 0
     try:
-        page = client.beta.agents.list()
-        agents = list(page)
-        
+        # Default list() only returns active agents; include archived so we
+        # can permanently delete agents left from prior archive-only runs.
+        agents = AgentExamples.list_all_agents(client, include_archived=True)
+        print(f"Found {len(agents)} agents (including archived)")
+
         for agent in agents:
             # Filter by user_id if provided (assuming agent has user metadata)
             if user_id and hasattr(agent, 'user_id') and agent.user_id != user_id:
                 continue
-                
-            print(f"{'[DRY RUN] ' if dry_run else ''}Archiving and deleting agent {agent.id} ({agent.name})")
+
+            label = f"{agent.id} ({agent.name})"
+            if getattr(agent, "archived_at", None):
+                label += " [archived]"
+            print(f"{'[DRY RUN] ' if dry_run else ''}Deleting agent {label}")
             if not dry_run:
                 try:
-                    # First archive the agent
-                    client.beta.agents.archive(agent.id)
-                    # Then delete it permanently
-                    try:
-                        client.beta.agents.delete(agent.id)
-                    except AttributeError:
-                        # If delete method doesn't exist, archive is sufficient
-                        print(f"  Note: Delete method not available, agent archived only")
+                    AgentExamples.cleanup_agent(client, agent.id)
                 except Exception as e:
                     print(f"  Error deleting agent {agent.id}: {e}")
                     continue
             count += 1
-            
+
     except Exception as e:
         print(f"Error listing/deleting agents: {e}")
-    
+
     return count
 
 
@@ -260,12 +278,13 @@ def main():
         help="Use remote API at specified URL (e.g., http://124.221.28.203:8787)"
     )
     
+    _load_dotenv()
     args = parser.parse_args()
-    
-    # Determine base URL
+
+    # Determine base URL (default: local oma-platform)
     base_url = None
     if args.localhost:
-        base_url = "http://127.0.0.1:8787"
+        base_url = _DEFAULT_BASE_URL
     elif args.remote:
         base_url = args.remote
     elif args.base_url:
@@ -274,16 +293,14 @@ def main():
     if args.dry_run:
         print("DRY RUN MODE - No resources will be deleted")
         print("=" * 60)
-    
-    if base_url:
-        print(f"Using API base URL: {base_url}")
-        print("=" * 60)
-    
-    try:
-        client = get_client(base_url)
-    except ValueError as e:
-        print(f"Error: {e}")
-        sys.exit(1)
+
+    resolved_base_url = (
+        base_url or os.getenv("OMA_BASE_URL", _DEFAULT_BASE_URL)
+    )
+    print(f"Using API base URL: {resolved_base_url}")
+    print("=" * 60)
+
+    client = get_client(base_url)
     
     user_filter = f" for user {args.user_id}" if args.user_id else " for all users"
     print(f"Deleting resources{user_filter}")

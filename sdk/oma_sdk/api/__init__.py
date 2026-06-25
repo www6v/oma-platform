@@ -14,6 +14,7 @@ from .memory_stores import MemoryStoreExamples
 from .vaults import VaultExamples
 from .skills import SkillExamples
 from .misc import MiscExamples
+from .subagents import SubagentExamples
 
 __all__ = [
     "AgentExamples",
@@ -23,4 +24,5 @@ __all__ = [
     "VaultExamples",
     "SkillExamples",
     "MiscExamples",
+    "SubagentExamples",
 ]
