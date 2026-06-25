@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     import anthropic
 
 _KEEP = os.getenv("OMA_KEEP_RESOURCES", "0") == "1"
-MODEL = {"id": "claude-sonnet-4-6"}
+MODEL = {"id": "qwen3.7-plus"}
 
 
 class AgentExamples:

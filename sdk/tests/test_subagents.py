@@ -6,11 +6,50 @@ import os
 
 import anthropic
 import httpx
+import pytest
 
 from oma_sdk.examples import SubagentExamples
-from oma_sdk.subagent import build_general_subagent_metadata
+from oma_sdk.subagent import (
+    DEMO_COORDINATOR_NAME,
+    DEMO_WORKER_NAME,
+    WORKER_REPLY_MARKER,
+    build_general_subagent_metadata,
+)
 
 _KEEP = os.getenv("OMA_KEEP_RESOURCES", "0") == "1"
+_SKIP_LIVE = os.getenv("OMA_SKIP_LIVE_SUBAGENT", "0") == "1"
+
+
+@pytest.mark.live
+@pytest.mark.skipif(_SKIP_LIVE, reason="OMA_SKIP_LIVE_SUBAGENT=1")
+def test_subagent_live_delegation_visible_in_console(
+    client: anthropic.Anthropic,
+):
+    """
+    Run a real call_agent delegation and keep resources for Console inspection.
+
+    Requires live oma-server + harness (OMA_FAKE_HARNESS=0) and LLM credentials.
+
+    Run with resources kept (default for this test):
+
+      OMA_KEEP_RESOURCES=1 pytest tests/test_subagents.py::test_subagent_live_delegation_visible_in_console -v -s
+
+    Or use ./tests/test_subagent_demo.sh
+    """
+    result = SubagentExamples.run_live_delegation_demo(
+        client,
+        keep_resources=True,
+    )
+    assert result["coordinator"].name == DEMO_COORDINATOR_NAME
+    assert result["worker"].name == DEMO_WORKER_NAME
+    assert result["thread_created_count"] >= 1
+    assert len(result["threads"]) >= 2
+    assert result["trajectory"]["summary"]["num_threads"] >= 2
+    assert any(
+        WORKER_REPLY_MARKER in SubagentExamples._message_text(ev)
+        for ev in result["events"]
+        if ev.get("type") == "agent.message"
+    )
 
 
 def test_subagent_coordinator_multiagent(client: anthropic.Anthropic):

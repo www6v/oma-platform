@@ -30,13 +30,19 @@ class SessionExamples:
         client: anthropic.Anthropic,
         agent_id: str,
         environment_id: str,
+        *,
+        title: str | None = None,
     ):
         """Create a session, retrying up to _SESSION_RETRY_MAX times on 429."""
         for attempt in range(_SESSION_RETRY_MAX + 1):
             try:
-                return client.beta.sessions.create(
-                    agent=agent_id, environment_id=environment_id
-                )
+                kwargs: dict = {
+                    "agent": agent_id,
+                    "environment_id": environment_id,
+                }
+                if title is not None:
+                    kwargs["title"] = title
+                return client.beta.sessions.create(**kwargs)
             except RateLimitError as exc:
                 if "session" not in str(exc).lower() or attempt == _SESSION_RETRY_MAX:
                     raise

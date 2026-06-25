@@ -13,7 +13,14 @@ from typing import Any, Literal, TypedDict
 SubagentRole = Literal["explore", "plan", "verify"]
 
 DEFAULT_TOOLS: list[dict[str, str]] = [{"type": "agent_toolset_20260401"}]
-DEFAULT_MODEL: dict[str, str] = {"id": "claude-sonnet-4-6"}
+DEFAULT_MODEL: dict[str, str] = {"id": "qwen3.7-plus"}
+
+# Recognizable names for Console UI browsing after SDK demo tests.
+DEMO_WORKER_NAME = "sdk-subagent-worker"
+DEMO_COORDINATOR_NAME = "sdk-subagent-coordinator"
+DEMO_SESSION_TITLE = "SDK Subagent Demo"
+DEMO_ENV_NAME = "sdk-subagent-demo-env"
+WORKER_REPLY_MARKER = "SDK-SUBAGENT-OK"
 
 
 class CallableAgentRef(TypedDict, total=False):

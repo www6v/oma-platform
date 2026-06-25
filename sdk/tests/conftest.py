@@ -10,6 +10,13 @@ Set OMA_KEEP_RESOURCES=1 to skip all cleanup so you can inspect created
 resources in the UI after the test run.
 
   OMA_KEEP_RESOURCES=1 OMA_API_KEY=dev-key OMA_BASE_URL=http://... pytest tests/
+
+Live sub-agent demo (real LLM delegation, keeps resources, prints Console URLs):
+
+  ./tests/test_subagent_demo.sh
+
+  # or:
+  OMA_KEEP_RESOURCES=1 pytest tests/test_subagents.py::test_subagent_live_delegation_visible_in_console -v -s
 """
 
 from __future__ import annotations
@@ -67,7 +74,7 @@ def tmp_agent(client: anthropic.Anthropic):
     """Creates a throw-away agent; archives it after the test (unless KEEP_RESOURCES)."""
     agent = client.beta.agents.create(
         name="sdk-e2e-tmp-agent",
-        model={"id": "claude-sonnet-4-6"},
+        model={"id": "qwen3.7-plus"},
         system="SDK e2e test agent. Do not use in production.",
     )
     yield agent

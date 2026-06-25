@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from pathlib import Path
 from typing import Any, Awaitable, Callable
@@ -47,7 +48,11 @@ from oma_adapter.tools import (
     enabled_schedule_tools,
     session_tool_config_from_agent,
 )
-from oma_adapter.pi_model import resolve_session_model_pattern
+from oma_adapter.pi_model import (
+    is_legacy_anthropic_model,
+    normalize_harness_models,
+    resolve_session_model_pattern,
+)
 from oma_adapter.types import AgentSnapshot, ModelConfig, TurnResponse
 from oma_adapter.web_fetch.runtime import WebFetchRuntime, clear_web_fetch_runtime, configure_web_fetch
 from oma_adapter.web_search.runtime import (
@@ -284,6 +289,19 @@ async def _run_turn_core(
             event = tagged
         if on_event is not None:
             await on_event(event)
+
+    model, aux_model = normalize_harness_models(
+        model,
+        agent_model=agent.model,
+        aux_model=aux_model,
+    )
+    if model is not None and is_legacy_anthropic_model(agent.model):
+        logging.getLogger("oma.turn").warning(
+            "[turn] remapped legacy model %s -> %s (provider=%s)",
+            agent.model,
+            model.model,
+            model.provider,
+        )
 
     context_window = resolve_context_window_tokens(
         model.model if model is not None else agent.model,

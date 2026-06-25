@@ -6,6 +6,7 @@ import os
 from contextlib import contextmanager
 
 from oma_adapter.pi_model import (
+    apply_pipy_model_override,
     normalize_pi_provider,
     resolve_session_model_pattern,
 )
@@ -54,6 +55,15 @@ def test_resolve_session_model_pattern_for_bare_claude() -> None:
     assert provider == "anthropic"
 
 
+def test_resolve_session_model_pattern_for_qwen() -> None:
+    model, provider = resolve_session_model_pattern(
+        wire_model="qwen3.7-plus",
+        oma_provider=None,
+    )
+    assert model == "qwen3.7-plus"
+    assert provider == "dashscope"
+
+
 def test_resolve_session_model_pattern_keeps_qualified_model() -> None:
     model, provider = resolve_session_model_pattern(
         wire_model="faux/test",
@@ -61,6 +71,27 @@ def test_resolve_session_model_pattern_keeps_qualified_model() -> None:
     )
     assert model == "faux/test"
     assert provider is None
+
+
+def test_apply_pipy_model_override_remaps_claude() -> None:
+    cfg = ModelConfig(
+        model="claude-sonnet-4-6",
+        provider="ant-compatible",
+        api_key="sk-stale",
+        base_url="https://ai.anta.com/aimodels-server/private/llm",
+    )
+    with _env("OMA_DEFAULT_MODEL", "qwen3.7-plus"):
+        out = apply_pipy_model_override(model=cfg, agent_model="claude-sonnet-4-6")
+    assert out is not None
+    assert out.model == "qwen3.7-plus"
+    assert out.provider == "dashscope"
+    assert out.api_key is None
+
+
+def test_apply_pipy_model_override_keeps_qwen() -> None:
+    cfg = ModelConfig(model="qwen3.7-plus", provider="dashscope")
+    out = apply_pipy_model_override(model=cfg, agent_model="qwen3.7-plus")
+    assert out is cfg
 
 
 def test_fake_harness_skipped_when_model_card_has_api_key() -> None:

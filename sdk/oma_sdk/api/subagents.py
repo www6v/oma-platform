@@ -7,26 +7,55 @@ and oma-platform ``docs/design/subagent.md``.
 
 from __future__ import annotations
 
+import json
 import os
+import time
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlparse
 
 import httpx
 
 from oma_sdk.subagent import (
     DEFAULT_MODEL,
     DEFAULT_TOOLS,
+    DEMO_COORDINATOR_NAME,
+    DEMO_ENV_NAME,
+    DEMO_SESSION_TITLE,
+    DEMO_WORKER_NAME,
+    WORKER_REPLY_MARKER,
     SubAgentConfig,
     build_general_subagent_metadata,
     build_multiagent,
     build_role_metadata,
     count_thread_created,
     events_of_type,
+    event_type,
+    extract_event_data,
 )
 
 if TYPE_CHECKING:
     import anthropic
 
 _KEEP = os.getenv("OMA_KEEP_RESOURCES", "0") == "1"
+_DEMO_TIMEOUT_SEC = int(os.getenv("SUBAGENT_DEMO_TIMEOUT_SEC", "180"))
+_DEMO_POLL_SEC = float(os.getenv("SUBAGENT_DEMO_POLL_SEC", "2"))
+
+
+def _console_base_url() -> str:
+    """Derive Console base URL from OMA_BASE_URL (API and UI share host)."""
+    explicit = os.getenv("OMA_CONSOLE_URL")
+    if explicit:
+        return explicit.rstrip("/")
+    api_base = os.getenv("OMA_BASE_URL", "http://localhost:8787").rstrip("/")
+    parsed = urlparse(api_base)
+    if parsed.path and parsed.path not in ("", "/"):
+        return f"{parsed.scheme}://{parsed.netloc}"
+    return api_base
+
+
+def _call_agent_tool_prefix(worker_id: str) -> str:
+    safe = worker_id.replace("-", "_")
+    return f"call_agent_{safe}"
 
 
 class SubagentExamples:
@@ -311,10 +340,282 @@ class SubagentExamples:
                     f"\n[KEEP] session {sess.id} — archive manually when done",
                 )
 
+    @staticmethod
+    def fetch_session_events(
+        client: anthropic.Anthropic,
+        session_id: str,
+    ) -> list[dict[str, Any]]:
+        """Fetch normalized session events (wire ``data`` payloads)."""
+        resp = client.get(
+            f"/v1/sessions/{session_id}/events?order=asc&limit=500",
+            cast_to=httpx.Response,
+        )
+        body = resp.json()
+        normalized: list[dict[str, Any]] = []
+        for item in body.get("data", []):
+            inner = item.get("data")
+            if isinstance(inner, dict):
+                normalized.append(inner)
+            elif isinstance(inner, str):
+                normalized.append(json.loads(inner))
+            elif isinstance(item, dict) and item.get("type"):
+                normalized.append(item)
+        return normalized
+
+    @staticmethod
+    def wait_for_delegation(
+        client: anthropic.Anthropic,
+        session_id: str,
+        worker_id: str,
+        *,
+        timeout_sec: int = _DEMO_TIMEOUT_SEC,
+        poll_sec: float = _DEMO_POLL_SEC,
+        worker_marker: str = WORKER_REPLY_MARKER,
+    ) -> list[dict[str, Any]]:
+        """
+        Poll until call_agent delegation completes or timeout.
+
+        Mirrors ``scripts/multi-agent/smoke-subagent-live-e2e.sh``.
+        """
+        deadline = time.time() + timeout_sec
+        last_events: list[dict[str, Any]] = []
+        tool_prefix = _call_agent_tool_prefix(worker_id)
+
+        while time.time() < deadline:
+            last_events = SubagentExamples.fetch_session_events(
+                client,
+                session_id,
+            )
+            status = SubagentExamples._delegation_chain_status(
+                last_events,
+                tool_prefix=tool_prefix,
+                worker_marker=worker_marker,
+            )
+            if status == "done":
+                return last_events
+            if status == "error":
+                err = next(
+                    (
+                        ev.get("message") or ev.get("error") or "session.error"
+                        for ev in last_events
+                        if ev.get("type") == "session.error"
+                    ),
+                    "session.error",
+                )
+                raise RuntimeError(f"session turn failed: {err}")
+
+            time.sleep(poll_sec)
+
+        raise TimeoutError(
+            f"timed out after {timeout_sec}s waiting for sub-agent delegation "
+            f"(session={session_id})",
+        )
+
+    @staticmethod
+    def _delegation_chain_status(
+        events: list[dict[str, Any]],
+        *,
+        tool_prefix: str,
+        worker_marker: str,
+    ) -> str:
+        """Return ``done``, ``pending``, or ``error``."""
+        saw_tool = False
+        saw_thread = False
+        saw_worker_msg = False
+        saw_primary = False
+
+        for ev in events:
+            if ev.get("type") == "session.error":
+                return "error"
+            name = ev.get("name") or ""
+            if ev.get("type") == "agent.tool_use" and name.startswith("call_agent_"):
+                saw_tool = True
+            if ev.get("type") == "session.thread_created":
+                saw_thread = True
+            if ev.get("type") == "agent.message":
+                text = SubagentExamples._message_text(ev)
+                if ev.get("session_thread_id"):
+                    if worker_marker in text:
+                        saw_worker_msg = True
+                elif text.strip():
+                    saw_primary = True
+
+        if saw_tool and saw_thread and saw_worker_msg and saw_primary:
+            return "done"
+        return "pending"
+
+    @staticmethod
+    def _message_text(event: dict[str, Any]) -> str:
+        parts: list[str] = []
+        for block in event.get("content") or []:
+            if block.get("type") == "text" and block.get("text"):
+                parts.append(str(block["text"]))
+        return "\n".join(parts).strip()
+
+    @staticmethod
+    def print_console_links(
+        *,
+        coordinator_id: str,
+        worker_id: str,
+        session_id: str,
+        threads: list[dict[str, Any]] | None = None,
+        base_url: str | None = None,
+    ) -> None:
+        """Print Console URLs so you can inspect agents and sub-agent threads."""
+        root = (base_url or _console_base_url()).rstrip("/")
+        print("\n=== SDK Subagent Demo — open in Console ===")
+        print(f"  Coordinator agent : {root}/agents/{coordinator_id}")
+        print(f"  Worker agent      : {root}/agents/{worker_id}")
+        print(f"  Session (threads) : {root}/sessions/{session_id}")
+        if threads:
+            print(f"  Thread count      : {len(threads)}")
+            for thread in threads:
+                tid = thread.get("id", "?")
+                label = thread.get("agent_name") or thread.get("agent_id") or ""
+                status = thread.get("status") or ""
+                print(f"    - {tid}  {label}  ({status})")
+        print(
+            "\n  In Session detail, switch thread tabs to view sub-agent "
+            "tool calls and messages.",
+        )
+        print(
+            "  Cleanup later: OMA_KEEP_RESOURCES=0 or "
+            "scripts/clean-all/clean_user_resources.py\n",
+        )
+
+    @staticmethod
+    def create_demo_environment(client: anthropic.Anthropic):
+        """Create a recognizable environment for the sub-agent demo."""
+        return client.beta.environments.create(name=DEMO_ENV_NAME)
+
+    @staticmethod
+    def run_live_delegation_demo(
+        client: anthropic.Anthropic,
+        environment_id: str | None = None,
+        *,
+        keep_resources: bool | None = None,
+        timeout_sec: int = _DEMO_TIMEOUT_SEC,
+    ) -> dict[str, Any]:
+        """
+        Full live demo: worker + coordinator + session + real delegation turn.
+
+        Creates resources with fixed names (``sdk-subagent-*``) so they are
+        easy to find in the Console Agents / Sessions lists. By default keeps
+        all resources after the run for UI inspection.
+        """
+        from .sessions import SessionExamples
+
+        keep = _KEEP if keep_resources is None else keep_resources
+        env = None
+        if environment_id is None:
+            env = SubagentExamples.create_demo_environment(client)
+            environment_id = env.id
+
+        worker = SubagentExamples.create_worker(
+            client,
+            name=DEMO_WORKER_NAME,
+            system=(
+                "You are a worker sub-agent for SDK demo. For every task, "
+                f"respond with exactly {WORKER_REPLY_MARKER} and nothing else."
+            ),
+        )
+        coordinator = SubagentExamples.create_coordinator(
+            client,
+            [worker.id],
+            name=DEMO_COORDINATOR_NAME,
+            worker_versions={worker.id: worker.version},
+            system=(
+                "You are a coordinator for SDK sub-agent demo. You MUST delegate "
+                "every user request to the worker using the call_agent tool "
+                "(call_agent_*). Never answer directly without delegating first. "
+                "After you receive the worker tool result, reply with a one-line "
+                "summary that includes the worker text."
+            ),
+        )
+        session = SessionExamples._create_session(
+            client,
+            coordinator.id,
+            environment_id,
+            title=DEMO_SESSION_TITLE,
+        )
+
+        client.beta.sessions.events.send(
+            session.id,
+            events=[
+                {
+                    "type": "user.message",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": (
+                                "Delegate to the worker with message: perform "
+                                "SDK smoke task. After delegation, summarize "
+                                "the worker result in one line."
+                            ),
+                        },
+                    ],
+                },
+            ],
+        )
+
+        events = SubagentExamples.wait_for_delegation(
+            client,
+            session.id,
+            worker.id,
+            timeout_sec=timeout_sec,
+        )
+
+        threads = SubagentExamples.list_threads(client, session.id)
+        trajectory = SubagentExamples.get_trajectory(client, session.id)
+        thread_count = len(events_of_type(events, "session.thread_created"))
+        num_threads = trajectory.get("summary", {}).get("num_threads", 0)
+
+        assert thread_count >= 1, "expected session.thread_created"
+        assert len(threads) >= 2, (
+            f"expected primary + sub threads, got {len(threads)}"
+        )
+        assert num_threads >= 2, f"expected num_threads >= 2, got {num_threads}"
+
+        SubagentExamples.print_console_links(
+            coordinator_id=coordinator.id,
+            worker_id=worker.id,
+            session_id=session.id,
+            threads=threads,
+        )
+
+        if keep:
+            print(
+                f"[KEEP] demo resources left active "
+                f"(coordinator={coordinator.id}, worker={worker.id}, "
+                f"session={session.id})",
+            )
+        else:
+            client.beta.sessions.archive(session.id)
+            client.beta.agents.archive(coordinator.id)
+            client.beta.agents.archive(worker.id)
+            if env is not None:
+                try:
+                    client.beta.environments.archive(env.id)
+                except Exception:
+                    pass
+
+        return {
+            "worker": worker,
+            "coordinator": coordinator,
+            "session": session,
+            "environment_id": environment_id,
+            "events": events,
+            "threads": threads,
+            "trajectory": trajectory,
+            "thread_created_count": thread_count,
+        }
+
 
 # Re-export event helpers for convenience in tests and downstream code.
 __all__ = [
     "SubagentExamples",
     "count_thread_created",
     "events_of_type",
+    "event_type",
+    "extract_event_data",
 ]

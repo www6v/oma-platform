@@ -40,17 +40,15 @@ def _assistant_text(message: AssistantMessage) -> str:
 def resolve_pi_model(cfg: ModelConfig) -> Any:
     from pi_ai.models import get_model
 
-    from oma_adapter.pi_model import normalize_pi_provider
+    from oma_adapter.pi_model import resolve_session_model_pattern
 
-    model_id = cfg.model.strip()
-    provider = normalize_pi_provider(cfg.provider)
-    if "/" in model_id:
-        prefix, _, suffix = model_id.partition("/")
-        if suffix and not provider:
-            provider = normalize_pi_provider(prefix)
-            model_id = suffix
-    if not provider:
-        provider = "anthropic"
+    model_id, provider = resolve_session_model_pattern(
+        wire_model=cfg.model.strip(),
+        oma_provider=cfg.provider,
+    )
+    if provider is None:
+        msg = f"cannot resolve piPy provider for model {cfg.model!r}"
+        raise ValueError(msg)
     return get_model(provider, model_id)
 
 

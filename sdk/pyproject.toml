@@ -24,3 +24,6 @@ packages = ["oma_sdk"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "live: tests that call a real LLM and harness (slow, kept for Console demo)",
+]

@@ -3,6 +3,7 @@ package modelresolve
 import (
 	"context"
 	"os"
+	"strings"
 
 	"github.com/open-ma/oma-building/internal/harness"
 	"github.com/open-ma/oma-building/internal/store"
@@ -15,6 +16,17 @@ type Resolver struct {
 
 // Resolve returns harness model config for an agent model field.
 func (r *Resolver) Resolve(
+	ctx context.Context,
+	tenantID, agentModel string,
+) (harness.ModelConfig, error) {
+	cfg, err := r.resolve(ctx, tenantID, agentModel)
+	if err != nil {
+		return harness.ModelConfig{}, err
+	}
+	return remapLegacyClaude(cfg), nil
+}
+
+func (r *Resolver) resolve(
 	ctx context.Context,
 	tenantID, agentModel string,
 ) (harness.ModelConfig, error) {
@@ -39,6 +51,17 @@ func (r *Resolver) Resolve(
 		}
 		if len(card.CustomHeaders) > 0 {
 			cfg.CustomHeaders = card.CustomHeaders
+		}
+		return cfg, nil
+	}
+
+	if isQwenModel(agentModel) {
+		cfg := harness.ModelConfig{
+			Model:    agentModel,
+			Provider: "dashscope",
+		}
+		if key := os.Getenv("DASHSCOPE_API_KEY"); key != "" {
+			cfg.APIKey = key
 		}
 		return cfg, nil
 	}
@@ -72,9 +95,38 @@ func (r *Resolver) Resolve(
 	return cfg, nil
 }
 
+func remapLegacyClaude(cfg harness.ModelConfig) harness.ModelConfig {
+	if !isClaudeModel(cfg.Model) {
+		return cfg
+	}
+	target := os.Getenv("OMA_DEFAULT_MODEL")
+	if target == "" {
+		target = "qwen3.7-plus"
+	}
+	if isClaudeModel(target) {
+		return cfg
+	}
+	out := harness.ModelConfig{
+		Model:    target,
+		Provider: "dashscope",
+	}
+	if key := os.Getenv("DASHSCOPE_API_KEY"); key != "" {
+		out.APIKey = key
+	}
+	return out
+}
+
+func isClaudeModel(model string) bool {
+	return strings.HasPrefix(strings.ToLower(model), "claude-")
+}
+
 func looksLikeProviderModel(model string) bool {
 	if len(model) < 3 {
 		return false
 	}
 	return model != "faux/test"
+}
+
+func isQwenModel(model string) bool {
+	return strings.HasPrefix(strings.ToLower(model), "qwen")
 }
