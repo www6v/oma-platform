@@ -21,6 +21,7 @@ interface Execution {
   status: string;
   started_at: string;
   completed_at: string | null;
+  oma_session_id?: string | null;
   traces: Trace[];
 }
 
@@ -176,6 +177,21 @@ export default function TraceViewer() {
           <div className="info-row">
             <strong>Completed:</strong>
             <span>{new Date(execution.completed_at).toLocaleString()}</span>
+          </div>
+        )}
+        {execution.oma_session_id && (
+          <div className="info-row">
+            <strong>OMA Session:</strong>
+            <a
+              href={`/sessions/${execution.oma_session_id}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {execution.oma_session_id} ↗
+            </a>
+            <span className="info-hint">
+              Open Main thread for step summaries; use worker tabs for full traces.
+            </span>
           </div>
         )}
         {execution.status === 'running' && (

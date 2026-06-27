@@ -45,6 +45,7 @@ async def _oma_run_sub_turn(
     events = [
         {
             "type": "user.message",
+            "session_thread_id": thread_id,
             "content": [{"type": "text", "text": message}],
         }
     ]
@@ -83,6 +84,7 @@ async def _oma_run_sub_turn(
     try:
         resp: TurnResponse = await _run_turn_core(
             session_id=session_id,
+            session_thread_id=thread_id,
             tenant_id=tenant_id,
             agent=_strip_delegation_to_oma(agent),
             model=model,

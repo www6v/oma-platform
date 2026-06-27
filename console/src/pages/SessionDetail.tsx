@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { useParams, Link } from "react-router";
+import { useParams, Link, useSearchParams } from "react-router";
 import { useApi } from "../lib/api";
 import { toast } from "sonner";
 import { Markdown } from "../components/Markdown";
@@ -72,6 +72,7 @@ interface PendingEntry {
 
 export function SessionDetail() {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const { api, streamEvents } = useApi();
   const [events, setEvents] = useState<Event[]>([]);
   /** In-flight assistant streams keyed by message_id. Each entry holds
@@ -153,6 +154,13 @@ export function SessionDetail() {
    *  the events array at render time. SSE-driven new threads don't
    *  auto-switch — the operator stays on whatever they're watching. */
   const [activeThreadId, setActiveThreadId] = useState<string>("sthr_primary");
+
+  useEffect(() => {
+    const threadParam = searchParams.get("thread");
+    if (threadParam) {
+      setActiveThreadId(threadParam);
+    }
+  }, [id, searchParams]);
   /** Server-mirrored pending queue, keyed by event_id. Populated from
    *  the initial GET /pending plus live system.user_message_pending /
    *  _promoted / _cancelled SSE frames. Pending entries render as a
@@ -1129,6 +1137,11 @@ export function SessionDetail() {
                 // and never mix into this seq-ordered timeline.
                 const filtered = events.filter((e) => {
                   const tid = (e as { session_thread_id?: string }).session_thread_id ?? "sthr_primary";
+                  if (activeThreadId === "sthr_primary" && e.type === "session.thread_created") {
+                    const parent = (e as { parent_thread_id?: string | null }).parent_thread_id
+                      ?? "sthr_primary";
+                    return parent === "sthr_primary";
+                  }
                   return tid === activeThreadId;
                 });
                 // Pre-pair tool_use ↔ result events. Three flavors per the
@@ -1227,6 +1240,8 @@ export function SessionDetail() {
                       event={e}
                       livePending={false}
                       pairedResult={pairedResult}
+                      activeThreadId={activeThreadId}
+                      onSelectThread={setActiveThreadId}
                       modelErrorCause={
                         e.type === "session.error"
                           ? sessionErrorCause.get((e as { id?: string }).id ?? "")
@@ -1517,6 +1532,19 @@ function ThreadTab({
  * sthr_primary so they stay visible instead of being hidden in a
  * dangling subtree.
  */
+function workflowThreadLabel(agentName?: string, fallbackId?: string): string {
+  if (agentName) {
+    const workerMatch = /-worker-(.+)$/.exec(agentName);
+    if (workerMatch) {
+      return workerMatch[1];
+    }
+  }
+  if (agentName) {
+    return agentName.length > 24 ? agentName.slice(0, 24) : agentName;
+  }
+  return fallbackId?.slice(0, 12) ?? "thread";
+}
+
 function ThreadTree({
   threads,
   activeThreadId,
@@ -1553,7 +1581,7 @@ function ThreadTree({
     for (const k of kids) {
       flat.push({
         id: k.id,
-        label: k.agent_name ?? k.id.slice(0, 12),
+        label: workflowThreadLabel(k.agent_name, k.id),
         depth,
         status: k.status,
       });
@@ -1671,6 +1699,8 @@ function EventRender({
   livePending = false,
   pairedResult,
   modelErrorCause,
+  activeThreadId = "sthr_primary",
+  onSelectThread,
 }: {
   event: Event;
   /**
@@ -1704,6 +1734,8 @@ function EventRender({
    * the timeline tab. Only meaningful when `event.type === "session.error"`.
    */
   modelErrorCause?: { error: string; model?: string };
+  activeThreadId?: string;
+  onSelectThread?: (threadId: string) => void;
 }) {
   // AMA pending lifecycle (set by event-log adapter from row.processed_at /
   // row.cancelled_at). Cancelled events stay in the log for audit but
@@ -1781,6 +1813,38 @@ function EventRender({
             className={isCancelled ? cancelledOverride : isPending ? pendingOverride : undefined}
           >
             {text}
+          </MessageContent>
+        </Message>
+      );
+    }
+
+    case "session.thread_created": {
+      const tc = event as {
+        session_thread_id?: string;
+        agent_name?: string;
+        parent_thread_id?: string | null;
+      };
+      if (activeThreadId !== "sthr_primary") {
+        return null;
+      }
+      if (!tc.session_thread_id || tc.session_thread_id === "sthr_primary") {
+        return null;
+      }
+      const label = workflowThreadLabel(tc.agent_name, tc.session_thread_id);
+      return (
+        <Message from="system">
+          <MessageContent className="rounded-2xl rounded-bl-sm px-4 py-3 bg-bg-surface text-fg-muted text-sm">
+            <span>Sub-agent thread opened: </span>
+            <span className="font-medium text-fg">{label}</span>
+            {onSelectThread && (
+              <button
+                type="button"
+                onClick={() => onSelectThread(tc.session_thread_id!)}
+                className="ml-2 text-brand hover:underline"
+              >
+                View thread →
+              </button>
+            )}
           </MessageContent>
         </Message>
       );
