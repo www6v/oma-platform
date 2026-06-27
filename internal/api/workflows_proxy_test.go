@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/open-ma/oma-building/internal/auth"
 )
 
 func TestWorkflowsProxyForwardsHealth(t *testing.T) {
@@ -31,5 +33,35 @@ func TestWorkflowsProxyForwardsHealth(t *testing.T) {
 	}
 	if rec.Body.String() != `{"status":"ok"}` {
 		t.Fatalf("body=%q", rec.Body.String())
+	}
+}
+
+func TestWorkflowsProxyInjectsTenantHeader(t *testing.T) {
+	var gotTenant string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotTenant = r.Header.Get("X-Active-Tenant")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	proxy, err := NewWorkflowsProxy(upstream.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/workflows/generate", nil)
+	req = req.WithContext(auth.WithTenant(req.Context(), "tenant-from-auth"))
+	rec := httptest.NewRecorder()
+	proxy.ServeHTTP(rec, req)
+
+	if gotTenant != "tenant-from-auth" {
+		t.Fatalf("tenant header=%q", gotTenant)
+	}
+}
+
+func TestResolveWorkflowTenantDefaults(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/api/workflows", nil)
+	if got := resolveWorkflowTenant(req); got != defaultTenant {
+		t.Fatalf("tenant=%q want %q", got, defaultTenant)
 	}
 }

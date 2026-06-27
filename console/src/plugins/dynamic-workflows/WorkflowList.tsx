@@ -1,6 +1,7 @@
 // WorkflowList.tsx - Dynamic Workflows plugin component
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { workflowFetch } from './workflowApi';
 
 interface Workflow {
   id: string;
@@ -18,7 +19,7 @@ export default function WorkflowList() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetch('/api/workflows')
+    workflowFetch('/api/workflows')
       .then(res => res.json())
       .then(data => {
         setWorkflows(data);
@@ -32,13 +33,13 @@ export default function WorkflowList() {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this workflow?')) return;
-    await fetch(`/api/workflows/${id}`, { method: 'DELETE' });
+    await workflowFetch(`/api/workflows/${id}`, { method: 'DELETE' });
     setWorkflows(workflows.filter(w => w.id !== id));
   };
 
   const handleExecute = async (id: string) => {
     try {
-      const res = await fetch(`/api/workflows/${id}/execute`, {
+      const res = await workflowFetch(`/api/workflows/${id}/execute`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
@@ -135,7 +136,7 @@ function WorkflowGeneratorModal({ onClose, onCreated }) {
     setGenerating(true);
     setError('');
     try {
-      const res = await fetch('/api/workflows/generate', {
+      const res = await workflowFetch('/api/workflows/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt }),
@@ -152,7 +153,7 @@ function WorkflowGeneratorModal({ onClose, onCreated }) {
       }
 
       // Create the workflow
-      const createRes = await fetch('/api/workflows', {
+      const createRes = await workflowFetch('/api/workflows', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

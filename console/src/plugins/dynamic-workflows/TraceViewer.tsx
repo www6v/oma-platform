@@ -1,6 +1,7 @@
 // TraceViewer.tsx - Dynamic Workflows plugin component
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router';
+import { workflowFetch } from './workflowApi';
 
 interface Trace {
   id: string;
@@ -33,7 +34,7 @@ export default function TraceViewer() {
 
   useEffect(() => {
     // Load execution data
-    fetch(`/api/workflows/executions/${executionId}`)
+    workflowFetch(`/api/workflows/executions/${executionId}`)
       .then(res => res.json())
       .then(data => {
         setExecution(data);
@@ -41,7 +42,7 @@ export default function TraceViewer() {
       .catch(err => console.error('Failed to load execution:', err));
 
     // Load traces
-    fetch(`/api/workflows/executions/${executionId}/traces`)
+    workflowFetch(`/api/workflows/executions/${executionId}/traces`)
       .then(res => res.json())
       .then(data => {
         setTraces(data);
@@ -134,7 +135,7 @@ export default function TraceViewer() {
   const handleCancel = async () => {
     if (!confirm('Cancel this execution?')) return;
 
-    await fetch(`/api/workflows/executions/${executionId}/cancel`, {
+    await workflowFetch(`/api/workflows/executions/${executionId}/cancel`, {
       method: 'POST',
     });
 

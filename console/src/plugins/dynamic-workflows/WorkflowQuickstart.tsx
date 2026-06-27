@@ -1,6 +1,7 @@
 // WorkflowQuickstart.tsx - Split-panel create flow (Phase C)
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { workflowFetch } from './workflowApi';
 
 interface TemplateSummary {
   id: string;
@@ -31,7 +32,7 @@ export default function WorkflowQuickstart() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    fetch('/api/workflows/templates')
+    workflowFetch('/api/workflows/templates')
       .then((res) => {
         if (!res.ok) {
           throw new Error('Failed to load templates');
@@ -56,7 +57,7 @@ export default function WorkflowQuickstart() {
     setError('');
     setSelectedTemplate(null);
     try {
-      const res = await fetch('/api/workflows/generate', {
+      const res = await workflowFetch('/api/workflows/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt }),
@@ -85,7 +86,7 @@ export default function WorkflowQuickstart() {
     setError('');
     setSelectedTemplate(templateId);
     try {
-      const res = await fetch(`/api/workflows/templates/${templateId}`);
+      const res = await workflowFetch(`/api/workflows/templates/${templateId}`);
       if (!res.ok) {
         throw new Error('Failed to load template');
       }
@@ -107,7 +108,7 @@ export default function WorkflowQuickstart() {
     setRunning(true);
     setError('');
     try {
-      const createRes = await fetch('/api/workflows', {
+      const createRes = await workflowFetch('/api/workflows', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -125,7 +126,7 @@ export default function WorkflowQuickstart() {
         );
       }
       const workflow = await createRes.json();
-      const execRes = await fetch(`/api/workflows/${workflow.id}/execute`, {
+      const execRes = await workflowFetch(`/api/workflows/${workflow.id}/execute`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
@@ -155,7 +156,7 @@ export default function WorkflowQuickstart() {
     setRunning(true);
     setError('');
     try {
-      const createRes = await fetch('/api/workflows', {
+      const createRes = await workflowFetch('/api/workflows', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

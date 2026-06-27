@@ -1,6 +1,7 @@
 // WorkflowEditor.tsx - Dynamic Workflows plugin component
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
+import { workflowFetch } from './workflowApi';
 
 interface Workflow {
   id: string;
@@ -45,7 +46,7 @@ export default function WorkflowEditor() {
 
   useEffect(() => {
     if (id && !isNew) {
-      fetch(`/api/workflows/${id}`)
+      workflowFetch(`/api/workflows/${id}`)
         .then(res => res.json())
         .then(data => {
           setWorkflow(data);
@@ -59,7 +60,7 @@ export default function WorkflowEditor() {
 
   const validateYaml = async (yaml: string) => {
     try {
-      const res = await fetch('/api/workflows/validate', {
+      const res = await workflowFetch('/api/workflows/validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ yaml }),
@@ -76,7 +77,7 @@ export default function WorkflowEditor() {
     try {
       const url = isNew ? '/api/workflows' : `/api/workflows/${id}`;
       const method = isNew ? 'POST' : 'PUT';
-      const res = await fetch(url, {
+      const res = await workflowFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, description, yaml: yamlContent }),
@@ -107,7 +108,7 @@ export default function WorkflowEditor() {
       return;
     }
     try {
-      const res = await fetch(`/api/workflows/${id}/execute`, {
+      const res = await workflowFetch(`/api/workflows/${id}/execute`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),

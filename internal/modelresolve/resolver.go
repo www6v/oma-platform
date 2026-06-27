@@ -57,7 +57,7 @@ func (r *Resolver) resolve(
 
 	if isQwenModel(agentModel) {
 		cfg := harness.ModelConfig{
-			Model:    agentModel,
+			Model:    bareModelID(agentModel),
 			Provider: "dashscope",
 		}
 		if key := os.Getenv("DASHSCOPE_API_KEY"); key != "" {
@@ -117,7 +117,16 @@ func remapLegacyClaude(cfg harness.ModelConfig) harness.ModelConfig {
 }
 
 func isClaudeModel(model string) bool {
-	return strings.HasPrefix(strings.ToLower(model), "claude-")
+	m := bareModelID(model)
+	return strings.HasPrefix(strings.ToLower(m), "claude-")
+}
+
+func bareModelID(model string) string {
+	m := strings.TrimSpace(model)
+	if idx := strings.LastIndex(m, "/"); idx >= 0 {
+		return m[idx+1:]
+	}
+	return m
 }
 
 func looksLikeProviderModel(model string) bool {
@@ -128,5 +137,5 @@ func looksLikeProviderModel(model string) bool {
 }
 
 func isQwenModel(model string) bool {
-	return strings.HasPrefix(strings.ToLower(model), "qwen")
+	return strings.HasPrefix(strings.ToLower(bareModelID(model)), "qwen")
 }
