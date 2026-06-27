@@ -312,6 +312,7 @@ func main() {
 		OutboundProxyAddr: outboundAddr,
 		OutboundProxyKey:  apiKey,
 		InternalSecret:    internalSecret,
+		HarnessURL:        harnessURL,
 		ModelResolver:     modelResolver,
 		LinearGateway:     linearGateway,
 		GitHubGateway:     githubGateway,

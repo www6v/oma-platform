@@ -72,8 +72,8 @@ export default function WorkflowList() {
           <button onClick={() => setShowGenerator(true)}>
             Create from Description
           </button>
-          <button onClick={() => navigate('/workflows/new')}>
-            Create from Scratch
+          <button onClick={() => navigate('/workflows')}>
+            Create Workflow
           </button>
         </div>
       </div>

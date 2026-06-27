@@ -7,6 +7,7 @@ import "./styles.css";
 const WorkflowList = lazy(() => import("./WorkflowList"));
 const WorkflowEditor = lazy(() => import("./WorkflowEditor"));
 const TraceViewer = lazy(() => import("./TraceViewer"));
+const WorkflowQuickstart = lazy(() => import("./WorkflowQuickstart"));
 
 // Wrapper component with Suspense for lazy-loaded components
 function LazyWorkflowList() {
@@ -29,6 +30,14 @@ function LazyTraceViewer() {
   return (
     <Suspense fallback={<div>Loading traces...</div>}>
       <TraceViewer />
+    </Suspense>
+  );
+}
+
+function LazyWorkflowQuickstart() {
+  return (
+    <Suspense fallback={<div>Loading quickstart...</div>}>
+      <WorkflowQuickstart />
     </Suspense>
   );
 }
@@ -61,6 +70,10 @@ const dynamicWorkflowsPlugin: ConsolePlugin = {
   routes: [
     {
       path: "workflows",
+      element: <LazyWorkflowQuickstart />,
+    },
+    {
+      path: "workflows/all",
       element: <LazyWorkflowList />,
     },
     {
@@ -83,9 +96,14 @@ const dynamicWorkflowsPlugin: ConsolePlugin = {
       items: [
         {
           to: "/workflows",
-          label: "My Workflows",
+          label: "Quickstart",
           icon: WorkflowIcon,
           end: true,
+        },
+        {
+          to: "/workflows/all",
+          label: "All Workflows",
+          icon: WorkflowIcon,
         },
       ],
     },

@@ -58,6 +58,7 @@ type Deps struct {
 	OutboundProxyAddr string
 	OutboundProxyKey  string
 	InternalSecret    string
+	HarnessURL        string
 	ModelResolver     *modelresolve.Resolver
 	LinearGateway     *linear.Handler
 	GitHubGateway     *github.Handler
@@ -300,6 +301,8 @@ func NewRouter(deps Deps) http.Handler {
 		FileBlobs:      deps.FileBlobs,
 		RateLimit:      deps.RateLimit,
 	})
+
+	mountWorkflowsProxyRoutes(r, deps.HarnessURL)
 
 	if deps.ConsoleDir != "" {
 		static := console.NewStaticHandler(deps.ConsoleDir)

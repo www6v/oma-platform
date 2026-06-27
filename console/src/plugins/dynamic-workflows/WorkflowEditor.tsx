@@ -17,15 +17,34 @@ interface Workflow {
 export default function WorkflowEditor() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [workflow, setWorkflow] = useState<Workflow | null>(null);
-  const [yamlContent, setYamlContent] = useState('');
-  const [name, setName] = useState('');
+  const isNew = id === 'new';
+  const [workflow, setWorkflow] = useState<Workflow | null>(
+    isNew
+      ? {
+          id: '',
+          name: 'untitled_workflow',
+          description: '',
+          yaml: 'name: untitled_workflow\ndescription: ""\nsteps:\n  - name: step1\n    action: llm_execute\n    params:\n      prompt: "Describe the task"\n',
+          parsed_spec: { name: 'untitled_workflow', description: '', steps: [] },
+          env_var_refs: [],
+          is_draft: true,
+          created_at: '',
+          updated_at: '',
+        }
+      : null,
+  );
+  const [yamlContent, setYamlContent] = useState(
+    isNew
+      ? 'name: untitled_workflow\ndescription: ""\nsteps:\n  - name: step1\n    action: llm_execute\n    params:\n      prompt: "Describe the task"\n'
+      : '',
+  );
+  const [name, setName] = useState(isNew ? 'untitled_workflow' : '');
   const [description, setDescription] = useState('');
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (id) {
+    if (id && !isNew) {
       fetch(`/api/workflows/${id}`)
         .then(res => res.json())
         .then(data => {
@@ -36,7 +55,7 @@ export default function WorkflowEditor() {
         })
         .catch(err => console.error('Failed to load workflow:', err));
     }
-  }, [id]);
+  }, [id, isNew]);
 
   const validateYaml = async (yaml: string) => {
     try {
@@ -55,15 +74,21 @@ export default function WorkflowEditor() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const res = await fetch(`/api/workflows/${id}`, {
-        method: 'PUT',
+      const url = isNew ? '/api/workflows' : `/api/workflows/${id}`;
+      const method = isNew ? 'POST' : 'PUT';
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, description, yaml: yamlContent }),
       });
       if (res.ok) {
         const updated = await res.json();
         setWorkflow(updated);
-        alert('Workflow saved!');
+        if (isNew) {
+          navigate(`/workflows/${updated.id}`);
+        } else {
+          alert('Workflow saved!');
+        }
       } else {
         const error = await res.json();
         alert(`Failed to save: ${error.detail}`);
@@ -77,6 +102,10 @@ export default function WorkflowEditor() {
   };
 
   const handleExecute = async () => {
+    if (isNew || !id) {
+      alert('Save the workflow before executing');
+      return;
+    }
     try {
       const res = await fetch(`/api/workflows/${id}/execute`, {
         method: 'POST',
@@ -102,12 +131,16 @@ export default function WorkflowEditor() {
     }
   };
 
-  if (!workflow) return <div>Loading workflow...</div>;
+  if (!workflow) {
+    return <div>Loading workflow...</div>;
+  }
 
   return (
     <div className="workflow-editor-page">
       <div className="editor-header">
-        <button onClick={() => navigate('/workflows')}>← Back</button>
+        <button onClick={() => navigate(isNew ? '/workflows' : '/workflows/all')}>
+          ← Back
+        </button>
         <div className="header-actions">
           <button onClick={handleSave} disabled={saving}>
             {saving ? 'Saving...' : 'Save'}
