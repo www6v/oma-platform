@@ -124,9 +124,20 @@ const LABELED_GROUPS = new Set(["Integrations"]);
 export function AppSidebar() {
   const { pathname } = useLocation();
 
+  // Workflow plugin nav items are surfaced directly under Dashboard so
+  // users see Quickstart / All Workflows next to the entry page instead
+  // of at the bottom of the sidebar. All other plugin nav groups are
+  // appended after the built-in groups as before.
+  const workflowsItems = consolePlugins
+    .flatMap((p) => p.navGroups ?? [])
+    .filter((g) => g.label === "Workflows")
+    .flatMap((g) => g.items);
+
   const groups = [
     ...navGroups,
-    ...consolePlugins.flatMap((p) => p.navGroups ?? []),
+    ...consolePlugins.flatMap((p) =>
+      (p.navGroups ?? []).filter((g) => g.label !== "Workflows"),
+    ),
   ];
 
   const isItemActive = (to: string, end?: boolean) => {
@@ -170,6 +181,9 @@ export function AppSidebar() {
   // its own SidebarGroup with a SidebarGroupLabel). Today there's only
   // one labeled group ("Integrations"); the structure still handles N.
   const flatGroups = groups.filter((g) => !LABELED_GROUPS.has(g.label));
+  // Overview (Dashboard) is rendered separately so the workflows items
+  // can slot in right after it, before the remaining flat groups.
+  const [overviewGroup, ...restFlatGroups] = flatGroups;
   const labeledGroups = groups.filter((g) => LABELED_GROUPS.has(g.label));
 
   return (
@@ -203,11 +217,13 @@ export function AppSidebar() {
             Configuration) under a single 'Managed Agents' label per
             user request — 'just add one title' rather than restoring
             every original group header. */}
-        {flatGroups.length > 0 && (
+        {overviewGroup && (
           <SidebarGroup>
             <SidebarGroupLabel>Managed Agents</SidebarGroupLabel>
             <SidebarMenu>
-              {flatGroups.flatMap((g) => g.items).map(renderItem)}
+              {overviewGroup.items.map(renderItem)}
+              {workflowsItems.map((item) => renderItem(item as NavItem))}
+              {restFlatGroups.flatMap((g) => g.items).map(renderItem)}
             </SidebarMenu>
           </SidebarGroup>
         )}
