@@ -4,20 +4,11 @@ import type { ConsolePlugin } from "../registry";
 import "./styles.css";
 
 // Lazy load components for code splitting
-const WorkflowList = lazy(() => import("./WorkflowList"));
 const WorkflowEditor = lazy(() => import("./WorkflowEditor"));
 const TraceViewer = lazy(() => import("./TraceViewer"));
 const WorkflowQuickstart = lazy(() => import("./WorkflowQuickstart"));
 
 // Wrapper component with Suspense for lazy-loaded components
-function LazyWorkflowList() {
-  return (
-    <Suspense fallback={<div>Loading workflows...</div>}>
-      <WorkflowList />
-    </Suspense>
-  );
-}
-
 function LazyWorkflowEditor() {
   return (
     <Suspense fallback={<div>Loading editor...</div>}>
@@ -73,10 +64,6 @@ const dynamicWorkflowsPlugin: ConsolePlugin = {
       element: <LazyWorkflowQuickstart />,
     },
     {
-      path: "workflows/all",
-      element: <LazyWorkflowList />,
-    },
-    {
       path: "workflows/new",
       element: <LazyWorkflowEditor />,
     },
@@ -99,11 +86,6 @@ const dynamicWorkflowsPlugin: ConsolePlugin = {
           label: "Quickstart",
           icon: WorkflowIcon,
           end: true,
-        },
-        {
-          to: "/workflows/all",
-          label: "All Workflows",
-          icon: WorkflowIcon,
         },
       ],
     },

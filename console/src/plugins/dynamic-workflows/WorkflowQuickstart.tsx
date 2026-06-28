@@ -190,9 +190,6 @@ export default function WorkflowQuickstart() {
           <p>Describe your process or pick a template, then run it.</p>
         </div>
         <div className="header-actions">
-          <button onClick={() => navigate('/workflows/all')}>
-            All Workflows
-          </button>
           <button onClick={() => navigate('/workflows/new')}>
             Blank Editor
           </button>

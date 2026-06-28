@@ -46,35 +46,42 @@ interface NavGroup {
   items: NavItem[];
 }
 
-/* ── Navigation groups — single source of truth for sidebar items ── */
+/* ── Navigation groups — single source of truth for sidebar items ──
+ * Each entry renders as its own labeled section in the sidebar. Order
+ * here is the visual top-to-bottom order. Dashboard and API Keys are
+ * pinned to the top per user request; Files and Skills live under a
+ * dedicated "Build" section alongside "Managed Agents".             */
 const navGroups: NavGroup[] = [
   {
-    label: "Overview",
+    label: "Dashboard",
     items: [{ to: "/", label: "Dashboard", icon: DashboardIcon, end: true }],
+  },
+  {
+    label: "API Keys",
+    items: [{ to: "/api-keys", label: "API Keys", icon: ApiKeysIcon }],
   },
   {
     label: "Managed Agents",
     items: [
       { to: "/agents", label: "Agents", icon: AgentIcon },
       { to: "/sessions", label: "Sessions", icon: SessionsIcon },
-      { to: "/files", label: "Files", icon: FilesIcon },
-      { to: "/evals", label: "Eval Runs", icon: SessionsIcon },
+      { to: "/environments", label: "Environments", icon: EnvIcon },
+      { to: "/vaults", label: "Credential Vaults", icon: VaultIcon },
+      { to: "/memory", label: "Memory Stores", icon: MemoryIcon },
     ],
   },
   {
-    label: "Infrastructure",
+    label: "Build",
     items: [
-      { to: "/environments", label: "Environments", icon: EnvIcon },
-      { to: "/vaults", label: "Credential Vaults", icon: VaultIcon },
+      { to: "/files", label: "Files", icon: FilesIcon },
+      { to: "/skills", label: "Skills", icon: SkillsIcon },
+      { to: "/evals", label: "Eval Runs", icon: SessionsIcon },
     ],
   },
   {
     label: "Configuration",
     items: [
-      { to: "/skills", label: "Skills", icon: SkillsIcon },
-      { to: "/memory", label: "Memory Stores", icon: MemoryIcon },
       { to: "/model-cards", label: "Model Cards", icon: ModelCardsIcon },
-      { to: "/api-keys", label: "API Keys", icon: ApiKeysIcon },
       { to: "/runtimes", label: "Local Runtimes", icon: RuntimesIcon },
     ],
   },
@@ -87,14 +94,6 @@ const navGroups: NavGroup[] = [
     ],
   },
 ];
-
-/** Which group labels should actually render as a SidebarGroupLabel
- *  above their items. Everything else stays flat (label data is just
- *  used for keying / structure today). Per the no-future-proofing
- *  rule, this is a hardcoded allowlist of length 1 — when a second
- *  labeled group materializes, lift to a per-group `showLabel: true`
- *  flag on NavGroup. */
-const LABELED_GROUPS = new Set(["Integrations"]);
 
 /**
  * Console sidebar — cloned from minimaxhub_benchmark/AppShell so the
@@ -117,17 +116,22 @@ const LABELED_GROUPS = new Set(["Integrations"]);
  *   2. TenantSwitcher — h-11, shares the brand-row recipe so it
  *                       collapses identically (icon at x=12, text
  *                       hides via group-data-[collapsible=icon]:hidden)
- *   3. SidebarContent — nav items, flat for the first 4 groups, then a
- *                       labeled `Integrations` group at the bottom
+ *   3. SidebarContent — one labeled SidebarGroup per navGroups entry:
+ *                       Dashboard / API Keys / Managed Agents
+ *                       (Quickstart, Agents, Sessions, Environments,
+ *                       Credential Vaults, Memory Stores)
+ *                       / Build (Files, Skills, Eval Runs) /
+ *                       Configuration (Model Cards, Local Runtimes) /
+ *                       Integrations
  *   4. SidebarFooter  — UserProfile (alone — tenant lives at the top now)
  */
 export function AppSidebar() {
   const { pathname } = useLocation();
 
-  // Workflow plugin nav items are surfaced directly under Dashboard so
-  // users see Quickstart / All Workflows next to the entry page instead
-  // of at the bottom of the sidebar. All other plugin nav groups are
-  // appended after the built-in groups as before.
+  // Workflow plugin nav items (Quickstart) are surfaced inside the
+  // "Managed Agents" section so they sit next to the agent-centric
+  // entries rather than forming their own group. All other plugin
+  // nav groups are appended after the built-in groups as before.
   const workflowsItems = consolePlugins
     .flatMap((p) => p.navGroups ?? [])
     .filter((g) => g.label === "Workflows")
@@ -176,16 +180,6 @@ export function AppSidebar() {
     );
   };
 
-  // Split groups into the flat prefix (rendered as one SidebarMenu,
-  // no group containers/labels) and the labeled tail (each rendered as
-  // its own SidebarGroup with a SidebarGroupLabel). Today there's only
-  // one labeled group ("Integrations"); the structure still handles N.
-  const flatGroups = groups.filter((g) => !LABELED_GROUPS.has(g.label));
-  // Overview (Dashboard) is rendered separately so the workflows items
-  // can slot in right after it, before the remaining flat groups.
-  const [overviewGroup, ...restFlatGroups] = flatGroups;
-  const labeledGroups = groups.filter((g) => LABELED_GROUPS.has(g.label));
-
   return (
     <Sidebar
       collapsible="icon"
@@ -209,28 +203,21 @@ export function AppSidebar() {
       </div>
 
       <SidebarContent className="bg-sidebar [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
-        {/* Both sections live in a SidebarGroup so they share the same
-            `p-2` indentation — without it the flat group's icons sit
-            8px further left than the Integrations icons below, which
-            reads as misaligned. The top group collapses the 4 source
-            navGroups (Overview / Managed Agents / Infrastructure /
-            Configuration) under a single 'Managed Agents' label per
-            user request — 'just add one title' rather than restoring
-            every original group header. */}
-        {overviewGroup && (
-          <SidebarGroup>
-            <SidebarGroupLabel>Managed Agents</SidebarGroupLabel>
-            <SidebarMenu>
-              {overviewGroup.items.map(renderItem)}
-              {workflowsItems.map((item) => renderItem(item as NavItem))}
-              {restFlatGroups.flatMap((g) => g.items).map(renderItem)}
-            </SidebarMenu>
-          </SidebarGroup>
-        )}
-        {labeledGroups.map((g) => (
+        {/* Every group renders as its own labeled section. Quickstart
+            (workflowsItems) is appended to the Managed Agents section
+            since workflows are agent-orchestration primitives, not a
+            standalone domain. */}
+        {groups.map((g) => (
           <SidebarGroup key={g.label}>
             <SidebarGroupLabel>{g.label}</SidebarGroupLabel>
-            <SidebarMenu>{g.items.map(renderItem)}</SidebarMenu>
+            <SidebarMenu>
+              {/* Quickstart (from the workflows plugin) is rendered at the
+                  top of the Managed Agents section so it sits right above
+                  Agents, the first real managed entry. */}
+              {g.label === "Managed Agents" &&
+                workflowsItems.map((item) => renderItem(item as NavItem))}
+              {g.items.map(renderItem)}
+            </SidebarMenu>
           </SidebarGroup>
         ))}
       </SidebarContent>

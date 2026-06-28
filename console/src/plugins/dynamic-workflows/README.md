@@ -6,13 +6,8 @@ This plugin integrates the pipy-dynamic-workflows backend into the oma-platform 
 
 ## 🎯 Features
 
-### 1. Workflow Management
-- **WorkflowList** - Browse and manage workflows
-  - Grid view of all workflows
-  - Create workflows from natural language descriptions
-  - Create workflows from scratch
-  - Delete workflows
-  - Quick execute actions
+### 1. Workflow Quickstart
+- **WorkflowQuickstart** - Entry page for describing a process or picking a template and running it
 
 ### 2. Workflow Editor
 - **WorkflowEditor** - Visual YAML editor with live preview
@@ -36,7 +31,7 @@ This plugin integrates the pipy-dynamic-workflows backend into the oma-platform 
 
 ```
 dynamic-workflows/
-├── WorkflowList.tsx       # Workflow browsing and management
+├── WorkflowQuickstart.tsx # Quickstart page
 ├── WorkflowEditor.tsx     # YAML editor with preview
 ├── TraceViewer.tsx        # Real-time execution viewer
 ├── index.tsx              # Plugin registration
@@ -58,7 +53,7 @@ export const consolePlugins: ConsolePlugin[] = [dynamicWorkflowsPlugin];
 
 | Path | Component | Description |
 |------|-----------|-------------|
-| `/workflows` | WorkflowList | List all workflows |
+| `/workflows` | WorkflowQuickstart | Quickstart page |
 | `/workflows/new` | WorkflowEditor | Create new workflow |
 | `/workflows/:id` | WorkflowEditor | Edit existing workflow |
 | `/workflows/:id/traces/:executionId` | TraceViewer | View execution traces |
@@ -66,25 +61,9 @@ export const consolePlugins: ConsolePlugin[] = [dynamicWorkflowsPlugin];
 ### Navigation
 
 Adds a "Workflows" section to the sidebar with:
-- **My Workflows** - Link to `/workflows`
+- **Quickstart** - Link to `/workflows`
 
 ## 🎨 Component Details
-
-### WorkflowList
-
-**Features:**
-- Grid layout with responsive cards
-- Draft badge for unpublished workflows
-- Quick actions (Edit, Execute, Delete)
-- Modal for natural language workflow generation
-- Empty state with onboarding message
-
-**API Endpoints Used:**
-- `GET /api/workflows` - List workflows
-- `POST /api/workflows/generate` - Generate from description
-- `POST /api/workflows` - Create workflow
-- `DELETE /api/workflows/:id` - Delete workflow
-- `POST /api/workflows/:id/execute` - Execute workflow
 
 ### WorkflowEditor
 
@@ -174,7 +153,7 @@ Uses `react-router-dom` for:
 ### Accessing Workflows
 
 1. Navigate to **Workflows** in the sidebar
-2. Click **My Workflows** to see the list
+2. Click **Quickstart** to describe a process or pick a template
 3. Create a new workflow:
    - **From Description**: Describe what you want in natural language
    - **From Scratch**: Start with an empty YAML template
@@ -244,7 +223,7 @@ To test the integration:
 │         Console (React App)             │
 ├─────────────────────────────────────────┤
 │  Dynamic Workflows Plugin               │
-│  ├─ WorkflowList                        │
+│  ├─ WorkflowQuickstart                  │
 │  ├─ WorkflowEditor                      │
 │  │   ├─ EnvVarMounter                   │
 │  │   └─ WorkflowPreview                 │

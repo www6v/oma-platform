@@ -139,7 +139,7 @@ export default function WorkflowEditor() {
   return (
     <div className="workflow-editor-page">
       <div className="editor-header">
-        <button onClick={() => navigate(isNew ? '/workflows' : '/workflows/all')}>
+        <button onClick={() => navigate('/workflows')}>
           ← Back
         </button>
         <div className="header-actions">
