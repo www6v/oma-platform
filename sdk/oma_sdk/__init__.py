@@ -16,7 +16,8 @@ Managed-agents resources (routed through anthropic SDK with custom base_url):
 OMA-platform-only resources (raw httpx):
     client.dreams, client.evals, client.runtimes,
     client.integrations, client.model_cards, client.cost_report,
-    client.me, client.api_keys, client.files, client.models
+    client.me, client.api_keys, client.files, client.models,
+    client.events
 """
 
 from __future__ import annotations
@@ -36,6 +37,7 @@ from .resources.me import MeResource
 from .resources.model_cards import ModelCardsResource
 from .resources.models import ModelsResource
 from .resources.runtimes import RuntimesResource
+from .resources.sessions import SessionEventsResource
 
 from .subagent import (
     build_multiagent,
@@ -73,6 +75,7 @@ class OMAClient:
         self.api_keys = ApiKeysResource(self._http)
         self.files = FilesResource(self._http)
         self.models = ModelsResource(self._http)
+        self.events = SessionEventsResource(self._http)
 
     # Managed-agents resources — routed through the anthropic SDK
     @property

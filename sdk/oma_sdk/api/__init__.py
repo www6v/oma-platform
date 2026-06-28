@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from .agents import AgentExamples
 from .environments import EnvironmentExamples
+from .events import EventsExamples
 from .files import FileExamples
 from .sessions import SessionExamples
 from .memory_stores import MemoryStoreExamples
@@ -20,6 +21,7 @@ from .subagents import SubagentExamples
 __all__ = [
     "AgentExamples",
     "EnvironmentExamples",
+    "EventsExamples",
     "FileExamples",
     "SessionExamples",
     "MemoryStoreExamples",

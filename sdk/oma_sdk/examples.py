@@ -9,6 +9,7 @@ from __future__ import annotations
 from .api import (
     AgentExamples,
     EnvironmentExamples,
+    EventsExamples,
     FileExamples,
     MemoryStoreExamples,
     MiscExamples,
@@ -21,6 +22,7 @@ from .api import (
 __all__ = [
     "AgentExamples",
     "EnvironmentExamples",
+    "EventsExamples",
     "FileExamples",
     "MemoryStoreExamples",
     "MiscExamples",
