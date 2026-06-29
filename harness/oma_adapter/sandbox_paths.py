@@ -38,12 +38,22 @@ def normalize_sandbox_path(workdir: str, path: str) -> str:
     return normalised
 
 
+def _resolve_under_cwd(cwd: Path, path: str) -> Path:
+    """Mirror pi_coding_agent.tools.path_utils.resolve_under_cwd."""
+    candidate = Path(path)
+    if not candidate.is_absolute():
+        candidate = cwd / candidate
+    resolved = candidate.resolve()
+    cwd_resolved = cwd.resolve()
+    if resolved != cwd_resolved and cwd_resolved not in resolved.parents:
+        raise ValueError(f"Path escapes working directory: {path}")
+    return resolved
+
+
 def resolve_under_sandbox_cwd(cwd: Path, path: str) -> Path:
     """resolve_under_cwd with AMA path rewriting."""
-    from pi_coding_agent.tools.path_utils import resolve_under_cwd
-
     rewritten = normalize_sandbox_path(str(cwd), path)
-    return resolve_under_cwd(cwd, rewritten)
+    return _resolve_under_cwd(cwd, rewritten)
 
 
 def patch_path_utils(workdir: str) -> None:

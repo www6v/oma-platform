@@ -3,33 +3,38 @@
 Build a data analyst agent with OMA Managed Agents.
 
 Mirrors the Anthropic cookbook ``managed_agents/data_analyst_agent.ipynb``:
-upload a CSV, drive a managed agent session, and download a narrative HTML
-report with interactive Plotly charts.
+upload a CSV, mount it on the session, drive a managed agent turn, and
+download ``report.html`` via the Files API.
 
-Flow
-----
-1. Create a reusable environment (pandas + plotly preinstalled).
-2. Create an agent with the analyst system prompt and bash/file tools.
+Flow (cookbook §1–7)
+--------------------
+1. Create a reusable environment (pandas + plotly in config).
+2. Create an agent with the analyst system prompt and toolset.
 3. Upload ``sales_data.csv`` via the Files API.
-4. Create a session that mounts the CSV inside the sandbox.
+4. Create a session with ``resources=[{file_id, mount_path}]``.
 5. Send the analysis task as a ``user.message`` event.
 6. Tail the event stream until ``session.status_idle``.
-7. Download ``report.html`` from session outputs.
+7. Download ``report.html`` with ``files.list(scope_id=session.id)``.
 8. Archive the session (keep agent + environment for reuse).
+
+This script is a **parity probe**: if a step fails, it usually indicates a
+platform gap rather than a missing workaround in the example.
 
 Prerequisites
 -------------
 * Python 3.11+
-* ``oma_sdk`` installed (ships with the OMA platform)
-* An OMA server reachable at ``OMA_BASE_URL`` with a valid ``OMA_API_KEY``
+* ``oma_sdk`` installed (``pip install -e sdk`` from oma-platform)
+* OMA server at ``OMA_BASE_URL`` with ``OMA_API_KEY``
+* Harness with pandas/plotly available (cloud env packages or local venv)
 
 Usage::
 
-    OMA_API_KEY=dev-key OMA_BASE_URL=http://localhost:8787 \\
-        python example/data_analyst_agent.py
+    OMA_API_KEY=dev-key OMA_BASE_URL=http://127.0.0.1:8787 \\
+        python sdk/example/data_analyst_agent.py
 
-Set ``OMA_KEEP_RESOURCES=1`` to skip cleanup and inspect resources in the
-Console UI afterward.
+Set ``OMA_KEEP_RESOURCES=1`` to skip session archive.
+Set ``OMA_DEV_FALLBACK=1`` to allow disk fallback when Files API is empty
+(dev only — not used in cookbook parity runs).
 """
 from __future__ import annotations
 
@@ -45,7 +50,7 @@ from oma_sdk.api.agents import MODEL as DEFAULT_MODEL
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-OMA_BASE_URL = os.getenv("OMA_BASE_URL", "http://localhost:8787")
+OMA_BASE_URL = os.getenv("OMA_BASE_URL", "http://127.0.0.1:8787")
 os.environ.setdefault("OMA_API_KEY", "dev-key")
 
 ENV_NAME = "cookbook-data-analyst-env"
@@ -53,11 +58,12 @@ AGENT_NAME = "cookbook-data-analyst"
 SESSION_TITLE = "Sales analysis"
 MODEL = os.getenv("OMA_MODEL", DEFAULT_MODEL["id"])
 TIMEOUT_SEC = int(os.getenv("OMA_DEMO_TIMEOUT_SEC", "900"))
-POLL_SEC = 3.0
+STREAM_READ_TIMEOUT = float(os.getenv("OMA_STREAM_READ_TIMEOUT_SEC", "90"))
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 CSV_PATH = SCRIPT_DIR / "sales_data.csv"
 REPORT_PATH = SCRIPT_DIR / "report.html"
+MOUNT_PATH = f"/mnt/session/uploads/{CSV_PATH.name}"
 
 ANALYST_SYSTEM_PROMPT = """\
 You are a senior data analyst producing a publication-quality report.
@@ -100,7 +106,7 @@ TOOLS = [
 
 
 def _load_dotenv() -> None:
-    """Load oma-platform/.env when present (same path as test conftest)."""
+    """Load oma-platform/.env when present."""
     dotenv = Path(__file__).resolve().parents[2] / ".env"
     if not dotenv.exists():
         return
@@ -125,6 +131,15 @@ def _message_text(event_data: dict) -> str:
     return "\n".join(parts).strip()
 
 
+def _event_type(ev: dict) -> str | None:
+    if ev.get("type"):
+        return str(ev["type"])
+    data = ev.get("data")
+    if isinstance(data, dict) and data.get("type"):
+        return str(data["type"])
+    return None
+
+
 def _event_payload(ev: dict) -> dict:
     data = ev.get("data")
     if isinstance(data, dict) and data.get("type"):
@@ -132,48 +147,58 @@ def _event_payload(ev: dict) -> dict:
     return ev
 
 
+def _print_progress(ev: dict) -> None:
+    event_type = _event_type(ev)
+    if not event_type:
+        return
+    payload = _event_payload(ev)
+    if event_type == "agent.message":
+        text = _message_text(payload)
+        if text:
+            preview = text[:300] + ("..." if len(text) > 300 else "")
+            print(preview)
+    elif event_type in ("agent.tool_use", "agent.mcp_tool_use"):
+        name = payload.get("name") or ""
+        print(f"  [{name}]")
+    elif event_type == "session.error":
+        msg = payload.get("message") or payload.get("error") or "session.error"
+        raise RuntimeError(f"Session error: {msg}")
+    elif event_type == "session.status_terminated":
+        raise RuntimeError("Session terminated before going idle")
+
+
 async def wait_for_idle(client: OMAClient, session_id: str) -> None:
-    """Tail the session event log, printing progress until idle."""
+    """Tail SSE until ``session.status_idle`` (cookbook ``events.stream``)."""
     deadline = time.time() + TIMEOUT_SEC
-    seen_seqs: set[int] = set()
 
-    while time.time() < deadline:
-        page = await client.events.list(session_id, order="asc", limit=200)
-        for ev in page.get("data") or []:
-            seq = ev.get("seq")
-            if seq is not None and seq in seen_seqs:
-                continue
-            if seq is not None:
-                seen_seqs.add(seq)
-
-            event_type = ev.get("type")
-            payload = _event_payload(ev)
-
-            if event_type == "agent.message":
-                text = _message_text(payload)
-                if text:
-                    preview = text[:300] + ("..." if len(text) > 300 else "")
-                    print(preview)
-            elif event_type in ("agent.tool_use", "agent.mcp_tool_use"):
-                name = payload.get("name") or ""
-                print(f"  [{name}]")
-            elif event_type == "session.error":
-                payload = _event_payload(ev)
-                msg = payload.get("message") or payload.get("error") or "session.error"
-                raise RuntimeError(f"Session error: {msg}")
-            elif event_type == "session.status_idle":
+    async def consume_stream() -> None:
+        async for ev in client.events.stream(
+            session_id,
+            replay=True,
+            timeout=STREAM_READ_TIMEOUT,
+        ):
+            _print_progress(ev)
+            if _event_type(ev) == "session.status_idle":
                 return
-            elif event_type == "session.status_terminated":
-                raise RuntimeError(
-                    "Session terminated before going idle. "
-                    f"Trace: {OMA_BASE_URL.rstrip('/')}/sessions/{session_id}"
-                )
+            if time.time() >= deadline:
+                break
 
-        await asyncio.sleep(POLL_SEC)
+    remaining = max(1.0, deadline - time.time())
+    try:
+        await asyncio.wait_for(consume_stream(), timeout=remaining)
+    except asyncio.TimeoutError as exc:
+        raise TimeoutError(
+            f"Timed out after {TIMEOUT_SEC}s waiting for session.status_idle"
+        ) from exc
 
-    raise TimeoutError(
-        f"Timed out after {TIMEOUT_SEC}s waiting for session.status_idle"
-    )
+    # Confirm idle via session GET if the stream closed without the event.
+    resp = await client._http.get(f"/v1/sessions/{session_id}")
+    resp.raise_for_status()
+    sess = resp.json()
+    if sess.get("status") != "idle":
+        raise TimeoutError(
+            f"Stream ended but session status={sess.get('status')!r}"
+        )
 
 
 async def upload_dataset(client: OMAClient, path: Path) -> dict:
@@ -204,7 +229,20 @@ async def download_report(
         print(f"Downloaded {dest.name} ({len(content)} bytes) via Files API")
         return
 
-    # Local dev fallback: harness writes under the session sandbox workdir.
+    if os.getenv("OMA_DEV_FALLBACK", "0") == "1":
+        _download_report_from_disk(session_id, dest)
+        return
+
+    names = [f.get("filename") for f in files]
+    raise RuntimeError(
+        "report.html not found via Files API "
+        f"(scope_id={session_id}, files={names}). "
+        "Platform parity gap O1 — do not use OMA_DEV_FALLBACK in CI."
+    )
+
+
+def _download_report_from_disk(session_id: str, dest: Path) -> None:
+    """Dev-only escape hatch when Files API scope_id listing is empty."""
     platform_root = SCRIPT_DIR.parents[1]
     outputs_root = Path(
         os.getenv(
@@ -227,13 +265,11 @@ async def download_report(
             content = candidate.read_bytes()
             dest.write_bytes(content)
             print(
-                f"Downloaded {dest.name} ({len(content)} bytes) "
+                f"[OMA_DEV_FALLBACK] Downloaded {dest.name} ({len(content)} bytes) "
                 f"from {candidate}"
             )
             return
-
-    names = [f.get("filename") for f in files]
-    raise RuntimeError(f"report.html not found. Files API: {names}")
+    raise RuntimeError("report.html not found on disk either")
 
 
 async def main() -> None:
@@ -247,55 +283,59 @@ async def main() -> None:
     client = OMAClient(base_url=OMA_BASE_URL)
 
     try:
-        mount_path = f"/mnt/session/uploads/{CSV_PATH.name}"
-
-        # 1. Upload the dataset (must happen before environment resources).
-        dataset = await upload_dataset(client, CSV_PATH)
-        print(
-            f"Uploaded {CSV_PATH.name} ({dataset['size_bytes']} bytes) "
-            f"as {dataset['id']}"
-        )
-
-        # 2. Environment — packages + CSV mount via config.resources
-        #    (OMA harness resolves file_id from the environment snapshot).
+        # 1. Environment — packages only (CSV mounts on the session).
         env = client.environments.create(
-            name=f"{ENV_NAME}-{int(time.time())}",
+            name=ENV_NAME,
             config={
                 "type": "cloud",
                 "networking": {"type": "unrestricted"},
                 "packages": {
                     "pip": ["pandas", "plotly"],
                 },
-                "resources": [
-                    {
-                        "type": "file",
-                        "file_id": dataset["id"],
-                        "mount_path": mount_path,
-                    }
-                ],
             },
         )
         print(f"Created environment: {env.id}")
 
-        # 3. Agent — model + system prompt + offline toolset.
+        # 2. Agent — model + system prompt + offline toolset.
         agent = client.agents.create(
-            name=f"{AGENT_NAME}-{int(time.time())}",
+            name=AGENT_NAME,
             model={"id": MODEL},
             system=ANALYST_SYSTEM_PROMPT,
             tools=TOOLS,
         )
         print(f"Created agent: id={agent.id}  version={agent.version}")
 
-        # 4. Session — bind agent + environment, send analysis task.
+        # 3. Upload dataset via Files API (cookbook ``beta.files.upload``).
+        dataset = await upload_dataset(client, CSV_PATH)
+        print(
+            f"Uploaded {CSV_PATH.name} ({dataset['size_bytes']} bytes) "
+            f"as {dataset['id']}"
+        )
+
+        # 4. Session — mount CSV via session.resources[].
         session = client.sessions.create(
             environment_id=env.id,
             agent={"type": "agent", "id": agent.id, "version": agent.version},
             title=SESSION_TITLE,
+            resources=[
+                {
+                    "type": "file",
+                    "file_id": dataset["id"],
+                    "mount_path": MOUNT_PATH,
+                }
+            ],
         )
         print(f"Created session: {session.id}")
+        resources = getattr(session, "resources", None) or []
+        if not resources:
+            raise RuntimeError(
+                "session.resources is empty — platform gap S1 (session create)"
+            )
+        print(f"Session resources: {resources}")
 
+        # 5. Send analysis task.
         analysis_prompt = f"""\
-Analyze the e-commerce orders in {mount_path}.
+Analyze the e-commerce orders in {MOUNT_PATH}.
 
 Columns: order_id, customer_id, product, category, price, quantity,
 order_date, region.
@@ -314,17 +354,17 @@ one surprising pattern. Produce report.html per your system instructions.
         )
         print(f"Session {session.id} running")
 
-        # 5. Stream progress until idle.
+        # 6. Stream until idle.
         await wait_for_idle(client, session.id)
 
-        # 6. Retrieve report.html from session outputs.
+        # 7. Download report.html via Files API.
         await download_report(client, session.id, REPORT_PATH)
 
         console = OMA_BASE_URL.rstrip("/")
         print(f"\nConsole session: {console}/sessions/{session.id}")
         print(f"Open report: {REPORT_PATH}")
 
-        # 7. Cleanup — archive session; keep agent + environment for reuse.
+        # 8. Archive session; keep agent + environment for reuse.
         if os.getenv("OMA_KEEP_RESOURCES", "0") != "1":
             try:
                 client.sessions.archive(session.id)

@@ -54,7 +54,7 @@ func parseResourceSpecs(envSnapshot json.RawMessage) []map[string]any {
 		return nil
 	}
 	if top, ok := root["resources"].([]any); ok {
-		return coerceResourceMaps(top)
+		return CoerceResourceMaps(top)
 	}
 	cfg, _ := root["config"].(map[string]any)
 	if cfg == nil {
@@ -64,7 +64,7 @@ func parseResourceSpecs(envSnapshot json.RawMessage) []map[string]any {
 	if !ok {
 		return nil
 	}
-	return coerceResourceMaps(raw)
+	return CoerceResourceMaps(raw)
 }
 
 // CoerceResourceMaps converts []any to []map[string]any.

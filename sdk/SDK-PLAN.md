@@ -1,6 +1,6 @@
 # OMA Platform Python SDK — Engineering Review & Implementation Plan
 
-> **Status (2026-06-28):** SDK implemented in this directory. Managed-agents resources route through `anthropic>=0.111.0` with `base_url`; OMA-only resources use `httpx` wrappers. E2E tests cover agents, sessions, environments, memory_stores, vaults, skills, files, misc, subagents.
+> **Status (2026-06-29):** SDK implemented in this directory. Managed-agents resources route through `anthropic>=0.111.0` with `base_url`; OMA-only resources use `httpx` wrappers. E2E tests cover agents, sessions, environments, memory_stores, vaults, skills, files, misc, subagents. **Cookbook parity (data analyst):** P0 closed — session create `resources[]`, turn mount, outputs→Files API, Go integration test, and `example/data_analyst_agent.py` parity probe (see [gap analysis](../docs/sdk/data-analyst-cookbook-gap-analysis.md)).
 
 ---
 
@@ -71,7 +71,7 @@ All `client.beta.{agents,sessions,environments,memory_stores,vaults,skills}` cal
 | Anthropic SDK resource | OMA route prefix | OMA status | OMA SDK binding | Gap severity |
 |---|---|---|---|---|
 | `beta.agents` | `/v1/agents` | ✅ Core CRUD + versions | `client.agents` (anthropic) | Low — see method table |
-| `beta.sessions` | `/v1/sessions` | ⚠️ Events OK; resources/threads/update gaps | `client.sessions` (anthropic) | **Medium** |
+| `beta.sessions` | `/v1/sessions` | ⚠️ Create `resources[]` + events OK; post-create resources CRUD / update / threads gaps | `client.sessions` (anthropic) | **Medium** |
 | `beta.environments` | `/v1/environments` | ⚠️ CRUD OK; no delete/work | `client.environments` (anthropic) | Low–Medium |
 | `beta.memory_stores` | `/v1/memory_stores` | ✅ Full CRUD + memories + versions | `client.memory_stores` (anthropic) | Low |
 | `beta.vaults` | `/v1/vaults` | ✅ Full CRUD + credentials | `client.vaults` (anthropic) | Low |
@@ -128,7 +128,7 @@ All `client.beta.{agents,sessions,environments,memory_stores,vaults,skills}` cal
 
 | SDK method | HTTP (anthropic 0.111.0) | OMA handler | Status | Notes |
 |---|---|---|---|---|
-| `create` | `POST /v1/sessions?beta=true` | `sessions.go` POST `/` | ✅ | |
+| `create` | `POST /v1/sessions?beta=true` | `sessions.go` POST `/` | ✅ | Accepts `resources[]`; scoped file copies persisted + returned |
 | `list` | `GET /v1/sessions?beta=true` | GET `/` | ✅ | Filter params partially supported |
 | `retrieve` | `GET /v1/sessions/{id}?beta=true` | GET `/{id}` | ✅ | |
 | `update` | `POST /v1/sessions/{id}?beta=true` | — | ❌ | **P1 gap** — mid-session agent/tools/metadata patch |
@@ -137,8 +137,8 @@ All `client.beta.{agents,sessions,environments,memory_stores,vaults,skills}` cal
 | `events.send` | `POST /v1/sessions/{id}/events?beta=true` | POST `/{id}/events` | ✅ | |
 | `events.list` | `GET /v1/sessions/{id}/events?beta=true` | GET `/{id}/events` | ✅ | |
 | `events.stream` | `GET /v1/sessions/{id}/events/stream?beta=true` | GET `/{id}/events/stream` | ✅ | SSE |
-| `resources.list` | `GET .../resources?beta=true` | — | ❌ | **P2 gap** |
-| `resources.add` | `POST .../resources?beta=true` | — | ❌ | **P2 gap** |
+| `resources.list` | `GET .../resources?beta=true` | — | ❌ | **P2 gap** — use `retrieve` + `resources` field from create |
+| `resources.add` | `POST .../resources?beta=true` | — | ❌ | **P2 gap** — create-time `resources[]` only (2026-06) |
 | `resources.retrieve` | `GET .../resources/{rid}?beta=true` | — | ❌ | **P2 gap** |
 | `resources.update` | `POST .../resources/{rid}?beta=true` | — | ❌ | **P2 gap** |
 | `resources.delete` | `DELETE .../resources/{rid}?beta=true` | — | ❌ | **P2 gap** |
@@ -237,7 +237,7 @@ These resources exist in **both** anthropic SDK and oma-platform, but OMA SDK de
 
 **SDK binding:** `OMAClient.files` → `oma_sdk/resources/files.py` (httpx), not `client.beta.files`.
 
-**Why httpx:** OMA accepts dual upload modes (multipart + base64 JSON) and ties into session outputs; tests live in `tests/test_files.py`.
+**Why httpx:** OMA accepts dual upload modes (multipart + base64 JSON), ties into session outputs via `scope_id`, and supports session-scoped file copies from `sessions.create(resources=[])`. Tests: `tests/test_files.py`; cookbook probe: `example/data_analyst_agent.py`.
 
 #### 3.2 `beta.models` vs OMA `/v1/models`
 
@@ -281,7 +281,7 @@ These resources exist in **both** anthropic SDK and oma-platform, but OMA SDK de
 | `/v1/sessions/{id}/teams/*` | teams, messages, tasks, shutdown | `oma_sdk/subagent.py` | `tests/test_subagents.py` |
 | `/v1/sessions/{id}/trajectory` | GET | subagent helpers | `tests/test_subagents.py` |
 | `/v1/sessions/{id}/pending` | GET | — | harness polling |
-| `/v1/sessions/{id}/outputs/*` | list, download | — | session artifacts |
+| `/v1/sessions/{id}/outputs/*` | list, download | — | Prefer `files.list(scope_id=session.id)` after turn sync |
 | `/v1/oma/*` | aliases for api_keys, me, evals, … | same httpx paths | — |
 
 ---
@@ -291,7 +291,8 @@ These resources exist in **both** anthropic SDK and oma-platform, but OMA SDK de
 | Priority | Gap | Impact | Recommendation |
 |---|---|---|---|
 | **P1** | `sessions.update` missing | Cannot patch session title/agent/tools mid-flight via SDK | Add `POST /v1/sessions/{id}` handler in `sessions.go` |
-| **P2** | `sessions.resources.*` missing | File mount / MCP resource attach flows fail | Add resource CRUD routes or document workaround via session create `resources[]` |
+| **P1** | Environment `packages.pip` not installed locally | Cookbook step 1 succeeds but harness may lack pandas/plotly | Document local venv requirement or install packages in harness |
+| **P2** | `sessions.resources.*` post-create CRUD missing | Cannot add/remove mounts after session create | Add resource CRUD routes; **create-time `resources[]` works** (2026-06) |
 | **P2** | `sessions.threads.retrieve/events.*` missing | Sub-agent thread isolation incomplete vs Anthropic API | Extend `session_aux.go` or document session-level event filtering |
 | **P3** | `environments.delete` missing | Minor — archive covers lifecycle | Add DELETE or document archive-only |
 | **P3** | `skills.versions.download` missing | SDK download returns 404 | Add `GET .../versions/{v}/content` or patch SDK tests to use JSON retrieve |
@@ -306,7 +307,7 @@ These resources exist in **both** anthropic SDK and oma-platform, but OMA SDK de
 | User-facing accessor | Transport | Underlying API | Notes |
 |---|---|---|---|
 | `client.agents` | anthropic SDK | `beta.agents` | Direct pass-through |
-| `client.sessions` | anthropic SDK | `beta.sessions` | Gaps: update, resources, thread sub-routes |
+| `client.sessions` | anthropic SDK | `beta.sessions` | Gaps: update, post-create resources CRUD, thread sub-routes; create `resources[]` ✅ |
 | `client.environments` | anthropic SDK | `beta.environments` | Gap: delete, work.* |
 | `client.memory_stores` | anthropic SDK | `beta.memory_stores` | Full parity |
 | `client.vaults` | anthropic SDK | `beta.vaults` | Full parity |
@@ -335,9 +336,31 @@ These resources exist in **both** anthropic SDK and oma-platform, but OMA SDK de
 - [x] **T5** `tests/conftest.py` — fixtures
 - [x] **T6–T11** E2E tests — agents, sessions, environments, memory_stores, vaults, skills
 - [x] **T12–T14** E2E tests — files, misc, subagents
-- [x] **Examples** — `oma_sdk/api/*`, `example/data_analyst_agent.py`
+- [x] **Examples** — `oma_sdk/api/*`, `example/data_analyst_agent.py` (cookbook parity probe)
 
-### Remaining (from gap analysis)
+### Cookbook parity — data analyst (2026-06)
+
+Reference: Anthropic `managed_agents/data_analyst_agent.ipynb` vs `example/data_analyst_agent.py`.
+Full gap matrix: [`docs/sdk/data-analyst-cookbook-gap-analysis.md`](../docs/sdk/data-analyst-cookbook-gap-analysis.md).
+
+| ID | Priority | Task | Status | Verify |
+|---|---|---|---|---|
+| **C1** | P0 | Session create accepts `resources[]` | ✅ | `session_resources_api_test.go` |
+| **C2** | P0 | Turn resolves session + env resources | ✅ | harness mount tests |
+| **C3** | P0 | Outputs path + post-turn sync → Files API | ✅ | `workdir/sync_test.go`, `session_outputs_api_test.go` |
+| **C4** | P0 | Go integration test (cookbook §3–6) | ✅ | CI `TestDataAnalystCookbook` |
+| **C5** | P0 | Example script cookbook 1:1 (no default disk fallback) | ✅ | `python example/data_analyst_agent.py` |
+| **C6** | P1 | `DataAnalystExamples` helper + pytest E2E | ⏸️ deferred | — |
+| **C7** | P1 | SDK-PLAN gap status update | ✅ | this doc |
+
+**Still open for full cookbook parity (non-blocking for C1–C5):**
+
+- Local harness does not install `environment.config.packages.pip` (use host venv or document)
+- `client.files` via httpx, not `client.beta.files` (T20)
+- Turn timeout not API-configurable (env var only)
+- Post-create `sessions.resources.*` CRUD (S2)
+
+### Remaining (Anthropic wire-compat gaps)
 
 - [ ] **T15 (P1)** `sessions.update` — `POST /v1/sessions/{id}`
 - [ ] **T16 (P2)** `sessions.resources.*` — full resource CRUD
@@ -354,7 +377,7 @@ These resources exist in **both** anthropic SDK and oma-platform, but OMA SDK de
 oma-platform APIs
 ├── anthropic SDK managed agents (6 resources) ─── test_agents … test_skills ✅
 │   ├── agents + versions          (~7 methods, 1 OMA-only DELETE)
-│   ├── sessions + events          (~9 methods; gaps: update, resources, threads)
+│   ├── sessions + events          (~9 methods; create resources ✅; gaps: update, post-create resources CRUD, threads)
 │   ├── environments               (~5 methods; gap: delete)
 │   ├── memory_stores + memories   (~14 methods) ✅ full
 │   ├── vaults + credentials       (~13 methods) ✅ full
@@ -366,6 +389,10 @@ oma-platform APIs
     ├── dreams, evals, runtimes, integrations
     ├── model_cards, cost_report, me, api_keys
     └── teams / trajectory / subagents
+
+Cookbook parity (Go server):
+└── data analyst critical path ─────────────────── test/integration/data_analyst_cookbook_test.go ✅
+    └── CI: `.github/workflows/ci.yml` → `TestDataAnalystCookbook`
 ```
 
 Test framework: `pytest` + `pytest-asyncio` (asyncio_mode=auto); live E2E against `:8787`.
@@ -378,28 +405,28 @@ Test framework: `pytest` + `pytest-asyncio` (asyncio_mode=auto); live E2E agains
 |--------|---------|-----|------|--------|----------|
 | CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
 | Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | — |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | issues_open | 6 P1–P3 gaps documented; SDK shipped |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | issues_open | Cookbook P0 closed; 3 wire-compat gaps remain (sessions.update, post-create resources CRUD, threads) |
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
 | DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
 
-- **UNRESOLVED:** 4 open platform gaps (sessions.update, sessions.resources, sessions.threads, skills.download)
-- **VERDICT:** Eng review complete — gap matrix updated 2026-06-28. Implement T15–T17 before claiming full Anthropic wire-compat.
+- **UNRESOLVED:** 3 open platform gaps for full Anthropic wire-compat (`sessions.update`, post-create `sessions.resources.*`, `sessions.threads.*`); cookbook P0 parity closed 2026-06-29
+- **VERDICT:** Eng review complete — gap matrix updated 2026-06-29. Implement T15–T17 before claiming full Anthropic wire-compat; data analyst cookbook probe passes on Go server.
 
 ### Section Summary
 
 | Section | Result |
 |---|---|
-| Step 0: Scope | Accepted — gap analysis scoped to anthropic 0.111.0 vs current OMA routes |
-| Architecture | 6 managed-agent resources via SDK; 9+ OMA-only via httpx — sound split |
-| Code Quality | SDK implemented; examples in `oma_sdk/api/` |
-| Tests | 9 test modules; live E2E pattern established |
-| Performance | SSE via anthropic SDK; shared httpx pool in OMAClient |
-| NOT in scope | deployments, user_profiles, webhooks, messages, environments.work |
-| What already exists | Updated — SDK no longer greenfield |
-| Failure modes | sessions.update/resources gaps → silent SDK 404 for advanced flows |
+| Step 0: Scope | Accepted — gap analysis scoped to anthropic 0.111.0 vs current OMA routes; cookbook P0 tracked separately |
+| Architecture | 6 managed-agent resources via SDK; 9+ OMA-only via httpx — sound split; session create resources + outputs sync landed |
+| Code Quality | SDK implemented; examples in `oma_sdk/api/`; `example/data_analyst_agent.py` is parity probe (workaround copy in `example/v1/`) |
+| Tests | 9 pytest modules + Go `TestDataAnalystCookbook`; live E2E pattern established |
+| Performance | SSE via anthropic SDK or `client.events.stream`; shared httpx pool in OMAClient |
+| NOT in scope | deployments, user_profiles, webhooks, messages, environments.work, cloud runtime |
+| What already exists | Updated — SDK no longer greenfield; cookbook critical path covered in CI |
+| Failure modes | Post-create resource CRUD / sessions.update still 404; packages not auto-installed locally |
 | Outside voice | Skipped this run |
 | Parallelization | Sequential — gap fixes touch `sessions.go` primarily |
 
-**Architecture score: 8/10** — Wire-compat design validated; remaining gaps are concentrated in sessions sub-resources.
+**Architecture score: 8/10** — Wire-compat design validated; remaining gaps are concentrated in sessions sub-resources (post-create) and local package install.
 
 **Recommended guard:** Quarterly smoke test creating one resource of each type against live Anthropic API to detect schema drift.

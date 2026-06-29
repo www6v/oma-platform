@@ -60,6 +60,10 @@ func TestEnsureMountsSessionOutputs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	absTarget, err = filepath.EvalSymlinks(absTarget)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if resolved != absTarget {
 		t.Fatalf("link=%s target=%s", resolved, absTarget)
 	}

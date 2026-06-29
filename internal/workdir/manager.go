@@ -98,8 +98,9 @@ func mountSessionOutputs(
 
 func tryRootSessionOutputsMount(targetDir string) {
 	sessionDir := "/mnt/session"
-	outputsLink := "/mnt/session/outputs"
-	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
+	outputsLink := filepath.Join(sessionDir, "outputs")
+	info, err := os.Lstat(sessionDir)
+	if err != nil || !info.IsDir() {
 		return
 	}
 	_ = replaceSymlink(outputsLink, targetDir)

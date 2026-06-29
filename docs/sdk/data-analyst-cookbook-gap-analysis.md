@@ -252,15 +252,15 @@ Lane C (tests, after T3+T5):
   T7
 ```
 
-| ID | Priority | Task | Files | Verify |
-|----|----------|------|-------|--------|
-| **T1** | P0 | Session create 接受并持久化 `resources[]` | `internal/api/sessions.go`, `internal/store/sessions.go`, `sessionwire.go` | unit: create 返回 resources |
-| **T2** | P0 | `ResolveForTurn` 合并 session + env resources | `internal/harness/resources.go`, `machine.go` | harness test: file mounted |
-| **T3** | P0 | 统一 outputs 路径 + turn 后 sync | `sandbox_paths.py`, `resource_mounter.py`, optional `machine.go` post-turn | files.list 含 report.html |
-| **T4** | P0 | Go integration test 复刻 cookbook §3–6 | `test/integration/data_analyst_cookbook_test.go` | CI green |
-| **T5** | P0 | 重写 `data_analyst_agent.py` 为 cookbook 1:1 | `sdk/example/data_analyst_agent.py` | 无 fallback 跑通 |
-| **T6** | P1 | `DataAnalystExamples` helper + E2E | `oma_sdk/api/data_analyst.py`, `tests/test_data_analyst.py` | pytest |
-| **T7** | P1 | 更新 SDK-PLAN gap 状态 | `sdk/SDK-PLAN.md` | doc review |
+| ID | Priority | Task | Files | Status | Verify |
+|----|----------|------|-------|--------|--------|
+| **T1** | P0 | Session create 接受并持久化 `resources[]` | `internal/api/sessions.go`, `internal/store/sessions.go`, `sessionwire.go` | ✅ | `session_resources_api_test.go` |
+| **T2** | P0 | `ResolveForTurn` 合并 session + env resources | `internal/harness/resources.go`, `machine.go` | ✅ | harness mount tests |
+| **T3** | P0 | 统一 outputs 路径 + turn 后 sync | `sandbox_paths.py`, `resource_mounter.py`, `machine.go` post-turn | ✅ | `workdir/sync_test.go`, `session_outputs_api_test.go` |
+| **T4** | P0 | Go integration test 复刻 cookbook §3–6 | `test/integration/data_analyst_cookbook_test.go`, `internal/integrationtest/` | ✅ | CI `TestDataAnalystCookbook` |
+| **T5** | P0 | 重写 `data_analyst_agent.py` 为 cookbook 1:1 | `sdk/example/data_analyst_agent.py` | ✅ | 零 fallback 跑通（`OMA_DEV_FALLBACK` 默认 off） |
+| **T6** | P1 | `DataAnalystExamples` helper + E2E | `oma_sdk/api/data_analyst.py`, `tests/test_data_analyst.py` | ⏸️ deferred | — |
+| **T7** | P1 | 更新 SDK-PLAN gap 状态 | `sdk/SDK-PLAN.md` | ✅ | doc review |
 
 ---
 
@@ -329,24 +329,39 @@ P2 — 完整 Managed Agents parity
 
 ## Completion Summary
 
-| 项 | 结果 |
-|----|------|
-| Step 0 Scope | **Accepted A** — P0 三件套 |
-| Architecture | **4 issues** (S1/O1 为 P0 blocker) |
-| Code Quality | **2 issues** (示例拆分、PLAN 漂移) |
-| Test Review | **7 gaps**, 0% Go-server cookbook coverage |
-| Performance | **1 issue** (turn timeout) |
-| NOT in scope | cloud runtime, work.*, beta header |
-| What exists | ResourceResolver, Files API, workdir symlink |
-| Failure modes | **2 critical** (S1, O1) |
-| Parallelization | Lane A sequential → B → C |
+**完成日期：** 2026-06-29 · **P0 对齐：** ✅ 已交付（T1–T5）
 
-**Lake Score：** P0 选完整 parity（10/10），非 shortcut。
+| 项 | 评审时 | 当前结果 |
+|----|--------|----------|
+| Step 0 Scope | Accepted A — P0 三件套 | ✅ **已交付** — session resources、outputs→Files API、示例去 workaround |
+| Architecture | 4 issues（S1/O1 为 P0 blocker） | ✅ **S1/O1 已关闭**（T1–T3）；E1 本地 packages、cloud runtime 仍 open |
+| Code Quality | 2 issues（示例拆分、PLAN 漂移） | ✅ 示例为 parity probe（T5）；workaround 保留在 `example/v1/`；SDK-PLAN 已同步（T7）；T6 helper **deferred** |
+| Test Review | 7 gaps，Go-server cookbook 0% | ✅ **Go E2E 覆盖 §3–6**（T4，CI green）；`session_resources_api_test.go`；SDK pytest E2E（T6）未做 |
+| Performance | turn 超时 300s | ⚠️ **仍依赖 env var**（`HARNESS_TURN_TIMEOUT_SEC`，本地可设 900）；API 化未做 |
+| NOT in scope | cloud runtime, work.*, beta header | 不变 |
+| What exists | ResourceResolver, Files API, symlink | ✅ 扩展：session.resources 持久化、turn 合并 mount、post-turn sync、`client.events.stream` |
+| Failure modes | 2 critical（S1, O1） | ✅ **S1/O1 已缓解**；packages 本地未装、turn 超时仍为 P1 风险 |
+| Implementation | T1–T7 待做 | T1–T5 ✅ · T6 ⏸️ · T7 ✅ |
+
+**Cookbook 7 步覆盖（Go server + 示例）：**
+
+| Step | 状态 | 备注 |
+|------|------|------|
+| 1 environments.create(packages) | ⚠️ | config 存 DB；本地 harness 不 pip install（E1） |
+| 2 agents.create | ✅ | |
+| 3 files.upload | ✅ | httpx async，非 `beta.files`（F1） |
+| 4 sessions.create(resources=[]) | ✅ | scoped file copy + turn mount |
+| 5 events.send + stream | ✅ | 示例用 `events.stream(replay=True)` |
+| 6 files.list(scope_id) + download | ✅ | post-turn sync；默认无磁盘 fallback |
+| 7 archive + 复用 agent/env | ✅ | 固定 name，session archive |
+
+**Lake Score：** P0 完整 parity 已落地（10/10）；剩余为 P1/P2（packages、post-create resources CRUD、T6 helper）。
 
 ---
 
 ## 建议下一步
 
-1. **开 implementation issue/branch**：按 T1→T7 顺序，T1+T2 可先做（session resources）。
-2. **把 `data_analyst_agent.py` 标为 parity probe**：在 README 注明「失败 = 平台 gap」，workaround 移到 `example/v1/` 或 dev-only flag。
-3. **补 Go integration test**：Port `files.test.ts` 的 session resources 用例到 Go，避免 TS/Go 漂移。
+1. **P1 — 本地 packages：** 文档声明 harness venv 预装要求，或 turn 前读 `env.config.packages.pip` 安装。
+2. **P1 — Turn 超时 API 化：** `turn_timeout_sec` 进 session/environment config，替代纯 env var。
+3. **可选 — T6：** 恢复 `DataAnalystExamples` + `tests/test_data_analyst.py`（T6 曾回退）。
+4. **P2 — post-create `sessions.resources.*` CRUD** 与 **`client.beta.files` 别名**（见 `sdk/SDK-PLAN.md` T15–T20）。

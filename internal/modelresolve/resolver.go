@@ -19,29 +19,32 @@ func (r *Resolver) Resolve(
 	ctx context.Context,
 	tenantID, agentModel string,
 ) (harness.ModelConfig, error) {
-	cfg, err := r.resolve(ctx, tenantID, agentModel)
+	cfg, remap, err := r.resolve(ctx, tenantID, agentModel)
 	if err != nil {
 		return harness.ModelConfig{}, err
 	}
-	return remapLegacyClaude(cfg), nil
+	if remap {
+		cfg = remapLegacyClaude(cfg)
+	}
+	return cfg, nil
 }
 
 func (r *Resolver) resolve(
 	ctx context.Context,
 	tenantID, agentModel string,
-) (harness.ModelConfig, error) {
+) (harness.ModelConfig, bool, error) {
 	if r == nil || r.Cards == nil || agentModel == "" {
-		return harness.ModelConfig{Model: agentModel}, nil
+		return harness.ModelConfig{Model: agentModel}, false, nil
 	}
 
 	card, err := r.Cards.GetByModelID(ctx, tenantID, agentModel)
 	if err != nil {
-		return harness.ModelConfig{}, err
+		return harness.ModelConfig{}, false, err
 	}
 	if card != nil {
 		key, err := r.Cards.GetAPIKey(ctx, tenantID, card.ID)
 		if err != nil {
-			return harness.ModelConfig{}, err
+			return harness.ModelConfig{}, false, err
 		}
 		cfg := harness.ModelConfig{
 			Model:    card.Model,
@@ -52,7 +55,8 @@ func (r *Resolver) resolve(
 		if len(card.CustomHeaders) > 0 {
 			cfg.CustomHeaders = card.CustomHeaders
 		}
-		return cfg, nil
+		remap := card.ModelID == card.Model && isClaudeModel(card.Model)
+		return cfg, remap, nil
 	}
 
 	if isQwenModel(agentModel) {
@@ -63,17 +67,17 @@ func (r *Resolver) resolve(
 		if key := os.Getenv("DASHSCOPE_API_KEY"); key != "" {
 			cfg.APIKey = key
 		}
-		return cfg, nil
+		return cfg, false, nil
 	}
 
 	defaultCard, err := r.Cards.GetDefault(ctx, tenantID)
 	if err != nil {
-		return harness.ModelConfig{}, err
+		return harness.ModelConfig{}, false, err
 	}
 	if defaultCard != nil && looksLikeProviderModel(agentModel) {
 		key, err := r.Cards.GetAPIKey(ctx, tenantID, defaultCard.ID)
 		if err != nil {
-			return harness.ModelConfig{}, err
+			return harness.ModelConfig{}, false, err
 		}
 		cfg := harness.ModelConfig{
 			Model:    agentModel,
@@ -84,7 +88,7 @@ func (r *Resolver) resolve(
 		if len(defaultCard.CustomHeaders) > 0 {
 			cfg.CustomHeaders = defaultCard.CustomHeaders
 		}
-		return cfg, nil
+		return cfg, false, nil
 	}
 
 	cfg := harness.ModelConfig{Model: agentModel}
@@ -92,7 +96,7 @@ func (r *Resolver) resolve(
 		cfg.APIKey = key
 		cfg.Provider = "ant"
 	}
-	return cfg, nil
+	return cfg, isClaudeModel(agentModel), nil
 }
 
 func remapLegacyClaude(cfg harness.ModelConfig) harness.ModelConfig {

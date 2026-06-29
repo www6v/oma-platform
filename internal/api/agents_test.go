@@ -48,11 +48,13 @@ func testRouterDeps(
 	pending := store.NewPendingRepo(db)
 	hub := stream.NewHub()
 	reg := session.NewRegistry()
-	workdirs := workdir.NewManager(t.TempDir(), "")
+	t.Cleanup(func() { reg.Shutdown() })
 	if outputsDir == "" {
 		outputsDir = t.TempDir()
 	}
+	workdirBase := t.TempDir()
 	outputs := sessionoutputs.NewStore(outputsDir)
+	workdirs := workdir.NewManager(workdirBase, outputsDir)
 
 	integrations := store.NewIntegrationRepo(db)
 	runtimes := store.NewRuntimeRepo(db)
@@ -175,6 +177,7 @@ func testRouterSharedDB(
 	pending := store.NewPendingRepo(db)
 	hub := stream.NewHub()
 	reg := session.NewRegistry()
+	t.Cleanup(func() { reg.Shutdown() })
 	workdirs := workdir.NewManager(t.TempDir(), "")
 	outputs := sessionoutputs.NewStore(t.TempDir())
 	memoryStores := store.NewMemoryStoreRepo(db, nil)

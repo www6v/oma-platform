@@ -20,15 +20,38 @@ func NewRegistry() *Registry {
 // Remove tears down the in-memory session lane (best-effort).
 func (r *Registry) Remove(sessionID string) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	lane, ok := r.lanes[sessionID]
+	if ok {
+		delete(r.lanes, sessionID)
+	}
+	r.mu.Unlock()
 	if !ok {
 		return
 	}
+	lane.shutdown()
+}
+
+// Shutdown stops all session turn workers and waits for them to exit.
+func (r *Registry) Shutdown() {
+	r.mu.Lock()
+	lanes := make([]*sessionLane, 0, len(r.lanes))
+	for _, lane := range r.lanes {
+		lanes = append(lanes, lane)
+	}
+	r.lanes = make(map[string]*sessionLane)
+	r.mu.Unlock()
+
+	for _, lane := range lanes {
+		lane.shutdown()
+	}
+}
+
+func (lane *sessionLane) shutdown() {
 	if lane.machine != nil {
 		lane.machine.CancelActiveTurn()
 	}
-	delete(r.lanes, sessionID)
+	close(lane.turnCh)
+	lane.wg.Wait()
 }
 
 // Register stores a machine for a session id and starts its turn worker.
@@ -70,6 +93,7 @@ type sessionLane struct {
 	machine  *Machine
 	appendMu sync.Mutex
 	turnCh   chan turnJob
+	wg       sync.WaitGroup
 }
 
 type turnJob struct {
@@ -84,7 +108,11 @@ func newSessionLane(machine *Machine) *sessionLane {
 		turnCh:  make(chan turnJob, 32),
 	}
 	machine.SetAppendLocker(&lane.appendMu)
-	go lane.runTurnWorker()
+	lane.wg.Add(1)
+	go func() {
+		defer lane.wg.Done()
+		lane.runTurnWorker()
+	}()
 	return lane
 }
 

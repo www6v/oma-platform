@@ -33,6 +33,10 @@ func TestEnsureMountsMntSessionOutputsAlias(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	absTarget, err = filepath.EvalSymlinks(absTarget)
+	if err != nil {
+		t.Fatal(err)
+	}
 	resolved, err := filepath.EvalSymlinks(link)
 	if err != nil {
 		t.Fatal(err)
