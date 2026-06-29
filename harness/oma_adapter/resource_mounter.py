@@ -11,6 +11,46 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+def ensure_session_output_mounts(workdir: str) -> None:
+    """Ensure workdir-relative output paths symlink to the canonical mount."""
+    root = Path(workdir)
+    canonical = root / ".mnt" / "session" / "outputs"
+    aliases = (
+        root / "mnt" / "session" / "outputs",
+        root / "outputs",
+    )
+    target = _resolve_output_target(canonical, *aliases)
+    if target is None:
+        canonical.parent.mkdir(parents=True, exist_ok=True)
+        canonical.mkdir(parents=True, exist_ok=True)
+        target = canonical.resolve()
+    for alias in aliases:
+        _ensure_output_symlink(alias, target)
+
+
+def _resolve_output_target(*paths: Path) -> Path | None:
+    for path in paths:
+        if path.is_symlink():
+            return path.resolve()
+        if path.is_dir():
+            return path.resolve()
+    return None
+
+
+def _ensure_output_symlink(link: Path, target: Path) -> None:
+    if link.is_symlink():
+        try:
+            if link.resolve() == target.resolve():
+                return
+        except OSError:
+            pass
+        link.unlink()
+    elif link.exists():
+        return
+    link.parent.mkdir(parents=True, exist_ok=True)
+    link.symlink_to(target, target_is_directory=True)
+
+
 def mount_resources(
     workdir: str,
     resources: list[dict[str, Any]] | None,

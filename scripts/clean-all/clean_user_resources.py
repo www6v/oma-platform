@@ -3,16 +3,18 @@
 Script to delete all resources for a specific user in the OMA system.
 
 This script uses the OMA SDK to delete all resources associated with a user,
-including agents, sessions, environments, vaults, memory stores, and skills.
+including agents, sessions, environments, vaults, memory stores, skills,
+and uploaded files (GET/DELETE /v1/files).
 """
 
 import argparse
 import os
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Iterator, Optional
 
 import anthropic
+import httpx
 
 # Allow importing oma_sdk from oma-platform/sdk without a pip install.
 _SDK_DIR = Path(__file__).resolve().parents[2] / "sdk"
@@ -240,6 +242,75 @@ def delete_all_skills(client: anthropic.Anthropic, user_id: Optional[str] = None
     return count
 
 
+def _iter_deletable_files(http: httpx.Client) -> Iterator[dict]:
+    """Yield all deletable file records from GET /v1/files (paginated)."""
+    before_id: Optional[str] = None
+    while True:
+        params: dict = {"limit": 1000, "order": "desc"}
+        if before_id:
+            params["before_id"] = before_id
+        resp = http.get("/v1/files", params=params)
+        resp.raise_for_status()
+        payload = resp.json()
+        for row in payload.get("data") or []:
+            file_id = row.get("id") or ""
+            if file_id and not file_id.startswith("out:"):
+                yield row
+        if not payload.get("has_more"):
+            break
+        before_id = payload.get("last_id")
+        if not before_id:
+            break
+
+
+def delete_all_files(
+    base_url: str,
+    dry_run: bool = False,
+) -> int:
+    """Delete all uploaded files via GET/DELETE /v1/files."""
+    api_key = os.getenv("OMA_API_KEY", _DEFAULT_API_KEY)
+    count = 0
+    try:
+        with httpx.Client(
+            base_url=base_url,
+            headers={"x-api-key": api_key},
+            timeout=30.0,
+        ) as http:
+            if dry_run:
+                for row in _iter_deletable_files(http):
+                    file_id = row["id"]
+                    filename = row.get("filename", file_id)
+                    print(f"[DRY RUN] Deleting file {file_id} ({filename})")
+                    count += 1
+                return count
+
+            while True:
+                resp = http.get("/v1/files", params={"limit": 1000})
+                resp.raise_for_status()
+                rows = [
+                    row for row in (resp.json().get("data") or [])
+                    if (row.get("id") or "")
+                    and not (row.get("id") or "").startswith("out:")
+                ]
+                if not rows:
+                    break
+                for row in rows:
+                    file_id = row["id"]
+                    filename = row.get("filename", file_id)
+                    print(f"Deleting file {file_id} ({filename})")
+                    try:
+                        del_resp = http.delete(f"/v1/files/{file_id}")
+                        del_resp.raise_for_status()
+                    except Exception as e:
+                        print(f"  Error deleting file {file_id}: {e}")
+                        continue
+                    count += 1
+    except Exception as e:
+        print(f"Error listing/deleting files: {e}")
+
+    return count
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Delete all resources for a specific user in the OMA system"
@@ -257,7 +328,16 @@ def main():
     parser.add_argument(
         "--resource-type",
         type=str,
-        choices=["all", "sessions", "agents", "environments", "vaults", "memory-stores", "skills"],
+        choices=[
+            "all",
+            "sessions",
+            "agents",
+            "environments",
+            "vaults",
+            "memory-stores",
+            "skills",
+            "files",
+        ],
         default="all",
         help="Type of resource to delete (default: all)"
     )
@@ -310,39 +390,45 @@ def main():
     
     # Delete in dependency order: sessions first, then other resources
     if args.resource_type in ["all", "sessions"]:
-        print("\n[1/6] Processing sessions...")
+        print("\n[1/7] Processing sessions...")
         count = delete_all_sessions(client, args.user_id, args.dry_run)
         print(f"Deleted {count} sessions")
         total_deleted += count
     
     if args.resource_type in ["all", "agents"]:
-        print("\n[2/6] Processing agents...")
+        print("\n[2/7] Processing agents...")
         count = delete_all_agents(client, args.user_id, args.dry_run)
         print(f"Archived and deleted {count} agents")
         total_deleted += count
     
     if args.resource_type in ["all", "environments"]:
-        print("\n[3/6] Processing environments...")
+        print("\n[3/7] Processing environments...")
         count = delete_all_environments(client, args.user_id, args.dry_run)
         print(f"Archived and deleted {count} environments")
         total_deleted += count
     
     if args.resource_type in ["all", "vaults"]:
-        print("\n[4/6] Processing vaults...")
+        print("\n[4/7] Processing vaults...")
         count = delete_all_vaults(client, args.user_id, args.dry_run)
         print(f"Archived and deleted {count} vaults")
         total_deleted += count
     
     if args.resource_type in ["all", "memory-stores"]:
-        print("\n[5/6] Processing memory stores...")
+        print("\n[5/7] Processing memory stores...")
         count = delete_all_memory_stores(client, args.user_id, args.dry_run)
         print(f"Archived and deleted {count} memory stores")
         total_deleted += count
     
     if args.resource_type in ["all", "skills"]:
-        print("\n[6/6] Processing skills...")
+        print("\n[6/7] Processing skills...")
         count = delete_all_skills(client, args.user_id, args.dry_run)
         print(f"Deleted {count} skills")
+        total_deleted += count
+
+    if args.resource_type in ["all", "files"]:
+        print("\n[7/7] Processing files...")
+        count = delete_all_files(resolved_base_url, args.dry_run)
+        print(f"Deleted {count} files")
         total_deleted += count
     
     print("\n" + "=" * 60)

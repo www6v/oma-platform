@@ -9,6 +9,8 @@ from pathlib import Path
 
 from pi_coding_agent.tools.bash import _wait_for_process
 
+from oma_adapter.sandbox_paths import rewrite_bash_session_output_paths
+
 
 @dataclass
 class OutboundBashOperations:
@@ -35,6 +37,8 @@ class OutboundBashOperations:
     ) -> int | None:
         if not Path(cwd).is_dir():
             raise FileNotFoundError(f"Working directory does not exist: {cwd}")
+
+        command = rewrite_bash_session_output_paths(command, cwd)
 
         env = os.environ.copy()
         home = self._resolve_curl_home(cwd)

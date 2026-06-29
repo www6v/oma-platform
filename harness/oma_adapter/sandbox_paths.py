@@ -56,3 +56,20 @@ def patch_path_utils(workdir: str) -> None:
         return resolve_under_sandbox_cwd(cwd_path, path)
 
     path_utils.resolve_under_cwd = resolve
+
+
+def rewrite_bash_session_output_paths(command: str, cwd: str) -> str:
+    """Rewrite /mnt/session/outputs in bash commands to the workdir mount.
+
+    piPy file tools use normalize_sandbox_path; bash subprocesses do not.
+    When the host-level /mnt/session/outputs mount is absent, redirect writes
+    to the session workdir symlink created by the platform.
+    """
+    marker = "/mnt/session/outputs"
+    if marker not in command:
+        return command
+    if root_mount_exists(marker):
+        return command
+    rel = normalize_sandbox_path(cwd, marker)
+    local = str((Path(cwd) / rel).resolve())
+    return command.replace(marker, local)

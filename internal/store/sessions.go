@@ -28,6 +28,7 @@ type Session struct {
 	AgentSnapshot       json.RawMessage
 	EnvironmentID       string
 	EnvironmentSnapshot json.RawMessage
+	Resources           json.RawMessage
 	Title               string
 	Status              SessionStatus
 	TurnID              *string
@@ -110,11 +111,11 @@ func (r *SessionRepo) Create(
 	_, err = r.db.ExecContext(ctx, `
 		INSERT INTO sessions (
 			id, tenant_id, agent_id, agent_version, agent_snapshot,
-			environment_id, environment_snapshot,
+			environment_id, environment_snapshot, resources,
 			title, status, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		id, tenantID, agent.ID, agent.Version, string(snapshot),
-		envID, string(envSnap),
+		envID, string(envSnap), "[]",
 		title, string(SessionStatusIdle), now, now,
 	)
 	if err != nil {
@@ -127,13 +128,39 @@ func (r *SessionRepo) Create(
 func (r *SessionRepo) GetByID(ctx context.Context, id string) (*Session, error) {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT id, tenant_id, agent_id, agent_version, agent_snapshot,
-			environment_id, environment_snapshot,
+			environment_id, environment_snapshot, resources,
 			title, status, turn_id, created_at, updated_at, archived_at
 		FROM sessions
 		WHERE id = ?`,
 		id,
 	)
 	return scanSession(row)
+}
+
+// SetResources replaces the persisted session-level resource specs.
+func (r *SessionRepo) SetResources(
+	ctx context.Context,
+	tenantID, sessionID string,
+	resources json.RawMessage,
+) (*Session, error) {
+	if len(resources) == 0 {
+		resources = json.RawMessage(`[]`)
+	}
+	now := time.Now().UnixMilli()
+	res, err := r.db.ExecContext(ctx, `
+		UPDATE sessions
+		SET resources = ?, updated_at = ?
+		WHERE id = ? AND tenant_id = ?`,
+		string(resources), now, sessionID, tenantOrDefault(tenantID),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("set session resources: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return nil, ErrNotFound
+	}
+	return r.Get(ctx, tenantID, sessionID)
 }
 
 // UpdateAgentSnapshot replaces the frozen agent snapshot on a session row.
@@ -166,7 +193,7 @@ func (r *SessionRepo) Get(
 ) (*Session, error) {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT id, tenant_id, agent_id, agent_version, agent_snapshot,
-			environment_id, environment_snapshot,
+			environment_id, environment_snapshot, resources,
 			title, status, turn_id, created_at, updated_at, archived_at
 		FROM sessions
 		WHERE id = ? AND tenant_id = ?`,
@@ -182,7 +209,7 @@ func (r *SessionRepo) List(
 ) ([]*Session, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, tenant_id, agent_id, agent_version, agent_snapshot,
-			environment_id, environment_snapshot,
+			environment_id, environment_snapshot, resources,
 			title, status, turn_id, created_at, updated_at, archived_at
 		FROM sessions
 		WHERE tenant_id = ?
@@ -286,13 +313,14 @@ func scanSession(row interface {
 		s            Session
 		snapshot     string
 		envSnapshot  string
+		resources    string
 		turnID       sql.NullString
 		updatedAt    sql.NullInt64
 		archivedAt   sql.NullInt64
 	)
 	if err := row.Scan(
 		&s.ID, &s.TenantID, &s.AgentID, &s.AgentVersion, &snapshot,
-		&s.EnvironmentID, &envSnapshot,
+		&s.EnvironmentID, &envSnapshot, &resources,
 		&s.Title, &s.Status, &turnID, &s.CreatedAt, &updatedAt, &archivedAt,
 	); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -302,6 +330,11 @@ func scanSession(row interface {
 	}
 	s.AgentSnapshot = json.RawMessage(snapshot)
 	s.EnvironmentSnapshot = json.RawMessage(envSnapshot)
+	if resources == "" {
+		s.Resources = json.RawMessage(`[]`)
+	} else {
+		s.Resources = json.RawMessage(resources)
+	}
 	if turnID.Valid {
 		v := turnID.String
 		s.TurnID = &v

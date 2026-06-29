@@ -49,7 +49,7 @@ func TestResourceResolverFileAndEnv(t *testing.T) {
 			},
 		},
 	})
-	got, err := resolver.ResolveForTurn(ctx, "default", envSnap)
+	got, err := resolver.ResolveForTurn(ctx, "default", envSnap, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

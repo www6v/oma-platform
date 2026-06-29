@@ -81,6 +81,17 @@ func mountSessionOutputs(
 		return fmt.Errorf("symlink %s: %w", rootAlias, err)
 	}
 
+	// Bash and some agents write to mnt/session/outputs (no leading dot)
+	// when the host-level /mnt/session mount is absent.
+	mntSessionDir := filepath.Join(workdir, "mnt", "session")
+	if err := os.MkdirAll(mntSessionDir, 0o755); err != nil {
+		return fmt.Errorf("mkdir mnt/session: %w", err)
+	}
+	mntOutputsLink := filepath.Join(mntSessionDir, "outputs")
+	if err := replaceSymlink(mntOutputsLink, absTarget); err != nil {
+		return fmt.Errorf("symlink %s: %w", mntOutputsLink, err)
+	}
+
 	tryRootSessionOutputsMount(absTarget)
 	return nil
 }

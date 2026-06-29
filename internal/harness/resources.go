@@ -17,14 +17,16 @@ type ResourceResolver struct {
 	MemoryStores *store.MemoryStoreRepo
 }
 
-// ResolveForTurn returns harness-ready resource payloads from an environment
-// snapshot. Best-effort: individual resource failures are skipped.
+// ResolveForTurn returns harness-ready resource payloads from environment
+// and session resource specs. Session specs override env specs on conflict.
+// Best-effort: individual resource failures are skipped.
 func (r *ResourceResolver) ResolveForTurn(
 	ctx context.Context,
 	tenantID string,
 	envSnapshot json.RawMessage,
+	sessionResources json.RawMessage,
 ) ([]json.RawMessage, error) {
-	specs := parseResourceSpecs(envSnapshot)
+	specs := mergeResourceSpecs(envSnapshot, sessionResources)
 	if len(specs) == 0 || r == nil {
 		return nil, nil
 	}
@@ -65,7 +67,8 @@ func parseResourceSpecs(envSnapshot json.RawMessage) []map[string]any {
 	return coerceResourceMaps(raw)
 }
 
-func coerceResourceMaps(items []any) []map[string]any {
+// CoerceResourceMaps converts []any to []map[string]any.
+func CoerceResourceMaps(items []any) []map[string]any {
 	out := make([]map[string]any, 0, len(items))
 	for _, item := range items {
 		m, ok := item.(map[string]any)

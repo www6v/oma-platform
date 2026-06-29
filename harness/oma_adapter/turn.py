@@ -38,7 +38,7 @@ from oma_adapter.outbound.setup import (
     normalize_outbound_proxy_addr,
     setup_outbound_proxy_for_turn,
 )
-from oma_adapter.resource_mounter import mount_resources
+from oma_adapter.resource_mounter import ensure_session_output_mounts, mount_resources
 from oma_adapter.mcp.runtime import McpRuntime, clear_mcp_runtime, configure_mcp_runtime
 from oma_adapter.mcp.setup import (
     discover_mcp_tools,
@@ -338,6 +338,7 @@ async def _run_turn_core(
 
     workdir = _resolve_turn_workdir(workdir)
     patch_path_utils(workdir)
+    ensure_session_output_mounts(workdir)
     saved_env = mount_resources(workdir, resources)
 
     outbound_host = normalize_outbound_proxy_addr(outbound_proxy_addr)

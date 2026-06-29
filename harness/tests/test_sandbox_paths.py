@@ -17,6 +17,16 @@ def test_normalize_workspace_strips_prefix() -> None:
     assert normalize_sandbox_path("/tmp", "/workspace/foo.txt") == "foo.txt"
 
 
+def test_rewrite_bash_session_output_paths() -> None:
+    from oma_adapter.sandbox_paths import rewrite_bash_session_output_paths
+
+    wd = "/tmp/sandbox/sess1"
+    cmd = "python -c \"open('/mnt/session/outputs/report.html','w').write('x')\""
+    rewritten = rewrite_bash_session_output_paths(cmd, wd)
+    assert "/mnt/session/outputs" not in rewritten
+    assert ".mnt/session/outputs" in rewritten
+
+
 def test_resolve_under_sandbox_cwd_writes_under_outputs(tmp_path: Path) -> None:
     workdir = tmp_path / "sess"
     outputs = workdir / ".mnt" / "session" / "outputs"

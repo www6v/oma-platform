@@ -31,6 +31,7 @@ type createSessionRequest struct {
 	Title         string          `json:"title"`
 	EnvironmentID string          `json:"environment_id"`
 	Environment   string          `json:"environment"`
+	Resources     json.RawMessage `json:"resources"`
 }
 
 type appendEventsRequest struct {
@@ -131,6 +132,13 @@ func mountSessionRoutes(
 			writeError(w, http.StatusConflict, "agent archived")
 			return
 		}
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		sess, err = h.applySessionResources(
+			req.Context(), tenantID(req), sess, body.Resources,
+		)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return

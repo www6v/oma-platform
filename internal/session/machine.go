@@ -167,7 +167,7 @@ func (m *Machine) RunTurn(ctx context.Context, threadID string) error {
 	var resources []json.RawMessage
 	if m.Resources != nil {
 		resolved, resErr := m.Resources.ResolveForTurn(
-			ctx, m.TenantID, envSnap,
+			ctx, m.TenantID, envSnap, sess.Resources,
 		)
 		if resErr == nil {
 			resources = resolved
@@ -229,6 +229,14 @@ func (m *Machine) RunTurn(ctx context.Context, threadID string) error {
 			return m.publishEvents(ctx, []json.RawMessage{ev})
 		},
 	)
+	if m.Workdirs != nil {
+		if syncErr := m.Workdirs.SyncSessionOutputs(
+			workdirPath, m.TenantID, m.SessionID,
+		); syncErr != nil {
+			// Best-effort: output sync must not fail the turn.
+			_ = syncErr
+		}
+	}
 	if streamErr != nil {
 		if errors.Is(streamErr, context.Canceled) {
 			return m.finishInterruptedTurn(ctx, turnID)

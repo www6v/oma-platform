@@ -1,6 +1,6 @@
 # OMA Platform Python SDK — Engineering Review & Implementation Plan
 
-> **Status (2026-06-28):** SDK scaffold shipped under `sdk/`. Managed-agents resources route through `anthropic>=0.111.0` with `base_url`; OMA-only resources use `httpx` wrappers. E2E tests cover agents, sessions, environments, memory_stores, vaults, skills, files, misc, subagents.
+> **Status (2026-06-28):** SDK implemented in this directory. Managed-agents resources route through `anthropic>=0.111.0` with `base_url`; OMA-only resources use `httpx` wrappers. E2E tests cover agents, sessions, environments, memory_stores, vaults, skills, files, misc, subagents.
 
 ---
 
@@ -20,12 +20,12 @@
 
 | Component | Location | Notes |
 |---|---|---|
-| Go HTTP server | `oma-platform/cmd/oma-server/main.go` | Listens `:8787`, chi router, SQLite |
-| Core API handlers | `internal/api/*.go` | agents, sessions, environments, memory_stores, vaults, skills, dreams, evals, runtimes, integrations, model_cards, files |
-| `/v1/oma/*` aliases | `internal/api/oma_aliases.go` | Mirrors select routes under alternate namespace |
-| Python SDK | `sdk/oma_sdk/` | `OMAClient` + resource classes + `oma_sdk/api/*` examples |
-| SDK tests | `sdk/tests/` | pytest + pytest-asyncio, live E2E against running server |
-| Python harness sidecar | `harness/` | uv project, fastapi, httpx |
+| Go HTTP server | `../cmd/oma-server/main.go` | Listens `:8787`, chi router, SQLite |
+| Core API handlers | `../internal/api/*.go` | agents, sessions, environments, memory_stores, vaults, skills, dreams, evals, runtimes, integrations, model_cards, files |
+| `/v1/oma/*` aliases | `../internal/api/oma_aliases.go` | Mirrors select routes under alternate namespace |
+| Python SDK | `oma_sdk/` | `OMAClient` + resource classes + `oma_sdk/api/*` examples |
+| SDK tests | `tests/` | pytest + pytest-asyncio, live E2E against running server |
+| Python harness sidecar | `../harness/` | uv project, fastapi, httpx |
 | anthropic Python SDK | system pip | **0.111.0** — full `beta.*` managed-agents namespace |
 
 ---
@@ -52,7 +52,7 @@ All `client.beta.{agents,sessions,environments,memory_stores,vaults,skills}` cal
 
 ## Anthropic SDK ↔ OMA Platform Gap Analysis
 
-**Reference:** anthropic Python SDK **0.111.0** (`client.beta.*`) vs oma-platform routes in `internal/api/router.go`.
+**Reference:** anthropic Python SDK **0.111.0** (`client.beta.*`) vs oma-platform routes in `../internal/api/router.go`.
 
 **Legend**
 
@@ -237,7 +237,7 @@ These resources exist in **both** anthropic SDK and oma-platform, but OMA SDK de
 
 **SDK binding:** `OMAClient.files` → `oma_sdk/resources/files.py` (httpx), not `client.beta.files`.
 
-**Why httpx:** OMA accepts dual upload modes (multipart + base64 JSON) and ties into session outputs; tests live in `test_files.py`.
+**Why httpx:** OMA accepts dual upload modes (multipart + base64 JSON) and ties into session outputs; tests live in `tests/test_files.py`.
 
 #### 3.2 `beta.models` vs OMA `/v1/models`
 
@@ -267,19 +267,19 @@ These resources exist in **both** anthropic SDK and oma-platform, but OMA SDK de
 | Route group | Key endpoints | SDK access | Test file |
 |---|---|---|---|
 | `/v1/dreams` | POST, GET, GET/{id}, POST/{id}/cancel, POST/{id}/archive | `client.dreams` | via misc / examples |
-| `/v1/evals/runs` | POST /runs, GET /runs, GET/DELETE /runs/{id} | `client.evals` | `test_misc.py` |
-| `/v1/runtimes` | POST /connect-runtime, GET, DELETE/{id} | `client.runtimes` | `test_misc.py` |
-| `/v1/integrations/{provider}/*` | publications, installations, dispatch-rules | `client.integrations` | `test_misc.py` |
-| `/v1/model_cards` | CRUD | `client.model_cards` | `test_misc.py` |
-| `/v1/cost_report` | GET / | `client.cost_report` | `test_misc.py` |
-| `/v1/me` | GET /, GET /tenants, POST /cli-tokens | `client.me` | `test_misc.py` |
-| `/v1/api_keys` | POST, GET, DELETE/{id} | `client.api_keys` | `test_misc.py` |
+| `/v1/evals/runs` | POST /runs, GET /runs, GET/DELETE /runs/{id} | `client.evals` | `tests/test_misc.py` |
+| `/v1/runtimes` | POST /connect-runtime, GET, DELETE/{id} | `client.runtimes` | `tests/test_misc.py` |
+| `/v1/integrations/{provider}/*` | publications, installations, dispatch-rules | `client.integrations` | `tests/test_misc.py` |
+| `/v1/model_cards` | CRUD | `client.model_cards` | `tests/test_misc.py` |
+| `/v1/cost_report` | GET / | `client.cost_report` | `tests/test_misc.py` |
+| `/v1/me` | GET /, GET /tenants, POST /cli-tokens | `client.me` | `tests/test_misc.py` |
+| `/v1/api_keys` | POST, GET, DELETE/{id} | `client.api_keys` | `tests/test_misc.py` |
 | `/v1/stats` | GET / | — | console |
 | `/v1/tenants` | POST / | via me | — |
 | `/v1/oauth/*` | authorize, callback, refresh | — | vault OAuth |
 | `/v1/clawhub/*` | search, install | — | skill marketplace |
-| `/v1/sessions/{id}/teams/*` | teams, messages, tasks, shutdown | `oma_sdk/subagent.py` | `test_subagents.py` |
-| `/v1/sessions/{id}/trajectory` | GET | subagent helpers | `test_subagents.py` |
+| `/v1/sessions/{id}/teams/*` | teams, messages, tasks, shutdown | `oma_sdk/subagent.py` | `tests/test_subagents.py` |
+| `/v1/sessions/{id}/trajectory` | GET | subagent helpers | `tests/test_subagents.py` |
 | `/v1/sessions/{id}/pending` | GET | — | harness polling |
 | `/v1/sessions/{id}/outputs/*` | list, download | — | session artifacts |
 | `/v1/oma/*` | aliases for api_keys, me, evals, … | same httpx paths | — |
@@ -329,10 +329,10 @@ These resources exist in **both** anthropic SDK and oma-platform, but OMA SDK de
 ### Done
 
 - [x] **T1** `POST /v1/sessions/{id}/messages` — `sessions.go:236`
-- [x] **T2** `sdk/pyproject.toml` — uv project, anthropic>=0.111.0
-- [x] **T3** `sdk/oma_sdk/__init__.py` — `OMAClient`
-- [x] **T4** `sdk/oma_sdk/resources/*` — OMA-only resource classes
-- [x] **T5** `sdk/tests/conftest.py` — fixtures
+- [x] **T2** `pyproject.toml` — uv project, anthropic>=0.111.0
+- [x] **T3** `oma_sdk/__init__.py` — `OMAClient`
+- [x] **T4** `oma_sdk/resources/*` — OMA-only resource classes
+- [x] **T5** `tests/conftest.py` — fixtures
 - [x] **T6–T11** E2E tests — agents, sessions, environments, memory_stores, vaults, skills
 - [x] **T12–T14** E2E tests — files, misc, subagents
 - [x] **Examples** — `oma_sdk/api/*`, `example/data_analyst_agent.py`

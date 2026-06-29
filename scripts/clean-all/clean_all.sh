@@ -1,10 +1,13 @@
 #!/bin/bash
 # Script to clean all user resources using the OMA SDK
 # This script calls clean_user_resources.py to delete agents, sessions,
-# environments, vaults, memory stores, and skills.
+# environments, vaults, memory stores, skills, and files (/v1/files).
 #
 # Agent deletion uses AgentExamples.cleanup_agent (archive + DELETE /v1/agents/:id).
-# Shortcut: ./clean_all.sh --agents-only [--localhost|--remote URL]
+# File deletion uses GET/DELETE /v1/files (console: http://localhost:8787/files).
+# Shortcuts:
+#   ./clean_all.sh --agents-only [--localhost|--remote URL]
+#   ./clean_all.sh --files-only [--localhost|--remote URL]
 
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -36,6 +39,9 @@ for arg in "$@"; do
         --agents-only--*)
             NORMALIZED+=("--agents-only" "--${arg#--agents-only--}")
             ;;
+        --files-only--*)
+            NORMALIZED+=("--files-only" "--${arg#--files-only--}")
+            ;;
         *)
             NORMALIZED+=("$arg")
             ;;
@@ -60,6 +66,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --agents-only)
             ARGS+=("--resource-type" "agents")
+            shift
+            ;;
+        --files-only)
+            ARGS+=("--resource-type" "files")
             shift
             ;;
         *)
