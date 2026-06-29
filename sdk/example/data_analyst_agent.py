@@ -2,20 +2,20 @@
 """
 Build a data analyst agent with OMA Managed Agents.
 
-Mirrors the Anthropic cookbook ``managed_agents/data_analyst_agent.ipynb``:
+Mirrors Anthropic cookbook ``managed_agents/data_analyst_agent.ipynb``:
 upload a CSV, mount it on the session, drive a managed agent turn, and
 download ``report.html`` via the Files API.
 
-Flow (cookbook §1–7)
---------------------
-1. Create a reusable environment (pandas + plotly in config).
-2. Create an agent with the analyst system prompt and toolset.
-3. Upload ``sales_data.csv`` via the Files API.
-4. Create a session with ``resources=[{file_id, mount_path}]``.
-5. Send the analysis task as a ``user.message`` event.
-6. Tail the event stream until ``session.status_idle``.
-7. Download ``report.html`` with ``files.list(scope_id=session.id)``.
-8. Archive the session (keep agent + environment for reuse).
+Cookbook section → OMA function mapping
+---------------------------------------
+Cell 2   Setup              → OMAClient, OMA_BASE_URL, OMA_API_KEY
+§1 Cell 4  Environment      → client.environments.create
+§2 Cell 6  Agent            → client.agents.create + ANALYST_SYSTEM_PROMPT
+§3 Cell 8  Upload dataset   → upload_dataset() → client.files.upload
+§4 Cell 10 Session + task   → client.sessions.create + events.send
+§5 Cell 12 Stream run       → wait_for_idle() → client.events.stream
+§6 Cell 14 Download report  → download_report() → files.list + download
+§7 Cell 16 Clean up         → client.sessions.archive
 
 This script is a **parity probe**: if a step fails, it usually indicates a
 platform gap rather than a missing workaround in the example.
@@ -48,23 +48,38 @@ from oma_sdk import OMAClient
 from oma_sdk.api.agents import MODEL as DEFAULT_MODEL
 
 # ---------------------------------------------------------------------------
-# Configuration
+# Cookbook mapping: notebook Cell 2 (setup)
 # ---------------------------------------------------------------------------
+# Cookbook:
+#   from anthropic import Anthropic
+#   load_dotenv(); client = Anthropic()
+#   MODEL = "claude-sonnet-4-6"
+# OMA equivalent:
+#   OMAClient(base_url=...) — same REST surface, routed to your OMA server.
+#   OMA_API_KEY replaces ANTHROPIC_API_KEY; OMA_BASE_URL points at local/prod.
 OMA_BASE_URL = os.getenv("OMA_BASE_URL", "http://127.0.0.1:8787")
 os.environ.setdefault("OMA_API_KEY", "dev-key")
 
+# Cookbook reuses these names across runs; fixed names here match the notebook.
 ENV_NAME = "cookbook-data-analyst-env"
 AGENT_NAME = "cookbook-data-analyst"
 SESSION_TITLE = "Sales analysis"
 MODEL = os.getenv("OMA_MODEL", DEFAULT_MODEL["id"])
+# OMA-only: cookbook has no explicit stream/turn timeout.
 TIMEOUT_SEC = int(os.getenv("OMA_DEMO_TIMEOUT_SEC", "900"))
 STREAM_READ_TIMEOUT = float(os.getenv("OMA_STREAM_READ_TIMEOUT_SEC", "90"))
 
+# Cookbook Cell 8: DATA_PATH = Path("example_data/.../sales_data.csv")
 SCRIPT_DIR = Path(__file__).resolve().parent
 CSV_PATH = SCRIPT_DIR / "sales_data.csv"
 REPORT_PATH = SCRIPT_DIR / "report.html"
+# Cookbook Cell 10: MOUNT_PATH = f"/mnt/session/uploads/{DATA_PATH.name}"
 MOUNT_PATH = f"/mnt/session/uploads/{CSV_PATH.name}"
 
+# ---------------------------------------------------------------------------
+# Cookbook mapping: notebook Cell 6 (§2 Create the agent)
+# ---------------------------------------------------------------------------
+# System prompt is byte-for-byte identical to the cookbook.
 ANALYST_SYSTEM_PROMPT = """\
 You are a senior data analyst producing a publication-quality report.
 
@@ -90,9 +105,12 @@ with inline CSS, 3+ embedded plotly charts, and a closing section of
 actionable recommendations. Confirm "Saved: report.html" when done.
 """
 
+# Cookbook Cell 6: agent_toolset_20260401 — bash/read/write/edit/glob/grep +
+# web_fetch/web_search. Offline analysis disables the two web tools.
 TOOLS = [
     {
         "type": "agent_toolset_20260401",
+        # default_config applies to every tool; configs[] overrides per tool.
         "default_config": {
             "enabled": True,
             "permission_policy": {"type": "always_allow"},
@@ -106,7 +124,10 @@ TOOLS = [
 
 
 def _load_dotenv() -> None:
-    """Load oma-platform/.env when present."""
+    """Load oma-platform/.env when present.
+
+    Cookbook Cell 2 uses python-dotenv; we read the same keys without a dep.
+    """
     dotenv = Path(__file__).resolve().parents[2] / ".env"
     if not dotenv.exists():
         return
@@ -119,6 +140,7 @@ def _load_dotenv() -> None:
 
 
 def _message_text(event_data: dict) -> str:
+    """Extract text blocks from a user/agent message event payload."""
     parts: list[str] = []
     content = event_data.get("content")
     if isinstance(content, str):
@@ -148,6 +170,7 @@ def _event_payload(ev: dict) -> dict:
 
 
 def _print_progress(ev: dict) -> None:
+    """Cookbook Cell 12: print agent.message previews and tool_use names."""
     event_type = _event_type(ev)
     if not event_type:
         return
@@ -168,7 +191,19 @@ def _print_progress(ev: dict) -> None:
 
 
 async def wait_for_idle(client: OMAClient, session_id: str) -> None:
-    """Tail SSE until ``session.status_idle`` (cookbook ``events.stream``)."""
+    """Tail SSE until ``session.status_idle``.
+
+    Cookbook Cell 12 (§5 Stream the run):
+        for ev in client.beta.sessions.events.stream(session_id):
+            ...
+            elif t == "session.status_idle": return
+
+    OMA differences:
+    - async iterator via ``client.events.stream`` (not beta.sessions.events)
+    - ``replay=True`` replays events already emitted before subscribe
+    - overall ``TIMEOUT_SEC`` + per-read ``STREAM_READ_TIMEOUT``
+    - fallback GET /v1/sessions/{id} when stream closes without idle event
+  """
     deadline = time.time() + TIMEOUT_SEC
 
     async def consume_stream() -> None:
@@ -202,6 +237,14 @@ async def wait_for_idle(client: OMAClient, session_id: str) -> None:
 
 
 async def upload_dataset(client: OMAClient, path: Path) -> dict:
+    """Cookbook Cell 8 (§3 Upload the dataset).
+
+    Cookbook:
+        dataset = client.beta.files.upload(
+            file=(DATA_PATH.name, f, "text/csv"))
+    OMA:
+        client.files.upload(..., downloadable=True) — no beta prefix/header.
+    """
     payload = path.read_bytes()
     return await client.files.upload(
         file=(path.name, io.BytesIO(payload), "text/csv"),
@@ -214,6 +257,24 @@ async def download_report(
     session_id: str,
     dest: Path,
 ) -> None:
+    """Cookbook Cell 14 (§6 Retrieve the report).
+
+    Cookbook:
+        outputs = client.beta.files.list(
+            scope_id=session.id,
+            betas=["managed-agents-2026-04-01"],
+        )
+        report = next(f for f in outputs.data if f.filename == "report.html")
+        content = client.beta.files.download(report.id)
+
+    OMA:
+        client.files.list(scope_id=...) — no managed-agents beta header.
+        Anything under /mnt/session/outputs/ should appear here; the mounted
+        input CSV may also be listed (same as cookbook output).
+
+    OMA_DEV_FALLBACK reads the sandbox disk when Files API scope listing is
+    empty — dev-only escape hatch, not in the cookbook.
+    """
     outputs = await client.files.list(scope_id=session_id)
     files = outputs.get("data") or []
     for item in files:
@@ -283,7 +344,15 @@ async def main() -> None:
     client = OMAClient(base_url=OMA_BASE_URL)
 
     try:
-        # 1. Environment — packages only (CSV mounts on the session).
+        # ------------------------------------------------------------------
+        # §1 Create an environment — Cookbook Cell 4
+        # ------------------------------------------------------------------
+        # Reusable container spec: pandas + plotly preinstalled so the agent
+        # can analyze immediately. ``unrestricted`` networking lets plotly load
+        # from CDN; use a host allowlist in production.
+        #
+        # Cookbook config.packages includes ``"type": "packages"``; OMA accepts
+        # the pip list directly under packages.
         env = client.environments.create(
             name=ENV_NAME,
             config={
@@ -296,7 +365,11 @@ async def main() -> None:
         )
         print(f"Created environment: {env.id}")
 
-        # 2. Agent — model + system prompt + offline toolset.
+        # ------------------------------------------------------------------
+        # §2 Create the agent — Cookbook Cell 6
+        # ------------------------------------------------------------------
+        # Cookbook: client.beta.agents.create(model=MODEL, ...)
+        # OMA: model is a dict {"id": ...}; system prompt + tools match.
         agent = client.agents.create(
             name=AGENT_NAME,
             model={"id": MODEL},
@@ -305,14 +378,23 @@ async def main() -> None:
         )
         print(f"Created agent: id={agent.id}  version={agent.version}")
 
-        # 3. Upload dataset via Files API (cookbook ``beta.files.upload``).
+        # ------------------------------------------------------------------
+        # §3 Upload the dataset — Cookbook Cell 8
+        # ------------------------------------------------------------------
+        # 50-row sample CSV; swap in any CSV and the rest of the flow is the
+        # same. File is uploaded once; mounted per-session in the next step.
         dataset = await upload_dataset(client, CSV_PATH)
         print(
             f"Uploaded {CSV_PATH.name} ({dataset['size_bytes']} bytes) "
             f"as {dataset['id']}"
         )
 
-        # 4. Session — mount CSV via session.resources[].
+        # ------------------------------------------------------------------
+        # §4 Create a session and send the task — Cookbook Cell 10
+        # ------------------------------------------------------------------
+        # Session binds agent + environment + mounted files. ``resources``
+        # places the uploaded CSV at an absolute path inside the container.
+        # After create, a ``user.message`` event starts the agent immediately.
         session = client.sessions.create(
             environment_id=env.id,
             agent={"type": "agent", "id": agent.id, "version": agent.version},
@@ -326,6 +408,7 @@ async def main() -> None:
             ],
         )
         print(f"Created session: {session.id}")
+        # Parity probe: cookbook assumes resources round-trip on the session.
         resources = getattr(session, "resources", None) or []
         if not resources:
             raise RuntimeError(
@@ -333,7 +416,7 @@ async def main() -> None:
             )
         print(f"Session resources: {resources}")
 
-        # 5. Send analysis task.
+        # Cookbook ANALYSIS_PROMPT — identical wording.
         analysis_prompt = f"""\
 Analyze the e-commerce orders in {MOUNT_PATH}.
 
@@ -343,6 +426,7 @@ order_date, region.
 Focus on revenue by category and region, repeat-customer behavior, and
 one surprising pattern. Produce report.html per your system instructions.
 """
+        # Cookbook: client.beta.sessions.events.send(session.id, events=[...])
         client.sessions.events.send(
             session.id,
             events=[
@@ -354,17 +438,31 @@ one surprising pattern. Produce report.html per your system instructions.
         )
         print(f"Session {session.id} running")
 
-        # 6. Stream until idle.
+        # ------------------------------------------------------------------
+        # §5 Stream the run — Cookbook Cell 12
+        # ------------------------------------------------------------------
+        # Tail the event stream until session.status_idle. Console UI shows the
+        # same events live; this helper prints a lightweight CLI trace.
         await wait_for_idle(client, session.id)
 
-        # 7. Download report.html via Files API.
+        # ------------------------------------------------------------------
+        # §6 Retrieve the report — Cookbook Cell 14
+        # ------------------------------------------------------------------
+        # Agent writes to /mnt/session/outputs/report.html; persisted files are
+        # listed via Files API with scope_id=<session_id>.
         await download_report(client, session.id, REPORT_PATH)
 
         console = OMA_BASE_URL.rstrip("/")
         print(f"\nConsole session: {console}/sessions/{session.id}")
         print(f"Open report: {REPORT_PATH}")
 
-        # 8. Archive session; keep agent + environment for reuse.
+        # ------------------------------------------------------------------
+        # §7 Clean up — Cookbook Cell 16
+        # ------------------------------------------------------------------
+        # Cookbook archives the session and saves agent/env IDs to .env for
+        # slack_data_bot.ipynb. OMA archives only; set OMA_KEEP_RESOURCES=1 to
+        # skip archive during local debugging. Agent + environment are reusable
+        # across future sessions (create a new session per conversation).
         if os.getenv("OMA_KEEP_RESOURCES", "0") != "1":
             try:
                 client.sessions.archive(session.id)
