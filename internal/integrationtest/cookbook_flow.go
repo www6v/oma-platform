@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -326,6 +327,51 @@ func fileIDByName(t *testing.T, files []map[string]any, name string) string {
 	}
 	t.Fatalf("file id for %q not found", name)
 	return ""
+}
+
+// sessionOutputFileIDByName returns the Files API id for an agent-written
+// output (id prefix "out:"). Scoped uploads can share the same filename.
+func sessionOutputFileIDByName(
+	t *testing.T,
+	files []map[string]any,
+	name string,
+) string {
+	t.Helper()
+	for _, row := range files {
+		if row["filename"] != name {
+			continue
+		}
+		id, _ := row["id"].(string)
+		if strings.HasPrefix(id, "out:") {
+			return id
+		}
+	}
+	t.Fatalf("session output id for %q not found", name)
+	return ""
+}
+
+func assertSessionOutputListed(
+	t *testing.T,
+	files []map[string]any,
+	filename, label string,
+) {
+	t.Helper()
+	for _, row := range files {
+		if row["filename"] != filename {
+			continue
+		}
+		id, _ := row["id"].(string)
+		if strings.HasPrefix(id, "out:") {
+			return
+		}
+	}
+	names := make([]string, 0, len(files))
+	for _, row := range files {
+		n, _ := row["filename"].(string)
+		id, _ := row["id"].(string)
+		names = append(names, n+"("+id+")")
+	}
+	t.Fatalf("%s %q not listed as session output, got %v", label, filename, names)
 }
 
 func downloadFileContent(

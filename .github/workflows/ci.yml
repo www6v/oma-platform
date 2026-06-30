@@ -25,6 +25,9 @@ jobs:
       - name: Data analyst cookbook (Go server parity §3–6)
         run: go test ./internal/api/ ./test/integration/ -run TestDataAnalystCookbook -count=1 -v
 
+      - name: Iterate cookbook MT1 (multi-turn same session)
+        run: go test ./internal/api/ ./test/integration/ -run TestIterateCookbookMultiTurn -count=1 -v
+
       - name: Crash recovery (SIGKILL → restart, ported from main-node)
         run: go test ./internal/api/ -run TestCrashRecovery -count=1 -v
 

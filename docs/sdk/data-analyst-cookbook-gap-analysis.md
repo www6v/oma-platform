@@ -6,7 +6,7 @@
 >
 > **对比文件：**
 > - Cookbook: `harness/claude-cookbooks-main/managed_agents/data_analyst_agent.ipynb`
-> - OMA 示例: `oma-platform/sdk/example/data_analyst_agent.py`
+> - OMA 示例: `oma-platform/sdk/example/example1/data_analyst_agent.py`
 >
 > **P0 范围（已确认）：** session.resources 挂载 + report.html→Files API + 示例去 workaround
 
@@ -175,7 +175,7 @@ Cookbook 依赖预装 pandas/plotly。OMA 存 config，harness **无 pip install
 
 `data_analyst_agent.py` 混了 parity demo、本地 fallback、错误处理。建议拆分：
 
-- `example/data_analyst_agent.py` — cookbook 1:1（失败即暴露 gap）
+- `example/example1/data_analyst_agent.py` — cookbook 1:1（失败即暴露 gap）
 - `oma_sdk/api/data_analyst.py` — `DataAnalystExamples.run_cookbook_flow()` 供 E2E 调用
 
 ### 2B — SDK-PLAN 与 Go 实现漂移 [P2] (confidence: 9/10)
@@ -258,7 +258,7 @@ Lane C (tests, after T3+T5):
 | **T2** | P0 | `ResolveForTurn` 合并 session + env resources | `internal/harness/resources.go`, `machine.go` | ✅ | harness mount tests |
 | **T3** | P0 | 统一 outputs 路径 + turn 后 sync | `sandbox_paths.py`, `resource_mounter.py`, `machine.go` post-turn | ✅ | `workdir/sync_test.go`, `session_outputs_api_test.go` |
 | **T4** | P0 | Go integration test 复刻 cookbook §3–6 | `test/integration/data_analyst_cookbook_test.go`, `internal/integrationtest/` | ✅ | CI `TestDataAnalystCookbook` |
-| **T5** | P0 | 重写 `data_analyst_agent.py` 为 cookbook 1:1 | `sdk/example/data_analyst_agent.py` | ✅ | 零 fallback 跑通（`OMA_DEV_FALLBACK` 默认 off） |
+| **T5** | P0 | 重写 `data_analyst_agent.py` 为 cookbook 1:1 | `sdk/example/example1/data_analyst_agent.py` | ✅ | 零 fallback 跑通（`OMA_DEV_FALLBACK` 默认 off） |
 | **T6** | P1 | `DataAnalystExamples` helper + E2E | `oma_sdk/api/data_analyst.py`, `tests/test_data_analyst.py` | ⏸️ deferred | — |
 | **T7** | P1 | 更新 SDK-PLAN gap 状态 | `sdk/SDK-PLAN.md` | ✅ | doc review |
 
@@ -335,7 +335,7 @@ P2 — 完整 Managed Agents parity
 |----|--------|----------|
 | Step 0 Scope | Accepted A — P0 三件套 | ✅ **已交付** — session resources、outputs→Files API、示例去 workaround |
 | Architecture | 4 issues（S1/O1 为 P0 blocker） | ✅ **S1/O1 已关闭**（T1–T3）；E1 本地 packages、cloud runtime 仍 open |
-| Code Quality | 2 issues（示例拆分、PLAN 漂移） | ✅ 示例为 parity probe（T5）；workaround 保留在 `example/v1/`；SDK-PLAN 已同步（T7）；T6 helper **deferred** |
+| Code Quality | 2 issues（示例拆分、PLAN 漂移） | ✅ 示例为 parity probe（T5）；workaround 保留在 `example/example1/v1/`；SDK-PLAN 已同步（T7）；T6 helper **deferred** |
 | Test Review | 7 gaps，Go-server cookbook 0% | ✅ **Go E2E 覆盖 §3–6**（T4，CI green）；`session_resources_api_test.go`；SDK pytest E2E（T6）未做 |
 | Performance | turn 超时 300s | ⚠️ **仍依赖 env var**（`HARNESS_TURN_TIMEOUT_SEC`，本地可设 900）；API 化未做 |
 | NOT in scope | cloud runtime, work.*, beta header | 不变 |

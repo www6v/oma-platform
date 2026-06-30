@@ -60,7 +60,7 @@ SESSION_TITLE = "Sales data analysis"
 
 # Path to the sample CSV shipped with the SDK examples.
 SCRIPT_DIR = Path(__file__).resolve().parent
-CSV_PATH = SCRIPT_DIR / "sales_data.csv"
+CSV_PATH = SCRIPT_DIR.parent / "sales_data.csv"
 
 print(f"OMA base URL : {OMA_BASE_URL}")
 print(f"CSV file     : {CSV_PATH}  (exists: {CSV_PATH.exists()})")

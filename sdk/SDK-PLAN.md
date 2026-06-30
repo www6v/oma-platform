@@ -1,6 +1,6 @@
 # OMA Platform Python SDK — Engineering Review & Implementation Plan
 
-> **Status (2026-06-29):** SDK implemented in this directory. Managed-agents resources route through `anthropic>=0.111.0` with `base_url`; OMA-only resources use `httpx` wrappers. E2E tests cover agents, sessions, environments, memory_stores, vaults, skills, files, misc, subagents. **Cookbook parity (data analyst):** P0 closed — session create `resources[]`, turn mount, outputs→Files API, Go integration test, and `example/data_analyst_agent.py` parity probe (see [gap analysis](../docs/sdk/data-analyst-cookbook-gap-analysis.md)).
+> **Status (2026-06-30):** SDK implemented in this directory. Managed-agents resources route through `anthropic>=0.111.0` with `base_url`; OMA-only resources use `httpx` wrappers. E2E tests cover agents, sessions, environments, memory_stores, vaults, skills, files, misc, subagents. **Cookbook parity (data analyst):** P0 closed — session create `resources[]`, turn mount, outputs→Files API, Go integration test, and `example/example1/data_analyst_agent.py` parity probe (see [gap analysis](../docs/sdk/data-analyst-cookbook-gap-analysis.md)). **Cookbook parity (iterate):** parity probe added at `example/example2/iterate_fix_failing_tests.py` (from `CMA_iterate_fix_failing_tests.ipynb`); gaps below.
 
 ---
 
@@ -237,7 +237,7 @@ These resources exist in **both** anthropic SDK and oma-platform, but OMA SDK de
 
 **SDK binding:** `OMAClient.files` → `oma_sdk/resources/files.py` (httpx), not `client.beta.files`.
 
-**Why httpx:** OMA accepts dual upload modes (multipart + base64 JSON), ties into session outputs via `scope_id`, and supports session-scoped file copies from `sessions.create(resources=[])`. Tests: `tests/test_files.py`; cookbook probe: `example/data_analyst_agent.py`.
+**Why httpx:** OMA accepts dual upload modes (multipart + base64 JSON), ties into session outputs via `scope_id`, and supports session-scoped file copies from `sessions.create(resources=[])`. Tests: `tests/test_files.py`; cookbook probe: `example/example1/data_analyst_agent.py`.
 
 #### 3.2 `beta.models` vs OMA `/v1/models`
 
@@ -336,11 +336,11 @@ These resources exist in **both** anthropic SDK and oma-platform, but OMA SDK de
 - [x] **T5** `tests/conftest.py` — fixtures
 - [x] **T6–T11** E2E tests — agents, sessions, environments, memory_stores, vaults, skills
 - [x] **T12–T14** E2E tests — files, misc, subagents
-- [x] **Examples** — `oma_sdk/api/*`, `example/data_analyst_agent.py` (cookbook parity probe)
+- [x] **Examples** — `oma_sdk/api/*`, `example/example1/data_analyst_agent.py` (cookbook parity probe)
 
 ### Cookbook parity — data analyst (2026-06)
 
-Reference: Anthropic `managed_agents/data_analyst_agent.ipynb` vs `example/data_analyst_agent.py`.
+Reference: Anthropic `managed_agents/data_analyst_agent.ipynb` vs `example/example1/data_analyst_agent.py`.
 Full gap matrix: [`docs/sdk/data-analyst-cookbook-gap-analysis.md`](../docs/sdk/data-analyst-cookbook-gap-analysis.md).
 
 | ID | Priority | Task | Status | Verify |
@@ -349,7 +349,7 @@ Full gap matrix: [`docs/sdk/data-analyst-cookbook-gap-analysis.md`](../docs/sdk/
 | **C2** | P0 | Turn resolves session + env resources | ✅ | harness mount tests |
 | **C3** | P0 | Outputs path + post-turn sync → Files API | ✅ | `workdir/sync_test.go`, `session_outputs_api_test.go` |
 | **C4** | P0 | Go integration test (cookbook §3–6) | ✅ | CI `TestDataAnalystCookbook` |
-| **C5** | P0 | Example script cookbook 1:1 (no default disk fallback) | ✅ | `python example/data_analyst_agent.py` |
+| **C5** | P0 | Example script cookbook 1:1 (no default disk fallback) | ✅ | `python example/example1/data_analyst_agent.py` |
 | **C6** | P1 | `DataAnalystExamples` helper + pytest E2E | ⏸️ deferred | — |
 | **C7** | P1 | SDK-PLAN gap status update | ✅ | this doc |
 
@@ -368,6 +368,40 @@ Full gap matrix: [`docs/sdk/data-analyst-cookbook-gap-analysis.md`](../docs/sdk/
 - [x] **T18 (P3)** `skills.versions.download` — `GET /{id}/versions/{v}/content` zip archive
 - [x] **T19 (P3)** `environments.delete` — `DELETE /v1/environments/{id}` with active-session guard
 - [ ] **T20** Optional — expose `client.beta.files` as thin wrapper over httpx `FilesResource`
+
+### Cookbook parity — iterate fix failing tests (2026-06-30)
+
+Reference: Anthropic `managed_agents/CMA_iterate_fix_failing_tests.ipynb` vs `example/example2/iterate_fix_failing_tests.py`.
+
+| ID | Priority | Gap | Cookbook expects | OMA / SDK today | Recommendation |
+|---|---|---|---|---|---|
+| **IF1** | P1 | Stream-then-send ordering | `with client.beta.sessions.events.stream(...) as stream:` then `events.send` inside open SSE | `oma_sdk.cookbook.stream_until_end_turn` opens httpx SSE first, sends after connect delay, `replay=True` | ✅ SDK helper shipped; sync anthropic context manager still N/A |
+| **IF2** | P1 | Archive race after idle | `wait_for_idle_status()` polls `sessions.retrieve().status == "idle"` before `archive()` | `oma_sdk.cookbook.wait_for_idle_status` + called from both examples before archive | ✅ |
+| **IF3** | P1 | `end_turn` vs bare idle | Exit on `session.status_idle` **and** `stop_reason.type == "end_turn"` | `stream_until_end_turn` checks both; `data_analyst_agent.py` updated | ✅ |
+| **IF4** | P2 | Shared cookbook helpers | `from utilities import stream_until_end_turn, wait_for_idle_status` | `from oma_sdk import stream_until_end_turn, wait_for_idle_status` | ✅ |
+| **MT1** | P2 | Multi-turn same session | Cell 15: second `user.message` + stream after first `end_turn` | Go `TestIterateCookbookMultiTurn` + pytest `test_iterate_cookbook.py` | ✅ |
+| **F1** | P2 | Files upload SDK path | `client.beta.files.upload(file=(name, bytes, mime))` | `client.files.upload` via httpx async (T20) | Optional `client.beta.files` alias |
+| **S1** | P0 | Session create `resources[]` | Mount calc.py + test_calc.py at create | ✅ closed 2026-06 | Parity probe asserts `len(session.resources) >= 2` |
+| **O1** | P0 | Outputs → Files API | `/mnt/session/outputs/calc.py` listable via `files.list(scope_id=session.id)` | Same class as data-analyst report.html | Reuse outputs sync path; probe raises if calc.py missing |
+| **M1** | P3 | Agent model shape | `model=MODEL` string | OMA examples use `model={"id": MODEL}` | Document; verify anthropic SDK accepts both against OMA |
+
+**Iterate-specific vs data-analyst overlap:** S1 and O1 share the data-analyst P0 fixes. New gaps from this notebook are **IF1–IF4** (streaming semantics) and **MT1** (multi-turn).
+
+**Example mapping (notebook → script):**
+
+| Notebook | Script function / block |
+|---|---|
+| Cell 3 agent | `client.agents.create` + `ITERATE_SYSTEM_PROMPT` |
+| Cell 5 environment | `client.environments.create` (`limited` networking) |
+| Cell 7 upload | `upload_fixture()` → `client.files.upload` |
+| Cell 9 session | `client.sessions.create(resources=[...])` |
+| Cell 11 stream+send | `oma_sdk.cookbook.stream_until_end_turn(..., send_events=[...])` |
+| Cell 15 verify | second `events.send` + `stream_until_end_turn` |
+| Cell 17 archive | `wait_for_idle_status` + archive session/env/agent |
+
+SDK module: `oma_sdk/cookbook.py` — `stream_until_end_turn`, `wait_for_idle_status`, `StreamConfig`, event parsers. Tests: `tests/test_cookbook.py`, `tests/test_iterate_cookbook.py` (MT1). Go: `TestIterateCookbookMultiTurn` in `internal/api/` and `test/integration/`.
+
+Fixtures: `sdk/example/example2/iterate/calc.py`, `test_calc.py` (from cookbook `example_data/iterate/`).
 
 ---
 
@@ -391,8 +425,12 @@ oma-platform APIs
     └── teams / trajectory / subagents
 
 Cookbook parity (Go server):
-└── data analyst critical path ─────────────────── test/integration/data_analyst_cookbook_test.go ✅
-    └── CI: `.github/workflows/ci.yml` → `TestDataAnalystCookbook`
+├── data analyst critical path ─────────────────── test/integration/data_analyst_cookbook_test.go ✅
+│   └── CI: `.github/workflows/ci.yml` → `TestDataAnalystCookbook`
+└── iterate fix failing tests ──────────────────── example/example2/iterate_fix_failing_tests.py [GAP probe]
+    ├── [★★★ TESTED] stream_until_end_turn + end_turn (oma_sdk.cookbook)
+    ├── [★★★ TESTED] MT1 multi-turn — Go TestIterateCookbookMultiTurn + pytest
+    └── [★★  TESTED] session resources + outputs via shared S1/O1 path
 ```
 
 Test framework: `pytest` + `pytest-asyncio` (asyncio_mode=auto); live E2E against `:8787`.
@@ -405,12 +443,12 @@ Test framework: `pytest` + `pytest-asyncio` (asyncio_mode=auto); live E2E agains
 |--------|---------|-----|------|--------|----------|
 | CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
 | Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | — |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 2 | clean | Wire-compat T15–T19 closed 2026-06-29 |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 3 | issues_open | Iterate cookbook probe: IF1–IF4, MT1 gaps logged |
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
 | DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
 
 - **UNRESOLVED:** optional T20 (`client.beta.files` alias); cookbook local pip install still manual
-- **VERDICT:** Eng review complete — Anthropic wire-compat for sessions/environments/skills closed 2026-06-29 except optional T20
+- **VERDICT:** IF1–IF4 + MT1 closed; iterate cookbook parity probe complete except live LLM run
 
 ### Section Summary
 
@@ -418,7 +456,7 @@ Test framework: `pytest` + `pytest-asyncio` (asyncio_mode=auto); live E2E agains
 |---|---|
 | Step 0: Scope | Accepted — gap analysis scoped to anthropic 0.111.0 vs current OMA routes; cookbook P0 tracked separately |
 | Architecture | 6 managed-agent resources via SDK; 9+ OMA-only via httpx — sound split; session create resources + outputs sync landed |
-| Code Quality | SDK implemented; examples in `oma_sdk/api/`; `example/data_analyst_agent.py` is parity probe (workaround copy in `example/v1/`) |
+| Code Quality | SDK implemented; examples in `oma_sdk/api/`; `example/example1/data_analyst_agent.py` is parity probe (workaround copy in `example/example1/v1/`) |
 | Tests | 9 pytest modules + Go `TestDataAnalystCookbook`; live E2E pattern established |
 | Performance | SSE via anthropic SDK or `client.events.stream`; shared httpx pool in OMAClient |
 | NOT in scope | deployments, user_profiles, webhooks, messages, environments.work, cloud runtime |

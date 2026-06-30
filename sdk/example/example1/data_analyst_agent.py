@@ -13,7 +13,7 @@ Cell 2   Setup              → OMAClient, OMA_BASE_URL, OMA_API_KEY
 §2 Cell 6  Agent            → client.agents.create + ANALYST_SYSTEM_PROMPT
 §3 Cell 8  Upload dataset   → upload_dataset() → client.files.upload
 §4 Cell 10 Session + task   → client.sessions.create + events.send
-§5 Cell 12 Stream run       → wait_for_idle() → client.events.stream
+§5 Cell 12 Stream run       → stream_until_end_turn() → client.events.stream
 §6 Cell 14 Download report  → download_report() → files.list + download
 §7 Cell 16 Clean up         → client.sessions.archive
 
@@ -30,7 +30,7 @@ Prerequisites
 Usage::
 
     OMA_API_KEY=dev-key OMA_BASE_URL=http://127.0.0.1:8787 \\
-        python sdk/example/data_analyst_agent.py
+        python sdk/example/example1/data_analyst_agent.py
 
 Set ``OMA_KEEP_RESOURCES=1`` to skip session archive.
 Set ``OMA_DEV_FALLBACK=1`` to allow disk fallback when Files API is empty
@@ -41,10 +41,9 @@ from __future__ import annotations
 import asyncio
 import io
 import os
-import time
 from pathlib import Path
 
-from oma_sdk import OMAClient
+from oma_sdk import OMAClient, StreamConfig, stream_until_end_turn, wait_for_idle_status
 from oma_sdk.api.agents import MODEL as DEFAULT_MODEL
 
 # ---------------------------------------------------------------------------
@@ -65,11 +64,7 @@ ENV_NAME = "cookbook-data-analyst-env"
 AGENT_NAME = "cookbook-data-analyst"
 SESSION_TITLE = "Sales analysis"
 MODEL = os.getenv("OMA_MODEL", DEFAULT_MODEL["id"])
-# OMA-only: cookbook has no explicit stream/turn timeout.
-TIMEOUT_SEC = int(os.getenv("OMA_DEMO_TIMEOUT_SEC", "900"))
-STREAM_READ_TIMEOUT = float(os.getenv("OMA_STREAM_READ_TIMEOUT_SEC", "90"))
 
-# Cookbook Cell 8: DATA_PATH = Path("example_data/.../sales_data.csv")
 SCRIPT_DIR = Path(__file__).resolve().parent
 CSV_PATH = SCRIPT_DIR / "sales_data.csv"
 REPORT_PATH = SCRIPT_DIR / "report.html"
@@ -139,101 +134,11 @@ def _load_dotenv() -> None:
         os.environ.setdefault(key.strip(), value.strip())
 
 
-def _message_text(event_data: dict) -> str:
-    """Extract text blocks from a user/agent message event payload."""
-    parts: list[str] = []
-    content = event_data.get("content")
-    if isinstance(content, str):
-        return content.strip()
-    for block in content or []:
-        if not isinstance(block, dict):
-            continue
-        if block.get("type") == "text" and block.get("text"):
-            parts.append(str(block["text"]))
-    return "\n".join(parts).strip()
-
-
-def _event_type(ev: dict) -> str | None:
-    if ev.get("type"):
-        return str(ev["type"])
-    data = ev.get("data")
-    if isinstance(data, dict) and data.get("type"):
-        return str(data["type"])
-    return None
-
-
-def _event_payload(ev: dict) -> dict:
-    data = ev.get("data")
-    if isinstance(data, dict) and data.get("type"):
-        return data
-    return ev
-
-
-def _print_progress(ev: dict) -> None:
-    """Cookbook Cell 12: print agent.message previews and tool_use names."""
-    event_type = _event_type(ev)
-    if not event_type:
-        return
-    payload = _event_payload(ev)
-    if event_type == "agent.message":
-        text = _message_text(payload)
-        if text:
-            preview = text[:300] + ("..." if len(text) > 300 else "")
-            print(preview)
-    elif event_type in ("agent.tool_use", "agent.mcp_tool_use"):
-        name = payload.get("name") or ""
-        print(f"  [{name}]")
-    elif event_type == "session.error":
-        msg = payload.get("message") or payload.get("error") or "session.error"
-        raise RuntimeError(f"Session error: {msg}")
-    elif event_type == "session.status_terminated":
-        raise RuntimeError("Session terminated before going idle")
-
-
-async def wait_for_idle(client: OMAClient, session_id: str) -> None:
-    """Tail SSE until ``session.status_idle``.
-
-    Cookbook Cell 12 (§5 Stream the run):
-        for ev in client.beta.sessions.events.stream(session_id):
-            ...
-            elif t == "session.status_idle": return
-
-    OMA differences:
-    - async iterator via ``client.events.stream`` (not beta.sessions.events)
-    - ``replay=True`` replays events already emitted before subscribe
-    - overall ``TIMEOUT_SEC`` + per-read ``STREAM_READ_TIMEOUT``
-    - fallback GET /v1/sessions/{id} when stream closes without idle event
-  """
-    deadline = time.time() + TIMEOUT_SEC
-
-    async def consume_stream() -> None:
-        async for ev in client.events.stream(
-            session_id,
-            replay=True,
-            timeout=STREAM_READ_TIMEOUT,
-        ):
-            _print_progress(ev)
-            if _event_type(ev) == "session.status_idle":
-                return
-            if time.time() >= deadline:
-                break
-
-    remaining = max(1.0, deadline - time.time())
-    try:
-        await asyncio.wait_for(consume_stream(), timeout=remaining)
-    except asyncio.TimeoutError as exc:
-        raise TimeoutError(
-            f"Timed out after {TIMEOUT_SEC}s waiting for session.status_idle"
-        ) from exc
-
-    # Confirm idle via session GET if the stream closed without the event.
-    resp = await client._http.get(f"/v1/sessions/{session_id}")
-    resp.raise_for_status()
-    sess = resp.json()
-    if sess.get("status") != "idle":
-        raise TimeoutError(
-            f"Stream ended but session status={sess.get('status')!r}"
-        )
+def _stream_config() -> StreamConfig:
+    return StreamConfig(
+        timeout_sec=float(os.getenv("OMA_DEMO_TIMEOUT_SEC", "900")),
+        stream_read_timeout=float(os.getenv("OMA_STREAM_READ_TIMEOUT_SEC", "90")),
+    )
 
 
 async def upload_dataset(client: OMAClient, path: Path) -> dict:
@@ -441,9 +346,13 @@ one surprising pattern. Produce report.html per your system instructions.
         # ------------------------------------------------------------------
         # §5 Stream the run — Cookbook Cell 12
         # ------------------------------------------------------------------
-        # Tail the event stream until session.status_idle. Console UI shows the
-        # same events live; this helper prints a lightweight CLI trace.
-        await wait_for_idle(client, session.id)
+        # Tail until session.status_idle + stop_reason end_turn (IF3).
+        # Events were sent above; replay=True catches any already emitted.
+        await stream_until_end_turn(
+            client,
+            session.id,
+            config=_stream_config(),
+        )
 
         # ------------------------------------------------------------------
         # §6 Retrieve the report — Cookbook Cell 14
@@ -465,6 +374,7 @@ one surprising pattern. Produce report.html per your system instructions.
         # across future sessions (create a new session per conversation).
         if os.getenv("OMA_KEEP_RESOURCES", "0") != "1":
             try:
+                await wait_for_idle_status(client, session.id)
                 client.sessions.archive(session.id)
             except Exception as exc:
                 print("session archive failed:", exc)
