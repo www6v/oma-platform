@@ -105,7 +105,9 @@ func NewRouter(deps Deps) http.Handler {
 
 	if deps.Environments != nil {
 		r.Route("/v1/environments", func(r chi.Router) {
-			mountEnvironmentRoutes(r, deps.Environments)
+			mountEnvironmentRoutes(
+				r, deps.Environments, sessionRepoFromHandlers(deps.Sessions),
+			)
 		})
 	}
 

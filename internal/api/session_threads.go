@@ -68,6 +68,13 @@ func deriveSessionThreads(
 			if th, ok := threads[tid]; ok {
 				th.status = "idle"
 			}
+		case "session.thread_archived":
+			tid := stringField(data, "session_thread_id")
+			if th, ok := threads[tid]; ok {
+				th.status = "archived"
+				at := ev.CreatedAt
+				th.archivedAt = &at
+			}
 		}
 	}
 
@@ -123,6 +130,10 @@ func serializeSessionThread(
 		"created_at":       formatISO(th.createdAt),
 		"archived_at":      archivedAt,
 		"updated_at":       formatISO(updatedAt),
+		"stats": map[string]any{
+			"active_seconds": 0,
+		},
+		"usage": map[string]any{},
 	}
 }
 

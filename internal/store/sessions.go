@@ -30,6 +30,7 @@ type Session struct {
 	EnvironmentSnapshot json.RawMessage
 	Resources           json.RawMessage
 	Title               string
+	Metadata            json.RawMessage
 	Status              SessionStatus
 	TurnID              *string
 	CreatedAt           int64
@@ -129,7 +130,7 @@ func (r *SessionRepo) GetByID(ctx context.Context, id string) (*Session, error) 
 	row := r.db.QueryRowContext(ctx, `
 		SELECT id, tenant_id, agent_id, agent_version, agent_snapshot,
 			environment_id, environment_snapshot, resources,
-			title, status, turn_id, created_at, updated_at, archived_at
+			title, metadata, status, turn_id, created_at, updated_at, archived_at
 		FROM sessions
 		WHERE id = ?`,
 		id,
@@ -137,7 +138,114 @@ func (r *SessionRepo) GetByID(ctx context.Context, id string) (*Session, error) 
 	return scanSession(row)
 }
 
-// SetResources replaces the persisted session-level resource specs.
+// UpdateSessionInput holds patch fields for Update.
+type UpdateSessionInput struct {
+	Title        *string
+	Metadata     json.RawMessage
+	MetadataSet  bool
+}
+
+// Update patches title and/or metadata on a non-archived session.
+func (r *SessionRepo) Update(
+	ctx context.Context,
+	tenantID, sessionID string,
+	input UpdateSessionInput,
+) (*Session, error) {
+	sess, err := r.Get(ctx, tenantID, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	if sess == nil {
+		return nil, ErrNotFound
+	}
+	if sess.ArchivedAt != nil {
+		return nil, ErrArchived
+	}
+
+	title := sess.Title
+	if input.Title != nil {
+		title = *input.Title
+	}
+	metadata := sess.Metadata
+	if input.MetadataSet {
+		metadata = mergeSessionMetadataJSON(sess.Metadata, input.Metadata)
+	}
+
+	now := time.Now().UnixMilli()
+	metaStr := nullableJSONString(metadata)
+	res, err := r.db.ExecContext(ctx, `
+		UPDATE sessions
+		SET title = ?, metadata = ?, updated_at = ?
+		WHERE id = ? AND tenant_id = ?`,
+		title, metaStr, now, sessionID, tenantOrDefault(tenantID),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("update session: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return nil, ErrNotFound
+	}
+	return r.Get(ctx, tenantID, sessionID)
+}
+
+func mergeSessionMetadataJSON(
+	existing, patch json.RawMessage,
+) json.RawMessage {
+	base := map[string]any{}
+	if len(existing) > 0 && string(existing) != "null" {
+		_ = json.Unmarshal(existing, &base)
+	}
+	updates := map[string]any{}
+	if len(patch) > 0 && string(patch) != "null" {
+		_ = json.Unmarshal(patch, &updates)
+	}
+	for key, value := range updates {
+		if value == nil {
+			delete(base, key)
+		} else {
+			base[key] = value
+		}
+	}
+	if len(base) == 0 {
+		return nil
+	}
+	out, err := json.Marshal(base)
+	if err != nil {
+		return existing
+	}
+	return out
+}
+
+func nullableJSONString(raw json.RawMessage) any {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	return string(raw)
+}
+
+// HasActiveByEnvironment reports non-archived sessions bound to an env.
+func (r *SessionRepo) HasActiveByEnvironment(
+	ctx context.Context,
+	tenantID, environmentID string,
+) (bool, error) {
+	var one int
+	err := r.db.QueryRowContext(ctx, `
+		SELECT 1 FROM sessions
+		WHERE tenant_id = ? AND environment_id = ?
+		  AND archived_at IS NULL
+		LIMIT 1`,
+		tenantOrDefault(tenantID), environmentID,
+	).Scan(&one)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("has active by environment: %w", err)
+	}
+	return true, nil
+}
+
 func (r *SessionRepo) SetResources(
 	ctx context.Context,
 	tenantID, sessionID string,
@@ -194,7 +302,7 @@ func (r *SessionRepo) Get(
 	row := r.db.QueryRowContext(ctx, `
 		SELECT id, tenant_id, agent_id, agent_version, agent_snapshot,
 			environment_id, environment_snapshot, resources,
-			title, status, turn_id, created_at, updated_at, archived_at
+			title, metadata, status, turn_id, created_at, updated_at, archived_at
 		FROM sessions
 		WHERE id = ? AND tenant_id = ?`,
 		id, tenantOrDefault(tenantID),
@@ -210,7 +318,7 @@ func (r *SessionRepo) List(
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, tenant_id, agent_id, agent_version, agent_snapshot,
 			environment_id, environment_snapshot, resources,
-			title, status, turn_id, created_at, updated_at, archived_at
+			title, metadata, status, turn_id, created_at, updated_at, archived_at
 		FROM sessions
 		WHERE tenant_id = ?
 		ORDER BY created_at ASC`,
@@ -314,6 +422,7 @@ func scanSession(row interface {
 		snapshot     string
 		envSnapshot  string
 		resources    string
+		metadata     sql.NullString
 		turnID       sql.NullString
 		updatedAt    sql.NullInt64
 		archivedAt   sql.NullInt64
@@ -321,7 +430,7 @@ func scanSession(row interface {
 	if err := row.Scan(
 		&s.ID, &s.TenantID, &s.AgentID, &s.AgentVersion, &snapshot,
 		&s.EnvironmentID, &envSnapshot, &resources,
-		&s.Title, &s.Status, &turnID, &s.CreatedAt, &updatedAt, &archivedAt,
+		&s.Title, &metadata, &s.Status, &turnID, &s.CreatedAt, &updatedAt, &archivedAt,
 	); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -334,6 +443,9 @@ func scanSession(row interface {
 		s.Resources = json.RawMessage(`[]`)
 	} else {
 		s.Resources = json.RawMessage(resources)
+	}
+	if metadata.Valid && metadata.String != "" {
+		s.Metadata = json.RawMessage(metadata.String)
 	}
 	if turnID.Valid {
 		v := turnID.String

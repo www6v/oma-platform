@@ -2,6 +2,7 @@ package store
 
 const (
 	sessionPrefix  = "sess-"
+	resourcePrefix = "sesrsc-"
 	eventPrefix    = "evt-"
 	schedulePrefix = "sched-"
 	teamPrefix     = "team-"
@@ -13,6 +14,15 @@ const (
 
 func generateSessionID() string {
 	return sessionPrefix + randomString(idLength)
+}
+
+func generateResourceID() string {
+	return resourcePrefix + randomString(idLength)
+}
+
+// NewResourceID returns a new session resource identifier.
+func NewResourceID() string {
+	return generateResourceID()
 }
 
 func generateEventID() string {

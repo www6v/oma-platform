@@ -71,7 +71,7 @@ func (r *SessionRepo) ListPage(
 	query := `
 		SELECT id, tenant_id, agent_id, agent_version, agent_snapshot,
 			environment_id, environment_snapshot, resources,
-			title, status, turn_id, created_at, updated_at, archived_at
+			title, metadata, status, turn_id, created_at, updated_at, archived_at
 		FROM sessions ` + where + `
 		ORDER BY created_at ASC, id ASC
 		LIMIT ?`

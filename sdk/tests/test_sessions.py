@@ -26,3 +26,24 @@ def test_sessions_archive_and_delete(client: anthropic.Anthropic, tmp_agent, tmp
     """Create → archive (assert) → delete, all on one session."""
     result = SessionExamples.archive_and_delete(client, tmp_agent.id, tmp_env)
     assert result["archived"].id == result["session"].id
+
+
+def test_sessions_update(client: anthropic.Anthropic, tmp_agent, tmp_env):
+    result = SessionExamples.update_session(client, tmp_agent.id, tmp_env)
+    assert result["updated"].title == "sdk-e2e-update-after"
+
+
+def test_sessions_resources_crud(
+    client: anthropic.Anthropic, tmp_agent, tmp_env, tmp_file,
+):
+    result = SessionExamples.resource_crud(
+        client, tmp_agent.id, tmp_env, tmp_file,
+    )
+    assert result["resource"].id
+
+
+def test_sessions_threads(client: anthropic.Anthropic, tmp_agent, tmp_env):
+    result = SessionExamples.thread_retrieve_and_archive(
+        client, tmp_agent.id, tmp_env,
+    )
+    assert result["archived"].status == "archived"

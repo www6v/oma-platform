@@ -97,6 +97,93 @@ class SessionExamples:
                 print(f"\n[KEEP] session {sess.id} (with events) left active — archive manually when done")
 
     @staticmethod
+    def update_session(
+        client: anthropic.Anthropic,
+        agent_id: str,
+        environment_id: str,
+        *,
+        title: str = "sdk-e2e-update-before",
+        title_after: str = "sdk-e2e-update-after",
+    ) -> dict:
+        """Create a session, update title/metadata, and verify."""
+        sess = SessionExamples._create_session(
+            client, agent_id, environment_id, title=title,
+        )
+        try:
+            updated = client.beta.sessions.update(
+                sess.id,
+                title=title_after,
+                metadata={"sdk": "wire-compat"},
+            )
+            assert updated.title == title_after
+            assert updated.metadata["sdk"] == "wire-compat"
+            return {"session": sess, "updated": updated}
+        finally:
+            if not _KEEP:
+                client.beta.sessions.archive(sess.id)
+
+    @staticmethod
+    def resource_crud(
+        client: anthropic.Anthropic,
+        agent_id: str,
+        environment_id: str,
+        file_id: str,
+    ) -> dict:
+        """Exercise sessions.resources add/list/retrieve/delete."""
+        sess = SessionExamples._create_session(client, agent_id, environment_id)
+        try:
+            added = client.beta.sessions.resources.add(
+                sess.id,
+                type="file",
+                file_id=file_id,
+                mount_path="/workspace/sdk-resource.txt",
+            )
+            assert added.id
+            listed = client.beta.sessions.resources.list(sess.id)
+            assert any(r.id == added.id for r in listed)
+            got = client.beta.sessions.resources.retrieve(
+                added.id, session_id=sess.id,
+            )
+            assert got.id == added.id
+            client.beta.sessions.resources.delete(added.id, session_id=sess.id)
+            return {"session": sess, "resource": added}
+        finally:
+            if not _KEEP:
+                client.beta.sessions.archive(sess.id)
+
+    @staticmethod
+    def thread_retrieve_and_archive(
+        client: anthropic.Anthropic,
+        agent_id: str,
+        environment_id: str,
+    ) -> dict:
+        """Send sub-agent events, then retrieve and archive a thread."""
+        sess = SessionExamples._create_session(client, agent_id, environment_id)
+        try:
+            client.beta.sessions.events.send(
+                sess.id,
+                events=[{
+                    "type": "session.thread_created",
+                    "session_thread_id": "sthr_sdk_worker",
+                    "agent_id": "agt_worker",
+                    "agent_name": "Worker",
+                    "parent_thread_id": "sthr_primary",
+                }],
+            )
+            thread = client.beta.sessions.threads.retrieve(
+                "sthr_sdk_worker", session_id=sess.id,
+            )
+            assert thread.id == "sthr_sdk_worker"
+            archived = client.beta.sessions.threads.archive(
+                "sthr_sdk_worker", session_id=sess.id,
+            )
+            assert archived.status == "archived"
+            return {"session": sess, "thread": thread, "archived": archived}
+        finally:
+            if not _KEEP:
+                client.beta.sessions.archive(sess.id)
+
+    @staticmethod
     def crud_and_events(
         client: anthropic.Anthropic,
         agent_id: str,

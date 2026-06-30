@@ -71,11 +71,11 @@ All `client.beta.{agents,sessions,environments,memory_stores,vaults,skills}` cal
 | Anthropic SDK resource | OMA route prefix | OMA status | OMA SDK binding | Gap severity |
 |---|---|---|---|---|
 | `beta.agents` | `/v1/agents` | ✅ Core CRUD + versions | `client.agents` (anthropic) | Low — see method table |
-| `beta.sessions` | `/v1/sessions` | ⚠️ Create `resources[]` + events OK; post-create resources CRUD / update / threads gaps | `client.sessions` (anthropic) | **Medium** |
-| `beta.environments` | `/v1/environments` | ⚠️ CRUD OK; no delete/work | `client.environments` (anthropic) | Low–Medium |
+| `beta.sessions` | `/v1/sessions` | ✅ Create `resources[]` + events + update + post-create resources CRUD + threads sub-routes | `client.sessions` (anthropic) | Low |
+| `beta.environments` | `/v1/environments` | ✅ CRUD + archive + delete; no work.* | `client.environments` (anthropic) | Low |
 | `beta.memory_stores` | `/v1/memory_stores` | ✅ Full CRUD + memories + versions | `client.memory_stores` (anthropic) | Low |
 | `beta.vaults` | `/v1/vaults` | ✅ Full CRUD + credentials | `client.vaults` (anthropic) | Low |
-| `beta.skills` | `/v1/skills` | ⚠️ CRUD OK; download path differs | `client.skills` (anthropic) | Low |
+| `beta.skills` | `/v1/skills` | ✅ CRUD + versions.download zip | `client.skills` (anthropic) | Low |
 | `beta.files` | `/v1/files` | ✅ Implemented (console mount) | `client.files` (httpx) 🔌 | Medium — SDK path mismatch |
 | `beta.models` | `/v1/models` | ⚠️ Different API shape | `client.models` (httpx) 🔌 | Medium — not Anthropic catalog |
 | `beta.deployments` | — | ❌ | — | Out of scope |
@@ -131,22 +131,22 @@ All `client.beta.{agents,sessions,environments,memory_stores,vaults,skills}` cal
 | `create` | `POST /v1/sessions?beta=true` | `sessions.go` POST `/` | ✅ | Accepts `resources[]`; scoped file copies persisted + returned |
 | `list` | `GET /v1/sessions?beta=true` | GET `/` | ✅ | Filter params partially supported |
 | `retrieve` | `GET /v1/sessions/{id}?beta=true` | GET `/{id}` | ✅ | |
-| `update` | `POST /v1/sessions/{id}?beta=true` | — | ❌ | **P1 gap** — mid-session agent/tools/metadata patch |
+| `update` | `POST /v1/sessions/{id}?beta=true` | POST `/{id}` | ✅ | title + metadata merge |
 | `delete` | `DELETE /v1/sessions/{id}?beta=true` | DELETE `/{id}` | ✅ | |
 | `archive` | `POST /v1/sessions/{id}/archive?beta=true` | POST `/{id}/archive` | ✅ | |
 | `events.send` | `POST /v1/sessions/{id}/events?beta=true` | POST `/{id}/events` | ✅ | |
 | `events.list` | `GET /v1/sessions/{id}/events?beta=true` | GET `/{id}/events` | ✅ | |
 | `events.stream` | `GET /v1/sessions/{id}/events/stream?beta=true` | GET `/{id}/events/stream` | ✅ | SSE |
-| `resources.list` | `GET .../resources?beta=true` | — | ❌ | **P2 gap** — use `retrieve` + `resources` field from create |
-| `resources.add` | `POST .../resources?beta=true` | — | ❌ | **P2 gap** — create-time `resources[]` only (2026-06) |
-| `resources.retrieve` | `GET .../resources/{rid}?beta=true` | — | ❌ | **P2 gap** |
-| `resources.update` | `POST .../resources/{rid}?beta=true` | — | ❌ | **P2 gap** |
-| `resources.delete` | `DELETE .../resources/{rid}?beta=true` | — | ❌ | **P2 gap** |
-| `threads.list` | `GET .../threads?beta=true` | GET `/{id}/threads` | ⚠️ | OMA derives threads from events; no cursor pagination |
-| `threads.retrieve` | `GET .../threads/{tid}?beta=true` | — | ❌ | **P2 gap** |
-| `threads.archive` | `POST .../threads/{tid}/archive?beta=true` | — | ❌ | **P3 gap** |
-| `threads.events.list` | `GET .../threads/{tid}/events?beta=true` | — | ❌ | **P2 gap** — use session-level events + filter |
-| `threads.events.stream` | `GET .../threads/{tid}/stream?beta=true` | — | ❌ | **P2 gap** |
+| `resources.list` | `GET .../resources?beta=true` | GET `/{id}/resources` | ✅ | |
+| `resources.add` | `POST .../resources?beta=true` | POST `/{id}/resources` | ✅ | file scoped copy on add |
+| `resources.retrieve` | `GET .../resources/{rid}?beta=true` | GET `/{id}/resources/{rid}` | ✅ | |
+| `resources.update` | `POST .../resources/{rid}?beta=true` | POST `/{id}/resources/{rid}` | ✅ | |
+| `resources.delete` | `DELETE .../resources/{rid}?beta=true` | DELETE `/{id}/resources/{rid}` | ✅ | |
+| `threads.list` | `GET .../threads?beta=true` | GET `/{id}/threads` | ✅ | derived from events |
+| `threads.retrieve` | `GET .../threads/{tid}?beta=true` | GET `/{id}/threads/{tid}` | ✅ | |
+| `threads.archive` | `POST .../threads/{tid}/archive?beta=true` | POST `/{id}/threads/{tid}/archive` | ✅ | persists `session.thread_archived` event |
+| `threads.events.list` | `GET .../threads/{tid}/events?beta=true` | GET `/{id}/threads/{tid}/events` | ✅ | filter by `session_thread_id` |
+| `threads.events.stream` | `GET .../threads/{tid}/stream?beta=true` | GET `/{id}/threads/{tid}/stream` | ✅ | SSE filtered by thread |
 | — | — | `POST /{id}/messages` | ➕ | OMA convenience endpoint; **not in anthropic SDK** — wraps `events.send` |
 
 #### 2.3 `beta.environments`
@@ -158,7 +158,7 @@ All `client.beta.{agents,sessions,environments,memory_stores,vaults,skills}` cal
 | `retrieve` | `GET /v1/environments/{id}?beta=true` | GET `/{id}` | ✅ | |
 | `update` | `POST/PUT /v1/environments/{id}?beta=true` | PUT/POST `/{id}` | ✅ | |
 | `archive` | `POST .../archive?beta=true` | POST `/{id}/archive` | ✅ | |
-| `delete` | `DELETE /v1/environments/{id}?beta=true` | — | ❌ | **P3 gap** — archive is sufficient for most flows |
+| `delete` | `DELETE /v1/environments/{id}?beta=true` | DELETE `/{id}` | ✅ | blocked when non-archived sessions reference env |
 | `work.poll` | `GET .../work/poll?beta=true` | — | ❌ | Out of scope (self-hosted workers) |
 | `work.list` | `GET .../work?beta=true` | — | ❌ | Out of scope |
 | `work.retrieve` | `GET .../work/{id}?beta=true` | — | ❌ | Out of scope |
@@ -217,7 +217,7 @@ All `client.beta.{agents,sessions,environments,memory_stores,vaults,skills}` cal
 | `versions.list` | `GET .../versions?beta=true` | GET `/{id}/versions` | ✅ | |
 | `versions.retrieve` | `GET .../versions/{v}?beta=true` | GET `/{id}/versions/{v}` | ⚠️ | OMA returns inline `files[]` JSON, not Anthropic metadata shape |
 | `versions.delete` | `DELETE .../versions/{v}?beta=true` | DELETE `/{id}/versions/{v}` | ✅ | |
-| `versions.download` | `GET .../versions/{v}/content?beta=true` | — | ❌ | **P3 gap** — use GET `/{id}/versions/{v}` JSON instead |
+| `versions.download` | `GET .../versions/{v}/content?beta=true` | GET `/{id}/versions/{v}/content` | ✅ | zip archive (`application/zip`) |
 
 ---
 
@@ -362,11 +362,11 @@ Full gap matrix: [`docs/sdk/data-analyst-cookbook-gap-analysis.md`](../docs/sdk/
 
 ### Remaining (Anthropic wire-compat gaps)
 
-- [ ] **T15 (P1)** `sessions.update` — `POST /v1/sessions/{id}`
-- [ ] **T16 (P2)** `sessions.resources.*` — full resource CRUD
-- [ ] **T17 (P2)** `sessions.threads.*` — retrieve, archive, per-thread events/stream
-- [ ] **T18 (P3)** `skills.versions.download` — binary content endpoint
-- [ ] **T19 (P3)** `environments.delete`
+- [x] **T15 (P1)** `sessions.update` — `POST /v1/sessions/{id}` (+ metadata merge, migration `020_session_metadata.sql`)
+- [x] **T16 (P2)** `sessions.resources.*` — full resource CRUD (`session_resources_handlers.go`)
+- [x] **T17 (P2)** `sessions.threads.*` — retrieve, archive, per-thread events/stream
+- [x] **T18 (P3)** `skills.versions.download` — `GET /{id}/versions/{v}/content` zip archive
+- [x] **T19 (P3)** `environments.delete` — `DELETE /v1/environments/{id}` with active-session guard
 - [ ] **T20** Optional — expose `client.beta.files` as thin wrapper over httpx `FilesResource`
 
 ---
@@ -405,12 +405,12 @@ Test framework: `pytest` + `pytest-asyncio` (asyncio_mode=auto); live E2E agains
 |--------|---------|-----|------|--------|----------|
 | CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
 | Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | — |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | issues_open | Cookbook P0 closed; 3 wire-compat gaps remain (sessions.update, post-create resources CRUD, threads) |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 2 | clean | Wire-compat T15–T19 closed 2026-06-29 |
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
 | DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
 
-- **UNRESOLVED:** 3 open platform gaps for full Anthropic wire-compat (`sessions.update`, post-create `sessions.resources.*`, `sessions.threads.*`); cookbook P0 parity closed 2026-06-29
-- **VERDICT:** Eng review complete — gap matrix updated 2026-06-29. Implement T15–T17 before claiming full Anthropic wire-compat; data analyst cookbook probe passes on Go server.
+- **UNRESOLVED:** optional T20 (`client.beta.files` alias); cookbook local pip install still manual
+- **VERDICT:** Eng review complete — Anthropic wire-compat for sessions/environments/skills closed 2026-06-29 except optional T20
 
 ### Section Summary
 
@@ -423,7 +423,7 @@ Test framework: `pytest` + `pytest-asyncio` (asyncio_mode=auto); live E2E agains
 | Performance | SSE via anthropic SDK or `client.events.stream`; shared httpx pool in OMAClient |
 | NOT in scope | deployments, user_profiles, webhooks, messages, environments.work, cloud runtime |
 | What already exists | Updated — SDK no longer greenfield; cookbook critical path covered in CI |
-| Failure modes | Post-create resource CRUD / sessions.update still 404; packages not auto-installed locally |
+| Failure modes | Resource caps (100/8 memory_store) enforced; thread archive blocks further events via `session.thread_archived` |
 | Outside voice | Skipped this run |
 | Parallelization | Sequential — gap fixes touch `sessions.go` primarily |
 

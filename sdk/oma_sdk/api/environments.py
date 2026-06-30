@@ -87,6 +87,14 @@ class EnvironmentExamples:
                 print(f"\n[KEEP] environment {env.id} ({name_after}) — archive manually when done")
 
     @staticmethod
+    def delete_environment(client: anthropic.Anthropic, name: str = "sdk-e2e-env-delete") -> dict:
+        """Create an environment and hard-delete it."""
+        env = client.beta.environments.create(name=name)
+        deleted = client.beta.environments.delete(env.id)
+        assert deleted.type == "environment_deleted"
+        return {"environment": env, "deleted": deleted}
+
+    @staticmethod
     def archive_environment(client: anthropic.Anthropic, name: str = "sdk-e2e-env-archive") -> dict:
         """
         Create an environment and archive it.

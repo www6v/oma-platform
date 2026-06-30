@@ -288,6 +288,8 @@ func mountSessionRoutes(
 		writeJSON(w, http.StatusAccepted, map[string]string{"status": "queued"})
 	})
 
+	r.Post("/{id}", h.handleSessionUpdate)
+
 	r.Post("/{id}/archive", func(w http.ResponseWriter, req *http.Request) {
 		id := chi.URLParam(req, "id")
 		sess, err := h.sessions.Archive(req.Context(), tenantID(req), id)
@@ -380,6 +382,7 @@ func mountSessionRoutes(
 		writeJSON(w, http.StatusOK, resp)
 	})
 
+	h.mountSessionResourceRoutes(r)
 	h.mountSessionAuxRoutes(r)
 
 	r.Get("/{id}/events/stream", func(w http.ResponseWriter, req *http.Request) {

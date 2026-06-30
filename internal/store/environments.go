@@ -208,6 +208,29 @@ func (r *EnvironmentRepo) Update(
 	return r.Get(ctx, tenantID, id)
 }
 
+// Delete hard-deletes an environment row.
+func (r *EnvironmentRepo) Delete(
+	ctx context.Context,
+	tenantID, id string,
+) error {
+	if id == DefaultEnvironmentID {
+		return fmt.Errorf("cannot delete default environment")
+	}
+	res, err := r.db.ExecContext(ctx, `
+		DELETE FROM environments
+		WHERE id = ? AND tenant_id = ?`,
+		id, tenantOrDefault(tenantID),
+	)
+	if err != nil {
+		return fmt.Errorf("delete environment: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // Archive soft-deletes an environment.
 func (r *EnvironmentRepo) Archive(
 	ctx context.Context,

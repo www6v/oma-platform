@@ -9,7 +9,11 @@ import (
 	"github.com/open-ma/oma-building/internal/store"
 )
 
-func mountEnvironmentRoutes(r chi.Router, envs *store.EnvironmentRepo) {
+func mountEnvironmentRoutes(
+	r chi.Router,
+	envs *store.EnvironmentRepo,
+	sessions *store.SessionRepo,
+) {
 	r.Post("/", func(w http.ResponseWriter, req *http.Request) {
 		var body struct {
 			Name        string          `json:"name"`
@@ -87,6 +91,36 @@ func mountEnvironmentRoutes(r chi.Router, envs *store.EnvironmentRepo) {
 			return
 		}
 		writeJSON(w, http.StatusOK, env)
+	})
+
+	r.Delete("/{id}", func(w http.ResponseWriter, req *http.Request) {
+		id := chi.URLParam(req, "id")
+		hasActive, err := sessions.HasActiveByEnvironment(
+			req.Context(), tenantID(req), id,
+		)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if hasActive {
+			writeError(
+				w, http.StatusConflict,
+				"Cannot delete environment with active sessions. Archive or delete sessions first.",
+			)
+			return
+		}
+		if err := envs.Delete(req.Context(), tenantID(req), id); err != nil {
+			if err == store.ErrNotFound {
+				writeError(w, http.StatusNotFound, "Environment not found")
+				return
+			}
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"type": "environment_deleted",
+			"id":   id,
+		})
 	})
 }
 

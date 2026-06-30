@@ -80,6 +80,12 @@ func formatAPISession(s *store.Session) map[string]any {
 	if s.Title != "" {
 		title = s.Title
 	}
+	metadata := map[string]any{}
+	if len(s.Metadata) > 0 && string(s.Metadata) != "null" {
+		if err := json.Unmarshal(s.Metadata, &metadata); err != nil {
+			metadata = map[string]any{}
+		}
+	}
 	resources := []any{}
 	if len(s.Resources) > 0 &&
 		string(s.Resources) != "[]" &&
@@ -100,7 +106,7 @@ func formatAPISession(s *store.Session) map[string]any {
 		"status":          s.Status,
 		"created_at":      formatISO(s.CreatedAt),
 		"vault_ids":       []any{},
-		"metadata":        map[string]any{},
+		"metadata":        metadata,
 		"resources":       resources,
 		"outcome_evaluations": []any{},
 		"usage":           map[string]any{},

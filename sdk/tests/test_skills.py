@@ -22,3 +22,8 @@ def test_skills_upload_and_delete(client: anthropic.Anthropic):
     result = SkillExamples.upload_and_delete_skill(client)
     assert result["skill"].id == result["skill_id"]
     assert isinstance(result["versions"], list)
+
+
+def test_skills_version_download(client: anthropic.Anthropic):
+    result = SkillExamples.download_version(client)
+    assert result["bytes"] > 0

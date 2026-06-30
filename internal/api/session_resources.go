@@ -32,6 +32,7 @@ func (h *sessionHandlers) applySessionResources(
 	scoped := h.resources.ScopeSessionResources(
 		ctx, tenantID, sess.ID, specs,
 	)
+	scoped = stampResourceRecords(sess.ID, scoped)
 	data, err := json.Marshal(scoped)
 	if err != nil {
 		return nil, fmt.Errorf("marshal session resources: %w", err)

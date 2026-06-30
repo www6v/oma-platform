@@ -25,6 +25,7 @@ import os
 from pathlib import Path
 
 import anthropic
+import httpx
 import pytest
 
 # Auto-load oma-platform/.env (two levels up from sdk/tests/)
@@ -83,5 +84,33 @@ def tmp_agent(client: anthropic.Anthropic):
         return
     try:
         client.beta.agents.archive(agent.id)
+    except Exception:
+        pass
+
+
+@pytest.fixture
+def tmp_file():
+    """Upload a throw-away file for resource CRUD tests."""
+    resp = httpx.post(
+        f"{base_url()}/v1/files",
+        headers={"Authorization": f"Bearer {os.environ['OMA_API_KEY']}"},
+        json={
+            "filename": "sdk-e2e-resource.txt",
+            "content": "resource test",
+            "media_type": "text/plain",
+        },
+        timeout=30.0,
+    )
+    resp.raise_for_status()
+    file_id = resp.json()["id"]
+    yield file_id
+    if KEEP_RESOURCES:
+        return
+    try:
+        httpx.delete(
+            f"{base_url()}/v1/files/{file_id}",
+            headers={"Authorization": f"Bearer {os.environ['OMA_API_KEY']}"},
+            timeout=30.0,
+        )
     except Exception:
         pass

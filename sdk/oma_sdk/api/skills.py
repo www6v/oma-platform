@@ -73,6 +73,43 @@ class SkillExamples:
         return {"skill": skill}
 
     @staticmethod
+    def download_version(
+        client: anthropic.Anthropic,
+        name: str = "sdk-e2e-skill-dl",
+    ) -> dict:
+        """Upload a skill and download its version as a zip archive."""
+        zip_bytes = SkillExamples.make_skill_zip(name)
+        resp = client.post(
+            "/v1/skills/upload",
+            cast_to=httpx.Response,
+            files={"file": (f"{name}.zip", zip_bytes, "application/zip")},
+            options={"headers": {
+                "Content-Type": "multipart/form-data",
+                "X-Display-Title": name,
+            }},
+        )
+        assert resp.status_code in (200, 201), resp.text
+        skill_id = resp.json()["id"]
+        try:
+            versions = list(client.beta.skills.versions.list(skill_id))
+            assert len(versions) >= 1
+            version_id = versions[0].version
+            downloaded = client.beta.skills.versions.download(
+                version_id, skill_id=skill_id,
+            )
+            content = downloaded.read()
+            assert len(content) > 0
+            assert content[:2] == b"PK"
+            return {
+                "skill_id": skill_id,
+                "version": version_id,
+                "bytes": len(content),
+            }
+        finally:
+            if not _KEEP:
+                client.beta.skills.delete(skill_id)
+
+    @staticmethod
     def upload_and_delete_skill(
         client: anthropic.Anthropic,
         name: str = "sdk-e2e-skill"

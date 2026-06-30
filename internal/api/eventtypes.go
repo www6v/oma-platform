@@ -8,7 +8,9 @@ var allowedClientEventTypes = map[string]struct{}{
 	"user.custom_tool_result": {},
 	"user.define_outcome":     {},
 	// agent.message is allowed for internal/harness use and programmatic sync
-	"agent.message":           {},
+	"agent.message": {},
+	// Sub-agent thread lifecycle (wire-compat with Anthropic Managed Agents API)
+	"session.thread_created": {},
 }
 
 // turnTriggerEventTypes cause a harness turn after append.

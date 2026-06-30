@@ -6,6 +6,7 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -299,6 +300,41 @@ func mountSkillRoutes(r chi.Router, deps skillsDeps) {
 					"files":      files,
 					"created_at": formatISO(ver.CreatedAt),
 				})
+			})
+
+			r.Get("/content", func(w http.ResponseWriter, req *http.Request) {
+				id := chi.URLParam(req, "id")
+				version := chi.URLParam(req, "version")
+				if store.IsBuiltinSkillID(id) {
+					writeError(w, http.StatusNotFound, "Version not found")
+					return
+				}
+				ver, err := deps.Skills.GetVersion(
+					req.Context(), tenantID(req), id, version,
+				)
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, err.Error())
+					return
+				}
+				if ver == nil {
+					writeError(w, http.StatusNotFound, "Version not found")
+					return
+				}
+				zipBytes, err := deps.Files.ZipVersionFiles(
+					tenantID(req), id, version, ver.Files,
+				)
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, err.Error())
+					return
+				}
+				w.Header().Set("Content-Type", "application/zip")
+				w.Header().Set(
+					"Content-Disposition",
+					`attachment; filename="`+id+"-"+version+`.zip"`,
+				)
+				w.Header().Set("Content-Length", strconv.Itoa(len(zipBytes)))
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write(zipBytes)
 			})
 
 			r.Delete("/", func(w http.ResponseWriter, req *http.Request) {

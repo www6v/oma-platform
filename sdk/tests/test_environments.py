@@ -28,3 +28,8 @@ def test_environments_update(client: anthropic.Anthropic):
 def test_environments_archive(client: anthropic.Anthropic):
     result = EnvironmentExamples.archive_environment(client)
     assert result["archived"].id == result["environment"].id
+
+
+def test_environments_delete(client: anthropic.Anthropic):
+    result = EnvironmentExamples.delete_environment(client)
+    assert result["deleted"].type == "environment_deleted"
