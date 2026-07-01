@@ -9,6 +9,7 @@ from pathlib import Path
 
 from pi_coding_agent.tools.bash import _wait_for_process
 
+from oma_adapter.env_packages import harness_venv_bin
 from oma_adapter.sandbox_paths import rewrite_bash_session_output_paths
 
 
@@ -41,6 +42,9 @@ class OutboundBashOperations:
         command = rewrite_bash_session_output_paths(command, cwd)
 
         env = os.environ.copy()
+        venv_bin = harness_venv_bin()
+        if venv_bin:
+            env["PATH"] = f"{venv_bin}{os.pathsep}{env.get('PATH', '')}"
         home = self._resolve_curl_home(cwd)
         if home:
             env["CURL_HOME"] = home

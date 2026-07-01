@@ -36,6 +36,16 @@ if [[ ! -x "${ROOT_DIR}/harness/.venv/bin/uvicorn" ]]; then
   uv sync
 fi
 
+# Optional: pre-install common cookbook deps (E1 still installs from env.config at turn time).
+if [[ "${OMA_COOKBOOK_PACKAGES:-0}" == "1" ]]; then
+  echo "Installing cookbook packages (pandas, plotly) into harness venv..."
+  if ! command -v uv >/dev/null 2>&1; then
+    echo "error: uv is required for OMA_COOKBOOK_PACKAGES=1" >&2
+    exit 1
+  fi
+  uv pip install --python "${ROOT_DIR}/harness/.venv/bin/python" pandas plotly
+fi
+
 exec "${ROOT_DIR}/harness/.venv/bin/uvicorn" oma_adapter.main:app \
   --host 0.0.0.0 \
   --port 8090

@@ -13,6 +13,7 @@ from oma_adapter.compaction import (
     resolve_context_window_tokens,
     should_compact,
 )
+from oma_adapter.env_packages import ensure_environment_packages
 from oma_adapter.subagent_bridge import build_subagent_runtime
 from oma_adapter.team_bridge import build_team_runtime
 from pi_subagent.resolve import enrich_parent_for_delegation, resolve_sub_agents
@@ -340,6 +341,7 @@ async def _run_turn_core(
     patch_path_utils(workdir)
     ensure_session_output_mounts(workdir)
     saved_env = mount_resources(workdir, resources)
+    ensure_environment_packages(environment)
 
     outbound_host = normalize_outbound_proxy_addr(outbound_proxy_addr)
     outbound_proxy_url = (

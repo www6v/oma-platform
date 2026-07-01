@@ -291,7 +291,7 @@ These resources exist in **both** anthropic SDK and oma-platform, but OMA SDK de
 | Priority | Gap | Impact | Recommendation |
 |---|---|---|---|
 | **P1** | `sessions.update` missing | Cannot patch session title/agent/tools mid-flight via SDK | Add `POST /v1/sessions/{id}` handler in `sessions.go` |
-| **P1** | Environment `packages.pip` not installed locally | Cookbook step 1 succeeds but harness may lack pandas/plotly | Document local venv requirement or install packages in harness |
+| **P1** | Environment `packages.pip` not installed locally | Cookbook step 1 succeeds but harness may lack pandas/plotly | ✅ E1: `oma_adapter/env_packages.py` + turn hook; `OMA_SKIP_ENV_PIP=1` to disable |
 | **P2** | `sessions.resources.*` post-create CRUD missing | Cannot add/remove mounts after session create | Add resource CRUD routes; **create-time `resources[]` works** (2026-06) |
 | **P2** | `sessions.threads.retrieve/events.*` missing | Sub-agent thread isolation incomplete vs Anthropic API | Extend `session_aux.go` or document session-level event filtering |
 | **P3** | `environments.delete` missing | Minor — archive covers lifecycle | Add DELETE or document archive-only |
@@ -350,15 +350,15 @@ Full gap matrix: [`docs/sdk/data-analyst-cookbook-gap-analysis.md`](../docs/sdk/
 | **C3** | P0 | Outputs path + post-turn sync → Files API | ✅ | `workdir/sync_test.go`, `session_outputs_api_test.go` |
 | **C4** | P0 | Go integration test (cookbook §3–6) | ✅ | CI `TestDataAnalystCookbook` |
 | **C5** | P0 | Example script cookbook 1:1 (no default disk fallback) | ✅ | `python example/example1/data_analyst_agent.py` |
-| **C6** | P1 | `DataAnalystExamples` helper + pytest E2E | ⏸️ deferred | — |
+| **C6** | P1 | `DataAnalystExamples` helper + pytest E2E | ⏸️ deferred (explicit — after E1) | — |
 | **C7** | P1 | SDK-PLAN gap status update | ✅ | this doc |
 
 **Still open for full cookbook parity (non-blocking for C1–C5):**
 
-- Local harness does not install `environment.config.packages.pip` (use host venv or document)
-- `client.files` via httpx, not `client.beta.files` (T20)
+- ~~Local harness does not install `environment.config.packages.pip`~~ **E1 ✅** — harness `ensure_environment_packages` at turn start; bash PATH includes venv; optional `OMA_COOKBOOK_PACKAGES=1` in `start-harness.sh`
+- `client.files` via httpx, not `client.beta.files` (T20 — deferred)
 - Turn timeout not API-configurable (env var only)
-- Post-create `sessions.resources.*` CRUD (S2)
+- Post-create `sessions.resources.*` CRUD — **done** (T16); diagram may be stale
 
 ### Remaining (Anthropic wire-compat gaps)
 
@@ -447,7 +447,7 @@ Test framework: `pytest` + `pytest-asyncio` (asyncio_mode=auto); live E2E agains
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
 | DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
 
-- **UNRESOLVED:** optional T20 (`client.beta.files` alias); cookbook local pip install still manual
+- **UNRESOLVED:** optional T20 (`client.beta.files` alias, deferred); C6 pytest live E2E (deferred); turn timeout API only via env
 - **VERDICT:** IF1–IF4 + MT1 closed; iterate cookbook parity probe complete except live LLM run
 
 ### Section Summary
