@@ -50,12 +50,33 @@ async def _two_turn_stream(session_id: str):
         yield ev
 
 
+async def _two_turn_stream_live(session_id: str):
+    """Replay turn 1 then live turn 2 (multi-turn SSE parity)."""
+    for ev in (
+        _agent_message(1, "iterate-cookbook-turn-1-ok"),
+        _idle_end_turn(2),
+    ):
+        yield ev
+    for ev in (
+        _agent_message(3, "iterate-cookbook-turn-2-ok"),
+        _idle_end_turn(4),
+    ):
+        yield ev
+
+
 @pytest.mark.asyncio
 async def test_multi_turn_stream_until_end_turn_twice() -> None:
     """MT1: second user.message + stream completes after first end_turn."""
     client = MagicMock()
     client.events.stream = lambda *_a, **_k: _two_turn_stream("sess_1")
     client.sessions.events.send = MagicMock()
+    client.events.list = AsyncMock(
+        side_effect=[
+            {"data": []},
+            {"data": [_idle_end_turn(2)]},
+            {"data": [_idle_end_turn(4)]},
+        ]
+    )
     client._http.get = AsyncMock(
         return_value=MagicMock(
             raise_for_status=MagicMock(),
@@ -80,17 +101,17 @@ async def test_multi_turn_stream_until_end_turn_twice() -> None:
     client.sessions.events.send.assert_called_once()
     client.sessions.events.send.reset_mock()
 
-    client.sessions.events.send(
+    await stream_until_end_turn(
+        client,
         "sess_1",
-        events=[
+        send_events=[
             {
                 "type": "user.message",
                 "content": [{"type": "text", "text": "verify calc.py"}],
             }
         ],
+        config=cfg,
     )
-
-    await stream_until_end_turn(client, "sess_1", config=cfg)
 
     assert client.sessions.events.send.call_count == 1
 
@@ -113,6 +134,7 @@ async def test_stream_ignores_requires_action_idle() -> None:
 
     client = MagicMock()
     client.events.stream = stream
+    client.events.list = AsyncMock(return_value={"data": []})
     client._http.get = AsyncMock(
         return_value=MagicMock(
             raise_for_status=MagicMock(),

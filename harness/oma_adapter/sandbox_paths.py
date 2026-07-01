@@ -20,6 +20,7 @@ def normalize_sandbox_path(workdir: str, path: str) -> str:
 
     Mirrors open-managed-agents LocalSubprocessSandbox.resolvePath().
     """
+    del workdir  # reserved for future workdir-specific rules
     normalised = path
     if normalised.startswith("/mnt/session/outputs/") or (
         normalised == "/mnt/session/outputs"
@@ -29,6 +30,14 @@ def normalize_sandbox_path(workdir: str, path: str) -> str:
         if normalised == "/mnt/session/outputs":
             return ".mnt/session/outputs"
         return ".mnt/session/outputs/" + normalised[len("/mnt/session/outputs/") :]
+    if normalised.startswith("/mnt/session/uploads/") or (
+        normalised == "/mnt/session/uploads"
+    ):
+        if root_mount_exists("/mnt/session/uploads"):
+            return normalised
+        if normalised == "/mnt/session/uploads":
+            return "mnt/session/uploads"
+        return "mnt/session/uploads/" + normalised[len("/mnt/session/uploads/") :]
     if normalised.startswith("/workspace/"):
         return normalised[len("/workspace/") :]
     if normalised == "/workspace":
@@ -68,18 +77,27 @@ def patch_path_utils(workdir: str) -> None:
     path_utils.resolve_under_cwd = resolve
 
 
-def rewrite_bash_session_output_paths(command: str, cwd: str) -> str:
-    """Rewrite /mnt/session/outputs in bash commands to the workdir mount.
+def rewrite_bash_session_paths(command: str, cwd: str) -> str:
+    """Rewrite AMA magic paths in bash commands to workdir-local mounts.
 
     piPy file tools use normalize_sandbox_path; bash subprocesses do not.
-    When the host-level /mnt/session/outputs mount is absent, redirect writes
-    to the session workdir symlink created by the platform.
+    When host-level /mnt/session/* mounts are absent, redirect to the session
+    workdir paths created by the platform (outputs symlink + upload mounts).
     """
-    marker = "/mnt/session/outputs"
-    if marker not in command:
-        return command
-    if root_mount_exists(marker):
-        return command
-    rel = normalize_sandbox_path(cwd, marker)
-    local = str((Path(cwd) / rel).resolve())
-    return command.replace(marker, local)
+    markers = (
+        "/mnt/session/outputs",
+        "/mnt/session/uploads",
+    )
+    for marker in markers:
+        if marker not in command:
+            continue
+        if root_mount_exists(marker):
+            continue
+        rel = normalize_sandbox_path(cwd, marker)
+        local = str((Path(cwd) / rel).resolve())
+        command = command.replace(marker, local)
+    return command
+
+
+# Backward-compatible alias used by outbound bash ops.
+rewrite_bash_session_output_paths = rewrite_bash_session_paths

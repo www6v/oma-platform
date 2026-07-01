@@ -153,7 +153,12 @@ def _load_dotenv() -> None:
 def _stream_config() -> StreamConfig:
     return StreamConfig(
         timeout_sec=float(os.getenv("OMA_DEMO_TIMEOUT_SEC", "900")),
-        stream_read_timeout=float(os.getenv("OMA_STREAM_READ_TIMEOUT_SEC", "90")),
+        stream_read_timeout=float(
+            os.getenv("OMA_STREAM_READ_TIMEOUT_SEC", "300"),
+        ),
+        idle_poll_max_wait=float(
+            os.getenv("OMA_IDLE_POLL_MAX_WAIT_SEC", "30"),
+        ),
     )
 
 

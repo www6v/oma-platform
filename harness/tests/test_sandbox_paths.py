@@ -13,18 +13,35 @@ def test_normalize_mnt_session_outputs_to_workdir_relative() -> None:
     )
 
 
-def test_normalize_workspace_strips_prefix() -> None:
-    assert normalize_sandbox_path("/tmp", "/workspace/foo.txt") == "foo.txt"
+def test_normalize_mnt_session_uploads_to_workdir_relative() -> None:
+    wd = "/tmp/sandbox"
+    assert normalize_sandbox_path(wd, "/mnt/session/uploads/sales_data.csv") == (
+        "mnt/session/uploads/sales_data.csv"
+    )
+    assert normalize_sandbox_path(wd, "/mnt/session/uploads") == (
+        "mnt/session/uploads"
+    )
 
 
 def test_rewrite_bash_session_output_paths() -> None:
-    from oma_adapter.sandbox_paths import rewrite_bash_session_output_paths
+    from oma_adapter.sandbox_paths import rewrite_bash_session_paths
 
     wd = "/tmp/sandbox/sess1"
     cmd = "python -c \"open('/mnt/session/outputs/report.html','w').write('x')\""
-    rewritten = rewrite_bash_session_output_paths(cmd, wd)
+    rewritten = rewrite_bash_session_paths(cmd, wd)
     assert "/mnt/session/outputs" not in rewritten
     assert ".mnt/session/outputs" in rewritten
+
+
+def test_rewrite_bash_session_upload_paths() -> None:
+    from oma_adapter.sandbox_paths import rewrite_bash_session_paths
+
+    wd = "/tmp/sandbox/sess1"
+    cmd = "cat /mnt/session/uploads/sales_data.csv | head"
+    rewritten = rewrite_bash_session_paths(cmd, wd)
+    assert "cat /mnt/session/uploads" not in rewritten
+    local = str((Path(wd) / "mnt/session/uploads/sales_data.csv").resolve())
+    assert local in rewritten
 
 
 def test_resolve_under_sandbox_cwd_writes_under_outputs(tmp_path: Path) -> None:

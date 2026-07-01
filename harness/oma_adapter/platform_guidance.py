@@ -28,9 +28,16 @@ SESSION_OUTPUTS_GUIDANCE = (
     "user-accessible."
 )
 
+SESSION_UPLOADS_GUIDANCE = (
+    "User-uploaded inputs are mounted at `/mnt/session/uploads/<filename>`. "
+    "Read them with that path in bash or file tools — do not search the host "
+    "filesystem with `find /` or guess alternate locations."
+)
+
 PLATFORM_GUIDANCE = (
     f"{AUTHENTICATED_COMMAND_GUIDANCE}\n\n"
     f"{LOOP_STOP_GUIDANCE}\n\n"
+    f"{SESSION_UPLOADS_GUIDANCE}\n\n"
     f"{SESSION_OUTPUTS_GUIDANCE}"
 )
 

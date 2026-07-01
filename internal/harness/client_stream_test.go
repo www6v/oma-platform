@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/open-ma/oma-building/internal/harness"
 )
@@ -74,5 +75,40 @@ func TestHTTPClientRunTurnStream(t *testing.T) {
 	got := strings.Join(types, ",")
 	if got != want {
 		t.Fatalf("types=%q want %q", got, want)
+	}
+}
+
+func TestHTTPClientRunTurnStreamSkipsKeepalive(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		_, _ = w.Write([]byte(`{"type":"harness.keepalive"}` + "\n"))
+		_, _ = w.Write([]byte(
+			`{"type":"agent.message","content":[{"type":"text","text":"ok"}]}` + "\n",
+		))
+	}))
+	defer server.Close()
+
+	client := &harness.HTTPClient{
+		BaseURL: server.URL,
+		HTTP:    &http.Client{Timeout: 30 * time.Second},
+	}
+	var types []string
+	err := client.RunTurnStream(
+		context.Background(),
+		harness.TurnRequest{SessionID: "s1"},
+		func(ev json.RawMessage) error {
+			var meta struct {
+				Type string `json:"type"`
+			}
+			_ = json.Unmarshal(ev, &meta)
+			types = append(types, meta.Type)
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(types) != 1 || types[0] != "agent.message" {
+		t.Fatalf("types=%v want [agent.message]", types)
 	}
 }

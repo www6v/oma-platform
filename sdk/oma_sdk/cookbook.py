@@ -15,9 +15,9 @@ from typing import Any, Callable
 
 # Default timeouts match cookbook example scripts.
 DEFAULT_TIMEOUT_SEC = 900.0
-DEFAULT_STREAM_READ_TIMEOUT = 90.0
+DEFAULT_STREAM_READ_TIMEOUT = 300.0
 DEFAULT_STREAM_CONNECT_DELAY = 0.1
-DEFAULT_IDLE_POLL_MAX_WAIT = 5.0
+DEFAULT_IDLE_POLL_MAX_WAIT = 30.0
 
 
 @dataclass(frozen=True)
@@ -165,6 +165,16 @@ async def stream_until_end_turn(
         lambda ev: print_stream_event(ev, preview_length=300)
     )
 
+    # Ignore replayed session.status_idle/end_turn from prior turns (MT1).
+    start_seq = 0
+    try:
+        listed = await client.events.list(session_id, order="desc", limit=1)
+        rows = listed.get("data") or []
+        if rows:
+            start_seq = int(rows[0].get("seq") or 0)
+    except Exception:
+        pass
+
     async def consume() -> None:
         nonlocal stream_error
         try:
@@ -177,7 +187,11 @@ async def stream_until_end_turn(
                 ev_type = event_type(ev)
                 if ev_type == "session.status_idle":
                     payload = event_payload(ev)
-                    if stop_reason_type(payload) == "end_turn":
+                    ev_seq = int(ev.get("seq") or 0)
+                    if (
+                        stop_reason_type(payload) == "end_turn"
+                        and ev_seq > start_seq
+                    ):
                         end_turn_seen.set()
                         return
                 if time.time() >= deadline:

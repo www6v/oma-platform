@@ -10,7 +10,7 @@ from pathlib import Path
 from pi_coding_agent.tools.bash import _wait_for_process
 
 from oma_adapter.env_packages import harness_venv_bin
-from oma_adapter.sandbox_paths import rewrite_bash_session_output_paths
+from oma_adapter.sandbox_paths import rewrite_bash_session_paths
 
 
 @dataclass
@@ -39,7 +39,7 @@ class OutboundBashOperations:
         if not Path(cwd).is_dir():
             raise FileNotFoundError(f"Working directory does not exist: {cwd}")
 
-        command = rewrite_bash_session_output_paths(command, cwd)
+        command = rewrite_bash_session_paths(command, cwd)
 
         env = os.environ.copy()
         venv_bin = harness_venv_bin()

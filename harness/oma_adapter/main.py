@@ -32,7 +32,13 @@ try:
 except ImportError:
     _workflows_ext = None
 
-TURN_TIMEOUT_SEC = float(os.environ.get("HARNESS_TURN_TIMEOUT_SEC", "300"))
+TURN_TIMEOUT_SEC = float(os.environ.get("HARNESS_TURN_TIMEOUT_SEC", "900"))
+STREAM_KEEPALIVE_SEC = float(
+    os.environ.get("HARNESS_STREAM_KEEPALIVE_SEC", "15"),
+)
+KEEPALIVE_NDJSON = (
+    json.dumps({"type": "harness.keepalive"}, separators=(",", ":")) + "\n"
+)
 
 app = FastAPI(title="oma-harness")
 
@@ -118,8 +124,13 @@ async def internal_turn_stream(body: TurnRequest) -> StreamingResponse:
         task = asyncio.create_task(run())
         while not task.done() or not queue.empty():
             try:
-                line = await asyncio.wait_for(queue.get(), timeout=0.05)
+                line = await asyncio.wait_for(
+                    queue.get(),
+                    timeout=STREAM_KEEPALIVE_SEC,
+                )
             except asyncio.TimeoutError:
+                if not task.done():
+                    yield KEEPALIVE_NDJSON
                 continue
             yield line
 

@@ -6,7 +6,7 @@
 >
 > **对比文件：**
 > - Cookbook: `harness/claude-cookbooks-main/managed_agents/data_analyst_agent.ipynb`
-> - OMA 示例: `oma-platform/sdk/example/example1/data_analyst_agent.py`
+> - OMA 示例: `oma-platform/sdk/example/example1/data_analyst_agent.py` → `data_analyst_agent_main.py`
 >
 > **P0 范围（已确认）：** session.resources 挂载 + report.html→Files API + 示例去 workaround
 
@@ -44,8 +44,8 @@
 
 ### 可延后 P1/P2
 
-- Environment `packages.pip` 本地安装（或文档声明仅 Docker cloud）
-- `sessions.resources.*` CRUD（POST create 之外的 add/update/delete）
+- ~~Environment `packages.pip` 本地安装~~ **E1 ✅**（`harness/oma_adapter/env_packages.py`）
+- ~~`sessions.resources.*` CRUD~~ **T16 ✅**
 - Turn 超时 API 化（非 env var）
 - SDK 封装 `GET /sessions/{id}/outputs`
 
@@ -54,15 +54,15 @@
 ## 逐步 Gap 矩阵（Cookbook vs OMA 现状）
 
 ```
-Cookbook 7 步                    OMA 现状                         Gap ID
-─────────────────────────────────────────────────────────────────────
-1. environments.create(packages)  config 仅存 DB，本地不 pip install   E1 (P1)
-2. agents.create                  ✅ 基本对齐                        —
-3. beta.files.upload              httpx async，非 beta.files          F1 (P2)
-4. sessions.create(resources=[])  Go 忽略 resources[]                 S1 (P0)
-5. events.send + stream           send ✅；示例用 poll 非 stream       EV1 (P1)
-6. files.list(scope_id)+download  scope_id 常返回 []                  O1 (P0)
-7. archive + 复用 agent/env       示例每次 timestamp 新建             C1 (P1)
+Cookbook 7 步                    OMA 现状（2026-07-01）              Gap ID
+─────────────────────────────────────────────────────────────────────────
+1. environments.create(packages)  turn 前 pip install（E1）            ✅ E1
+2. agents.create                  ✅ 基本对齐                          —
+3. beta.files.upload              httpx async，非 beta.files            F1 (P2, T20 deferred)
+4. sessions.create(resources=[])  scoped file copy + turn mount       ✅ S1
+5. events.send + stream           stream + end_turn（oma_sdk.cookbook） ✅ EV1
+6. files.list(scope_id)+download  post-turn sync → Files API          ✅ O1
+7. archive + 复用 agent/env       wait_for_idle + archive             ✅ C1
 ```
 
 ---
@@ -298,30 +298,30 @@ Lane C (tests, after T3+T5):
 |------|---------------------|----------|---------|
 | 客户端模型 | 单一 `Anthropic()` 客户端 | `OMAClient` = anthropic SDK + httpx 双通道 | 中 |
 | 运行时 | 托管 cloud 容器 | 本地 piPy harness + 本地 subprocess 沙箱 | **高** |
-| Session 资源挂载 | `sessions.create(resources=[...])` | Go server **不处理** session.resources | **高** |
-| 环境 packages | 容器构建时预装 | 仅存储配置，本地 **不安装** | **高** |
-| 输出文件回收 | Files API `scope_id` 即可下载 | 路径不一致时 Files API 为空 | **高** |
-| 事件流 | `sessions.events.stream()` 同步 SSE | 需用 OMA 原生 `events.list` 轮询 | 中 |
+| Session 资源挂载 | `sessions.create(resources=[...])` | create + T16 post-create CRUD | **低** |
+| 环境 packages | 容器构建时预装 | turn 前读 config 并 pip install（E1） | **低** |
+| 输出文件回收 | Files API `scope_id` 即可下载 | post-turn sync → Files API | **低** |
+| 事件流 | `sessions.events.stream()` 同步 SSE | `oma_sdk.cookbook.stream_until_end_turn` | 低 |
 
 ---
 
 ## 建议补齐顺序
 
 ```
-P0 — 阻塞 data analyst 与 cookbook 对齐
+P0 — 阻塞 data analyst 与 cookbook 对齐          ✅ 已交付
 ├── S1/S3  Session create resources[] + turn 前 resolve/mount
 ├── O1/O2  统一 /mnt/session/outputs 写入 → sessionoutputs → Files API scope_id
 └── 示例   去掉 workaround，恢复 cookbook 流程
 
 P1 — API 形态对齐
-├── F1/T20  client.beta.files 别名到 OMA FilesResource
-├── EV1     统一 events.stream 事件结构与 SDK 对象
-├── E1      本地 harness 执行 environment.packages（或文档明确仅 Docker cloud）
-└── EV2     turn 超时可通过 session/agent 配置或 API 传递
+├── F1/T20  client.beta.files 别名（deferred）
+├── EV1     events.stream + end_turn（oma_sdk.cookbook）     ✅
+├── E1      本地 harness 执行 environment.packages           ✅
+└── EV2     turn 超时可通过 session/agent 配置或 API 传递   open
 
 P2 — 完整 Managed Agents parity
-├── S2      sessions.resources CRUD
-├── O3      SDK 封装 GET /sessions/{id}/outputs
+├── S2      sessions.resources CRUD                         ✅ T16
+├── O3      SDK 封装 GET /sessions/{id}/outputs              open
 └── E2      真实 cloud sandbox（packages/networking 按 environment 构建）
 ```
 
@@ -329,39 +329,39 @@ P2 — 完整 Managed Agents parity
 
 ## Completion Summary
 
-**完成日期：** 2026-06-29 · **P0 对齐：** ✅ 已交付（T1–T5）
+**完成日期：** 2026-06-29（P0）· 2026-07-01（E1 + T15–T19 sync）· **P0 对齐：** ✅ · **E1：** ✅
 
 | 项 | 评审时 | 当前结果 |
 |----|--------|----------|
 | Step 0 Scope | Accepted A — P0 三件套 | ✅ **已交付** — session resources、outputs→Files API、示例去 workaround |
-| Architecture | 4 issues（S1/O1 为 P0 blocker） | ✅ **S1/O1 已关闭**（T1–T3）；E1 本地 packages、cloud runtime 仍 open |
-| Code Quality | 2 issues（示例拆分、PLAN 漂移） | ✅ 示例为 parity probe（T5）；workaround 保留在 `example/example1/v1/`；SDK-PLAN 已同步（T7）；T6 helper **deferred** |
-| Test Review | 7 gaps，Go-server cookbook 0% | ✅ **Go E2E 覆盖 §3–6**（T4，CI green）；`session_resources_api_test.go`；SDK pytest E2E（T6）未做 |
-| Performance | turn 超时 300s | ⚠️ **仍依赖 env var**（`HARNESS_TURN_TIMEOUT_SEC`，本地可设 900）；API 化未做 |
+| Architecture | 4 issues（S1/O1 为 P0 blocker） | ✅ **S1/O1/E1 已关闭**；cloud runtime 仍 open |
+| Code Quality | 2 issues（示例拆分、PLAN 漂移） | ✅ launcher + `*_main.py`；legacy 在 `example/example1/v1/`（deprecated）；T6 helper **deferred** |
+| Test Review | 7 gaps，Go-server cookbook 0% | ✅ Go E2E §3–6 + `TestIterateCookbookMultiTurn`；`test_env_packages.py`；SDK pytest E2E（C6）未做 |
+| Performance | turn 超时 300s | ⚠️ **仍依赖 env var**（`HARNESS_TURN_TIMEOUT_SEC`）；API 化未做 |
 | NOT in scope | cloud runtime, work.*, beta header | 不变 |
-| What exists | ResourceResolver, Files API, symlink | ✅ 扩展：session.resources 持久化、turn 合并 mount、post-turn sync、`client.events.stream` |
-| Failure modes | 2 critical（S1, O1） | ✅ **S1/O1 已缓解**；packages 本地未装、turn 超时仍为 P1 风险 |
-| Implementation | T1–T7 待做 | T1–T5 ✅ · T6 ⏸️ · T7 ✅ |
+| What exists | ResourceResolver, Files API, symlink | ✅ + env packages、session.resources CRUD、threads、outputs sync |
+| Failure modes | 2 critical（S1, O1） | ✅ **S1/O1/E1 已缓解**；长 turn 仍可能超时 |
+| Implementation | T1–T7 待做 | T1–T5 ✅ · T6 ⏸️ · T7 ✅ · E1 ✅ |
 
 **Cookbook 7 步覆盖（Go server + 示例）：**
 
 | Step | 状态 | 备注 |
 |------|------|------|
-| 1 environments.create(packages) | ⚠️ | config 存 DB；本地 harness 不 pip install（E1） |
+| 1 environments.create(packages) | ✅ | E1：`ensure_environment_packages` at turn start |
 | 2 agents.create | ✅ | |
-| 3 files.upload | ✅ | httpx async，非 `beta.files`（F1） |
-| 4 sessions.create(resources=[]) | ✅ | scoped file copy + turn mount |
-| 5 events.send + stream | ✅ | 示例用 `events.stream(replay=True)` |
+| 3 files.upload | ✅ | httpx async，非 `beta.files`（F1/T20 deferred） |
+| 4 sessions.create(resources=[]) | ✅ | scoped file copy + turn mount + T16 CRUD |
+| 5 events.send + stream | ✅ | `oma_sdk.cookbook.stream_until_end_turn` |
 | 6 files.list(scope_id) + download | ✅ | post-turn sync；默认无磁盘 fallback |
-| 7 archive + 复用 agent/env | ✅ | 固定 name，session archive |
+| 7 archive + 复用 agent/env | ✅ | `wait_for_idle_status` + archive |
 
-**Lake Score：** P0 完整 parity 已落地（10/10）；剩余为 P1/P2（packages、post-create resources CRUD、T6 helper）。
+**Lake Score：** P0 + E1 parity 已落地；剩余 P1/P2：turn timeout API、T20/C6 optional。
 
 ---
 
 ## 建议下一步
 
-1. **P1 — 本地 packages：** 文档声明 harness venv 预装要求，或 turn 前读 `env.config.packages.pip` 安装。
-2. **P1 — Turn 超时 API 化：** `turn_timeout_sec` 进 session/environment config，替代纯 env var。
-3. **可选 — T6：** 恢复 `DataAnalystExamples` + `tests/test_data_analyst.py`（T6 曾回退）。
-4. **P2 — post-create `sessions.resources.*` CRUD** 与 **`client.beta.files` 别名**（见 `sdk/SDK-PLAN.md` T15–T20）。
+1. **P1 — Turn 超时 API 化：** `turn_timeout_sec` 进 session/environment config，替代纯 env var。
+2. **可选 — C6：** `DataAnalystExamples` + `tests/test_data_analyst.py` live E2E（deferred）。
+3. **可选 — T20：** `client.beta.files` 别名（deferred；当前用 `client.files`）。
+4. **P2 — cloud runtime：** 真实容器 sandbox（E2）；本地 harness 无法等价 `type:cloud`。

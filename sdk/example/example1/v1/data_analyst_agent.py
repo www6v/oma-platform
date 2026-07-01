@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """
+DEPRECATED — see ../data_analyst_agent_main.py and ../v1/README.md.
+
 Data Analyst Agent (OMA SDK) — script version.
 
 Mirrors the pattern from the Anthropic cookbook

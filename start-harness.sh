@@ -11,6 +11,7 @@ if [[ -f "${ROOT_DIR}/.env" ]]; then
 fi
 
 export OMA_FAKE_HARNESS="${OMA_FAKE_HARNESS:-1}"
+export HARNESS_TURN_TIMEOUT_SEC="${HARNESS_TURN_TIMEOUT_SEC:-900}"
 
 export OMA_DATABASE_PATH="${OMA_DATABASE_PATH:-${DATABASE_PATH:-${ROOT_DIR}/data/oma.db}}"
 

@@ -146,7 +146,12 @@ def _load_dotenv() -> None:
 def _stream_config() -> StreamConfig:
     return StreamConfig(
         timeout_sec=float(os.getenv("OMA_DEMO_TIMEOUT_SEC", "900")),
-        stream_read_timeout=float(os.getenv("OMA_STREAM_READ_TIMEOUT_SEC", "90")),
+        stream_read_timeout=float(
+            os.getenv("OMA_STREAM_READ_TIMEOUT_SEC", "300"),
+        ),
+        idle_poll_max_wait=float(
+            os.getenv("OMA_IDLE_POLL_MAX_WAIT_SEC", "30"),
+        ),
     )
 
 
@@ -298,18 +303,15 @@ async def main() -> None:
         # ------------------------------------------------------------------
         # Second turn in the same session: don't trust the agent's word.
         # MT1: covered by Go TestIterateCookbookMultiTurn + pytest test_iterate_cookbook.py.
-        client.sessions.events.send(
+        await stream_until_end_turn(
+            client,
             session.id,
-            events=[
+            send_events=[
                 {
                     "type": "user.message",
                     "content": [{"type": "text", "text": VERIFY_TASK}],
                 }
             ],
-        )
-        await stream_until_end_turn(
-            client,
-            session.id,
             config=_stream_config(),
             on_event=lambda ev: print_stream_event(ev, preview_length=None),
         )

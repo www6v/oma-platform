@@ -1,0 +1,14 @@
+# OMA SDK cookbook parity examples
+
+Thin launchers pick Python 3.11+ via `_run_with_python3.py`; main logic lives in
+`*_main.py`.
+
+| Cookbook | Launcher | Main | Fixtures |
+|---|---|---|---|
+| `data_analyst_agent.ipynb` | `example1/data_analyst_agent.py` | `example1/data_analyst_agent_main.py` | `example1/data/` |
+| `CMA_iterate_fix_failing_tests.ipynb` | `example2/iterate_fix_failing_tests.py` | `example2/iterate_fix_failing_tests_main.py` | `example2/iterate/` |
+
+Shared streaming helpers: `oma_sdk.cookbook` (`stream_until_end_turn`,
+`wait_for_idle_status`).
+
+Legacy workaround copy: `example1/v1/` (deprecated).

@@ -138,6 +138,26 @@ type HTTPClient struct {
 	HTTP    *http.Client
 }
 
+const harnessKeepaliveEventType = "harness.keepalive"
+
+// streamingHTTPClient returns an HTTP client without Client.Timeout for
+// long-lived NDJSON turn streams. Client.Timeout counts from request start
+// and aborts mid-turn when LLM/bash gaps exceed the limit.
+func (c *HTTPClient) streamingHTTPClient() *http.Client {
+	if c.HTTP != nil && c.HTTP.Timeout == 0 {
+		return c.HTTP
+	}
+	base := c.HTTP
+	if base == nil {
+		base = http.DefaultClient
+	}
+	transport := base.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	return &http.Client{Transport: transport, Timeout: 0}
+}
+
 // RunTurn posts to POST /internal/turn.
 func (c *HTTPClient) RunTurn(
 	ctx context.Context,
@@ -207,10 +227,7 @@ func (c *HTTPClient) RunTurnStream(
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "application/x-ndjson")
 
-	client := c.HTTP
-	if client == nil {
-		client = &http.Client{Timeout: 10 * time.Minute}
-	}
+	client := c.streamingHTTPClient()
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		return err
@@ -230,6 +247,13 @@ func (c *HTTPClient) RunTurnStream(
 	for scanner.Scan() {
 		line := bytes.TrimSpace(scanner.Bytes())
 		if len(line) == 0 {
+			continue
+		}
+		var meta struct {
+			Type string `json:"type"`
+		}
+		_ = json.Unmarshal(line, &meta)
+		if meta.Type == harnessKeepaliveEventType {
 			continue
 		}
 		if err := onEvent(json.RawMessage(line)); err != nil {
