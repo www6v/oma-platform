@@ -66,6 +66,9 @@ TEAM_EXTENSION_PATH = (
 SUBAGENT_EXTENSION_PATH = (
     Path(__file__).resolve().parent / "extensions" / "subagent_extension.py"
 )
+CUSTOM_TOOLS_EXTENSION_PATH = (
+    Path(__file__).resolve().parent / "extensions" / "custom_tools.py"
+)
 
 
 def resolve_subagent_extension_path() -> Path:
@@ -190,6 +193,10 @@ def _extension_paths_for_agent(agent: AgentSnapshot) -> list[str]:
     )
     if needs_team and team_ext_path.is_file():
         paths.append(str(team_ext_path))
+    from oma_adapter.custom_tools import custom_tools_from_agent
+
+    if custom_tools_from_agent(agent) and CUSTOM_TOOLS_EXTENSION_PATH.is_file():
+        paths.append(str(CUSTOM_TOOLS_EXTENSION_PATH))
     return paths
 
 

@@ -202,6 +202,10 @@ func (m *Machine) RunTurn(ctx context.Context, threadID string) error {
 		return err
 	}
 
+	onEvent, turnEvents := turnEventCollector(func(ev json.RawMessage) error {
+		return m.publishEvents(ctx, []json.RawMessage{ev})
+	})
+
 	streamErr := harness.RunTurnStreaming(
 		turnCtx,
 		m.Harness,
@@ -225,9 +229,7 @@ func (m *Machine) RunTurn(ctx context.Context, threadID string) error {
 			OutboundProxyAPIKey: m.OutboundProxyAPIKey,
 			DatabasePath:        m.DatabasePath,
 		},
-		func(ev json.RawMessage) error {
-			return m.publishEvents(ctx, []json.RawMessage{ev})
-		},
+		onEvent,
 	)
 	if m.Workdirs != nil {
 		if syncErr := m.Workdirs.SyncSessionOutputs(
@@ -255,7 +257,56 @@ func (m *Machine) RunTurn(ctx context.Context, threadID string) error {
 	if err := m.publishEvents(ctx, []json.RawMessage{lifecycleEnd}); err != nil {
 		return err
 	}
-	return m.PublishStatusIdle(ctx)
+	return m.publishStatusIdle(ctx, *turnEvents)
+}
+
+// turnEventCollector tracks events emitted during a harness stream.
+func turnEventCollector(
+	onEvent harness.EventHandler,
+) (harness.EventHandler, *[]json.RawMessage) {
+	turnEvents := make([]json.RawMessage, 0, 32)
+	handler := func(ev json.RawMessage) error {
+		turnEvents = append(turnEvents, append(json.RawMessage(nil), ev...))
+		if onEvent == nil {
+			return nil
+		}
+		return onEvent(ev)
+	}
+	return handler, &turnEvents
+}
+
+// PublishStatusIdle appends session.status_idle with stop_reason derived from
+// pending custom tools across the full session history.
+func (m *Machine) PublishStatusIdle(ctx context.Context) error {
+	return m.publishStatusIdle(ctx, nil)
+}
+
+func (m *Machine) publishStatusIdle(
+	ctx context.Context,
+	turnEvents []json.RawMessage,
+) error {
+	eventPayloads := turnEvents
+	if m.Events != nil {
+		history, err := m.Events.ListEvents(ctx, m.SessionID, 0, 10000, true)
+		if err != nil {
+			return err
+		}
+		eventPayloads = make([]json.RawMessage, 0, len(history))
+		for _, ev := range history {
+			eventPayloads = append(eventPayloads, ev.Payload)
+		}
+	}
+	stopReason := harness.BuildIdleStopReason(
+		harness.PendingCustomToolIDs(eventPayloads),
+	)
+	idleEvent, err := json.Marshal(map[string]any{
+		"type":        "session.status_idle",
+		"stop_reason": stopReason,
+	})
+	if err != nil {
+		return err
+	}
+	return m.publishEvents(ctx, []json.RawMessage{idleEvent})
 }
 
 // CancelActiveTurn aborts the in-flight harness turn, if any.
@@ -268,18 +319,6 @@ func (m *Machine) CancelActiveTurn() bool {
 	}
 	cancel()
 	return true
-}
-
-// PublishStatusIdle appends a session.status_idle marker (OMA-aligned).
-func (m *Machine) PublishStatusIdle(ctx context.Context) error {
-	idleEvent, err := json.Marshal(map[string]any{
-		"type":        "session.status_idle",
-		"stop_reason": map[string]string{"type": "end_turn"},
-	})
-	if err != nil {
-		return err
-	}
-	return m.publishEvents(ctx, []json.RawMessage{idleEvent})
 }
 
 func (m *Machine) setCancelTurn(cancel context.CancelFunc) {

@@ -46,11 +46,14 @@ from .subagent import (
 )
 from .cookbook import (
     StreamConfig,
+    custom_tool_event_id,
     event_payload,
     event_type,
     message_text,
     print_stream_event,
+    stop_reason_event_ids,
     stop_reason_type,
+    stream_hitl_until_end_turn,
     stream_until_end_turn,
     wait_for_idle_status,
 )
@@ -60,12 +63,15 @@ __all__ = [
     "StreamConfig",
     "build_multiagent",
     "count_thread_created",
+    "custom_tool_event_id",
     "event_payload",
     "event_type",
     "events_of_type",
     "message_text",
     "print_stream_event",
+    "stop_reason_event_ids",
     "stop_reason_type",
+    "stream_hitl_until_end_turn",
     "stream_until_end_turn",
     "wait_for_idle_status",
 ]

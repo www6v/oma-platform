@@ -6,11 +6,14 @@ import json
 import uuid
 from typing import Any
 
+from oma_adapter.custom_tools import wire_tool_use_type
+
 
 def emit_oma_events(
     raw_events: list[dict[str, Any]],
     *,
     seen_agent_text: set[str] | None = None,
+    custom_tool_names: frozenset[str] | None = None,
 ) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     seen_agent_text = seen_agent_text if seen_agent_text is not None else set()
@@ -44,24 +47,40 @@ def emit_oma_events(
                 or item.get("tool_use_id")
                 or f"tool_{uuid.uuid4().hex[:12]}"
             )
+            tool_name = item.get("toolName") or item.get("name", "tool")
+            if (
+                custom_tool_names is not None
+                and str(tool_name) in custom_tool_names
+            ):
+                wire_type = "agent.custom_tool_use"
+            else:
+                wire_type = wire_tool_use_type(str(tool_name))
             out.append(
                 {
-                    "type": "agent.tool_use",
+                    "type": wire_type,
                     "id": tool_id,
-                    "name": item.get("toolName") or item.get("name", "tool"),
+                    "name": tool_name,
                     "input": item.get("args") or item.get("input") or {},
                 }
             )
         elif kind in {"tool_result", "agent.tool_result", "tool_execution_end"}:
+            tool_use_id = (
+                item.get("toolCallId")
+                or item.get("tool_use_id")
+                or item.get("id")
+                or ""
+            )
+            tool_name = _tool_name_for_call(raw_events, tool_use_id, idx)
+            if (
+                custom_tool_names is not None
+                and tool_name is not None
+                and tool_name in custom_tool_names
+            ):
+                continue
             out.append(
                 {
                     "type": "agent.tool_result",
-                    "tool_use_id": (
-                        item.get("toolCallId")
-                        or item.get("tool_use_id")
-                        or item.get("id")
-                        or ""
-                    ),
+                    "tool_use_id": tool_use_id,
                     "content": [
                         {
                             "type": "text",
@@ -73,6 +92,37 @@ def emit_oma_events(
                 }
             )
     return out
+
+
+def _tool_name_for_call(
+    raw_events: list[dict[str, Any]],
+    tool_use_id: str,
+    end_index: int,
+) -> str | None:
+    """Resolve tool name from a preceding tool_use / tool_execution_start."""
+    if not tool_use_id:
+        return None
+    for item in reversed(raw_events[: end_index + 1]):
+        if not isinstance(item, dict):
+            continue
+        kind = item.get("type") or item.get("event")
+        if kind not in {
+            "tool_use",
+            "agent.tool_use",
+            "tool_execution_start",
+        }:
+            continue
+        call_id = (
+            item.get("toolCallId")
+            or item.get("tool_use_id")
+            or item.get("id")
+        )
+        if call_id != tool_use_id:
+            continue
+        name = item.get("toolName") or item.get("name")
+        if isinstance(name, str) and name:
+            return name
+    return None
 
 
 def _agent_message(text: str) -> dict[str, Any]:

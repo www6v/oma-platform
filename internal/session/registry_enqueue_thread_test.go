@@ -47,10 +47,6 @@ func TestEnqueueEventsRunsTurnOnTeammateThread(t *testing.T) {
 	}
 	defer store.Close(db)
 
-	if err := store.Migrate(db); err != nil {
-		t.Fatal(err)
-	}
-
 	agents := store.NewAgentRepo(db)
 	environments := store.NewEnvironmentRepo(db)
 	if err := environments.EnsureDefault(context.Background()); err != nil {

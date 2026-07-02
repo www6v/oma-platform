@@ -11,6 +11,24 @@ from oma_adapter.compaction import (
 
 PRIMARY_THREAD_ID = "sthr_primary"
 
+# Session frames excluded from harness conversation projection.
+_NON_MODEL_EVENT_TYPES = frozenset(
+    {
+        "session.lifecycle",
+        "session.status_running",
+        "session.status_idle",
+        "session.status_terminated",
+        "session.error",
+        "session.warning",
+        "system.user_message_pending",
+        "system.user_message_promoted",
+        "system.user_message_cancelled",
+        "span.model_request_start",
+        "span.model_request_end",
+        "span.model_first_token",
+    }
+)
+
 
 def event_thread_id(event: dict[str, Any]) -> str:
     if not isinstance(event, dict):
@@ -117,6 +135,25 @@ def _history_slice(events: list[dict[str, Any]], end_index: int) -> list[dict[st
     return events[boundary_index + 1 : end_index]
 
 
+def _continuation_events_after_user(
+    events: list[dict[str, Any]],
+    user_index: int,
+) -> list[dict[str, Any]]:
+    """Model-context events after the latest user.message (HITL resume tail)."""
+    if user_index < 0 or user_index >= len(events) - 1:
+        return []
+    from oma_adapter.compaction import model_context_events
+
+    tail = [
+        ev
+        for ev in events[user_index + 1 :]
+        if isinstance(ev, dict)
+        and ev.get("type") not in _NON_MODEL_EVENT_TYPES
+        and ev.get("type") != "user.custom_tool_result"
+    ]
+    return model_context_events(tail)
+
+
 def project_oma_events(
     events: list[dict[str, Any]],
     *,
@@ -138,6 +175,9 @@ def project_oma_events(
 
     parts: list[str] = []
     history_events = _history_slice(scoped, last_user_index)
+    history_events.extend(
+        _continuation_events_after_user(scoped, last_user_index)
+    )
     boundary = latest_compaction_boundary(scoped[:last_user_index])
     if boundary is not None:
         summary = _summary_text(boundary)

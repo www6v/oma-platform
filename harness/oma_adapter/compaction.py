@@ -67,6 +67,11 @@ def latest_compaction_boundary(
     return boundary
 
 
+def model_context_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return events that should appear in harness conversation text."""
+    return _model_context_events(events)
+
+
 def _model_context_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for event in events:
@@ -90,13 +95,17 @@ def _event_text(event: dict[str, Any]) -> str:
             continue
         if block.get("type") == "text" and block.get("text"):
             parts.append(str(block["text"]))
-    if event.get("type") == "agent.tool_use":
+    if event.get("type") in ("agent.tool_use", "agent.custom_tool_use"):
         name = event.get("name")
         if name:
             parts.append(str(name))
         inp = event.get("input")
         if inp is not None:
             parts.append(str(inp))
+    if event.get("type") == "agent.tool_result":
+        tool_use_id = event.get("tool_use_id")
+        if tool_use_id:
+            parts.append(str(tool_use_id))
     return "\n".join(parts)
 
 

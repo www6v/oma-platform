@@ -62,7 +62,8 @@ type TurnRequest struct {
 
 // TurnResponse is the harness turn result.
 type TurnResponse struct {
-	Events []json.RawMessage `json:"events"`
+	Events                  []json.RawMessage `json:"events"`
+	PendingCustomToolIDs    []string          `json:"pending_custom_tool_ids,omitempty"`
 }
 
 // OutcomeRubric describes eval criteria for LLM-as-judge.

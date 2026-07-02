@@ -23,6 +23,17 @@ from pi_subagent.runtime import (
     configure_subagent_runtime,
     get_subagent_runtime,
 )
+from oma_adapter.custom_tools import (
+    custom_tool_names,
+    custom_tools_from_agent,
+    pending_custom_tool_ids,
+    register_custom_tools_on_session,
+)
+from oma_adapter.custom_tools_runtime import (
+    CustomToolsRuntime,
+    clear_custom_tools_runtime,
+    configure_custom_tools_runtime,
+)
 from oma_adapter.emit import emit_oma_events
 from oma_adapter.platform_guidance import compose_system_prompt
 from oma_adapter.project import (
@@ -266,6 +277,9 @@ async def _run_turn_core(
     is_subthread = thread_tag != PRIMARY_THREAD_ID
 
     delegation_agent = SubAgentSnapshot.model_validate(agent.model_dump())
+    agent_custom_tools = custom_tool_names(
+        AgentSnapshot.model_validate(delegation_agent.model_dump())
+    )
     resolved_sub_agents: dict[str, SubAgentSnapshot] = {}
     if sub_agents:
         resolved_sub_agents = {
@@ -327,7 +341,7 @@ async def _run_turn_core(
         session_thread_id=session_thread_id,
     )
     if not prompt:
-        return TurnResponse(events=[])
+        return TurnResponse(events=[], pending_custom_tool_ids=[])
 
     wire_model = model.model if model is not None else agent.model
     if _should_use_fake_harness(model=model, wire_model=wire_model):
@@ -459,6 +473,11 @@ async def _run_turn_core(
             proxy_api_key=mcp_proxy_api_key,
         )
         configure_mcp_runtime(mcp_runtime if mcp_runtime.tools else None)
+        agent_for_tools = AgentSnapshot.model_validate(delegation_agent.model_dump())
+        custom_tool_defs = custom_tools_from_agent(agent_for_tools)
+        configure_custom_tools_runtime(
+            CustomToolsRuntime(tools=custom_tool_defs) if custom_tool_defs else None
+        )
         try:
             if create_session is not None:
                 result = await create_session(None)
@@ -478,6 +497,7 @@ async def _run_turn_core(
                 )
             session = result.session
             _register_mcp_tools_on_session(session, mcp_runtime)
+            register_custom_tools_on_session(session, custom_tool_defs)
 
             buffer: list[dict[str, Any]] = []
             raw_cursor = 0
@@ -506,6 +526,7 @@ async def _run_turn_core(
                 delta = emit_oma_events(
                     buffer[raw_cursor:],
                     seen_agent_text=seen_agent_text,
+                    custom_tool_names=agent_custom_tools,
                 )
                 raw_cursor = len(buffer)
                 # Debug: log what we got and what we emitted
@@ -551,6 +572,7 @@ async def _run_turn_core(
             streamed_oma = emit_oma_events(
                 buffer,
                 seen_agent_text=seen_agent_text,
+                custom_tool_names=agent_custom_tools,
             )
             fallback_tool_events: list[dict[str, Any]] = []
             pending_mcp = requested_mcp & {
@@ -587,6 +609,7 @@ async def _run_turn_core(
                 fallback = emit_oma_events(
                     buffer,
                     seen_agent_text=seen_agent_text,
+                    custom_tool_names=agent_custom_tools,
                 )
                 if not fallback:
                     text = _assistant_text_from_session(session)
@@ -614,7 +637,11 @@ async def _run_turn_core(
                     return_exceptions=True,
                 )
 
-            return TurnResponse(events=oma_events)
+            pending_ids = pending_custom_tool_ids(oma_events)
+            return TurnResponse(
+                events=oma_events,
+                pending_custom_tool_ids=pending_ids,
+            )
         finally:
             for key in saved_env:
                 os.environ.pop(key, None)
@@ -623,6 +650,7 @@ async def _run_turn_core(
             clear_web_search_runtime()
             clear_schedule_runtime()
             clear_mcp_runtime()
+            clear_custom_tools_runtime()
             clear_subagent_runtime()
             if team_runtime_token is not None:
                 active_team = get_team_runtime()

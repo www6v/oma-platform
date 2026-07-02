@@ -1,3 +1,5 @@
+import pytest
+
 from oma_adapter.tools import DEFAULT_PIPY_TOOLS, pypi_tools_from_agent
 from oma_adapter.types import AgentSnapshot
 
@@ -145,3 +147,106 @@ def test_legacy_name_item() -> None:
         tools=[{"name": "edit"}, {"name": "browser"}],
     )
     assert pypi_tools_from_agent(agent) == ["edit"]
+
+
+def test_gate_custom_tools_load_extension() -> None:
+    from oma_adapter.tools import (
+        CUSTOM_TOOLS_EXTENSION_PATH,
+        session_tool_config_from_agent,
+    )
+
+    agent = AgentSnapshot(
+        id="a",
+        name="gate",
+        model="m",
+        tools=[
+            {"type": "agent_toolset_20260401"},
+            {
+                "type": "custom",
+                "name": "decide",
+                "description": "approve/reject",
+                "input_schema": {"type": "object"},
+            },
+            {
+                "type": "custom",
+                "name": "escalate",
+                "description": "human review",
+                "input_schema": {},
+            },
+        ],
+    )
+    cfg = session_tool_config_from_agent(agent)
+    assert str(CUSTOM_TOOLS_EXTENSION_PATH) in cfg.extension_paths
+
+
+@pytest.mark.asyncio
+async def test_custom_tools_register_with_pipy_session() -> None:
+    pytest.importorskip("pi_coding_agent")
+    pytest.importorskip("pi_agent")
+    from pi_ai.providers.faux import (
+        faux_assistant_message,
+        faux_text,
+        register_faux_provider,
+    )
+    from pi_coding_agent.sdk import CreateAgentSessionOptions, create_agent_session
+
+    from oma_adapter.custom_tools import (
+        CustomToolDef,
+        register_custom_tools_on_session,
+    )
+    from oma_adapter.tools import session_tool_config_from_agent
+
+    registration = register_faux_provider(
+        models=[{"id": "gate-custom", "name": "gate-custom"}],
+        handler=lambda _ctx: faux_assistant_message([faux_text("ok")]),
+    )
+    try:
+        agent = AgentSnapshot(
+            id="a",
+            name="gate",
+            model="faux/gate-custom",
+            tools=[
+                {"type": "agent_toolset_20260401"},
+                {
+                    "type": "custom",
+                    "name": "decide",
+                    "description": "approve/reject",
+                    "input_schema": {"type": "object"},
+                },
+                {
+                    "type": "custom",
+                    "name": "escalate",
+                    "description": "human review",
+                    "input_schema": {},
+                },
+            ],
+        )
+        cfg = session_tool_config_from_agent(agent)
+        result = await create_agent_session(
+            CreateAgentSessionOptions(
+                model="faux/gate-custom",
+                tools=cfg.builtin_tools,
+                extension_paths=cfg.extension_paths,
+                in_memory=True,
+            )
+        )
+        register_custom_tools_on_session(
+            result.session,
+            [
+                CustomToolDef(
+                    name="decide",
+                    description="approve/reject",
+                    input_schema={"type": "object"},
+                ),
+                CustomToolDef(
+                    name="escalate",
+                    description="human review",
+                    input_schema={},
+                ),
+            ],
+        )
+        tool_names = {tool.name for tool in result.session._agent._tools}
+        assert "decide" in tool_names
+        assert "escalate" in tool_names
+    finally:
+        registration.dispose()

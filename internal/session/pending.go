@@ -154,7 +154,12 @@ func (m *Machine) PromoteOnePending(
 		return false, nil
 	}
 
-	stored, err := m.Events.AppendEvents(ctx, m.SessionID, []json.RawMessage{row.Data})
+	toStore, err := appendEventsForPendingPromote(row.Data)
+	if err != nil {
+		return false, err
+	}
+
+	stored, err := m.Events.AppendEvents(ctx, m.SessionID, toStore)
 	if err != nil {
 		return false, err
 	}

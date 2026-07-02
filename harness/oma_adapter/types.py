@@ -79,6 +79,7 @@ class TurnRequest(BaseModel):
 
 class TurnResponse(BaseModel):
     events: list[dict[str, Any]] = Field(default_factory=list)
+    pending_custom_tool_ids: list[str] = Field(default_factory=list)
 
 
 class OutcomeRubricRequest(BaseModel):

@@ -9,9 +9,12 @@ httpx SSE resource (``client.events.stream``) instead of the sync anthropic
 from __future__ import annotations
 
 import asyncio
+import inspect
+import json
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 # Default timeouts match cookbook example scripts.
 DEFAULT_TIMEOUT_SEC = 900.0
@@ -46,6 +49,28 @@ def event_payload(ev: dict[str, Any]) -> dict[str, Any]:
     if isinstance(data, dict) and data.get("type"):
         return data
     return ev
+
+
+def stop_reason_event_ids(payload: dict[str, Any]) -> list[str]:
+    """Extract ``stop_reason.event_ids`` from a ``requires_action`` idle."""
+    stop_reason = payload.get("stop_reason")
+    if not isinstance(stop_reason, dict):
+        return []
+    raw = stop_reason.get("event_ids")
+    if not isinstance(raw, list):
+        return []
+    return [str(item) for item in raw if item]
+
+
+def custom_tool_event_id(ev: dict[str, Any]) -> str | None:
+    """Return the tool-use id from an ``agent.custom_tool_use`` payload."""
+    payload = event_payload(ev)
+    for key in ("id", "custom_tool_use_id", "tool_use_id"):
+        value = payload.get(key)
+        if value:
+            return str(value)
+    seq = ev.get("seq")
+    return str(seq) if seq is not None else None
 
 
 def stop_reason_type(payload: dict[str, Any]) -> str | None:
@@ -102,6 +127,10 @@ def print_stream_event(
         name = payload.get("name") or ""
         prefix = "\n" if preview_length is None else "  "
         print(f"{prefix}[{name}]")
+    elif ev_type == "agent.custom_tool_use":
+        name = payload.get("name") or ""
+        prefix = "\n" if preview_length is None else "  "
+        print(f"{prefix}[custom:{name}]")
     elif ev_type == "session.error":
         msg = payload.get("message") or payload.get("error") or "session.error"
         raise RuntimeError(f"Session error: {msg}")
@@ -230,3 +259,192 @@ async def stream_until_end_turn(
         session_id,
         max_wait=cfg.idle_poll_max_wait,
     )
+
+
+def _send_session_events(
+    client: Any,
+    session_id: str,
+    events: list[dict[str, Any]],
+) -> None:
+    """Send client events via anthropic sessions API or httpx events API."""
+    sessions = getattr(client, "sessions", None)
+    if sessions is not None and hasattr(sessions, "events"):
+        sessions.events.send(session_id, events=events)
+        return
+    events_api = getattr(client, "events", None)
+    if events_api is not None and hasattr(events_api, "send"):
+        coro = events_api.send(session_id, events=events)
+        if inspect.isawaitable(coro):
+            raise RuntimeError(
+                "client.events.send is async; use await from async context"
+            )
+    raise AttributeError("client has no sessions.events.send or events.send")
+
+
+async def _send_session_events_async(
+    client: Any,
+    session_id: str,
+    events: list[dict[str, Any]],
+) -> None:
+    """Async send for HITL replies during an open SSE consumer."""
+    events_api = getattr(client, "events", None)
+    if events_api is not None and hasattr(events_api, "send"):
+        await events_api.send(session_id, events=events)
+        return
+    sessions = getattr(client, "sessions", None)
+    if sessions is not None and hasattr(sessions, "events"):
+        sessions.events.send(session_id, events=events)
+        return
+    raise AttributeError("client has no events.send or sessions.events.send")
+
+
+CustomToolHandler = Callable[
+    [str, str, dict[str, Any]],
+    dict[str, Any] | Awaitable[dict[str, Any]],
+]
+
+
+async def stream_hitl_until_end_turn(
+    client: Any,
+    session_id: str,
+    *,
+    send_events: list[dict[str, Any]] | None = None,
+    on_custom_tool: CustomToolHandler,
+    config: StreamConfig | None = None,
+    on_event: Callable[[dict[str, Any]], None] | None = None,
+) -> dict[str, Any]:
+    """Stream a custom-tool HITL session until ``end_turn``.
+
+    Cookbook ``CMA_gate_human_in_the_loop`` Part A: the agent emits
+    ``agent.custom_tool_use`` events; the session goes idle with
+    ``stop_reason.type == \"requires_action\"`` and a sliding window of
+    ``stop_reason.event_ids``. The caller POSTs ``user.custom_tool_result``
+    for each pending id, deduping across idle events, until a final
+    ``end_turn`` idle arrives.
+
+    Returns a dict with ``responded_ids`` (set) for test assertions.
+    """
+    cfg = config or StreamConfig()
+    deadline = time.time() + cfg.timeout_sec
+    end_turn_seen = asyncio.Event()
+    stream_error: Exception | None = None
+    handler = on_event or (
+        lambda ev: print_stream_event(ev, preview_length=300)
+    )
+    tool_use_events: dict[str, dict[str, Any]] = {}
+    responded_to: set[str] = set()
+
+    start_seq = 0
+    try:
+        listed = await client.events.list(session_id, order="desc", limit=1)
+        rows = listed.get("data") or []
+        if rows:
+            start_seq = int(rows[0].get("seq") or 0)
+    except Exception:
+        pass
+
+    async def _dispatch_custom_tool(
+        tool_name: str,
+        event_id: str,
+        args: dict[str, Any],
+    ) -> dict[str, Any]:
+        outcome = on_custom_tool(tool_name, event_id, args)
+        if inspect.isawaitable(outcome):
+            return await outcome
+        return outcome
+
+    async def consume() -> None:
+        nonlocal stream_error
+        try:
+            async for ev in client.events.stream(
+                session_id,
+                replay=True,
+                timeout=cfg.stream_read_timeout,
+            ):
+                handler(ev)
+                ev_type = event_type(ev)
+                payload = event_payload(ev)
+                if ev_type == "agent.custom_tool_use":
+                    tool_id = custom_tool_event_id(ev)
+                    if tool_id:
+                        tool_use_events[tool_id] = payload
+                elif ev_type == "session.status_idle":
+                    reason = stop_reason_type(payload)
+                    ev_seq = int(ev.get("seq") or 0)
+                    if reason == "requires_action":
+                        for event_id in stop_reason_event_ids(payload):
+                            if event_id in responded_to:
+                                continue
+                            tool_ev = tool_use_events.get(event_id)
+                            if tool_ev is None:
+                                continue
+                            tool_name = str(tool_ev.get("name") or "")
+                            args = tool_ev.get("input")
+                            if not isinstance(args, dict):
+                                args = {}
+                            result = await _dispatch_custom_tool(
+                                tool_name,
+                                event_id,
+                                args,
+                            )
+                            await _send_session_events_async(
+                                client,
+                                session_id,
+                                [
+                                    {
+                                        "type": "user.custom_tool_result",
+                                        "custom_tool_use_id": event_id,
+                                        "content": [
+                                            {
+                                                "type": "text",
+                                                "text": json.dumps(result),
+                                            }
+                                        ],
+                                    }
+                                ],
+                            )
+                            responded_to.add(event_id)
+                    elif reason == "end_turn" and ev_seq > start_seq:
+                        end_turn_seen.set()
+                        return
+                elif ev_type == "session.status_terminated":
+                    raise RuntimeError(
+                        "Session terminated before end_turn"
+                    )
+                if time.time() >= deadline:
+                    break
+        except Exception as exc:
+            stream_error = exc
+            end_turn_seen.set()
+
+    stream_task = asyncio.create_task(consume())
+
+    await asyncio.sleep(cfg.stream_connect_delay)
+    if send_events is not None:
+        _send_session_events(client, session_id, send_events)
+
+    remaining = max(1.0, deadline - time.time())
+    try:
+        await asyncio.wait_for(end_turn_seen.wait(), timeout=remaining)
+    except asyncio.TimeoutError as exc:
+        stream_task.cancel()
+        raise TimeoutError(
+            f"Timed out after {cfg.timeout_sec}s waiting for HITL end_turn"
+        ) from exc
+    finally:
+        if not stream_task.done():
+            stream_task.cancel()
+            try:
+                await stream_task
+            except asyncio.CancelledError:
+                pass
+
+    if stream_error is not None:
+        raise stream_error
+
+    await wait_for_idle_status(
+        client,
+        session_id,
+        max_wait=cfg.idle_poll_max_wait,
+    )
+    return {"responded_ids": responded_to, "tool_uses": tool_use_events}

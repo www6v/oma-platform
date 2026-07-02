@@ -1,6 +1,6 @@
 # OMA Platform Python SDK — Engineering Review & Implementation Plan
 
-> **Status (2026-07-01):** SDK implemented in this directory. Managed-agents resources route through `anthropic>=0.111.0` with `base_url`; OMA-only resources use `httpx` wrappers. E2E tests cover agents, sessions, environments, memory_stores, vaults, skills, files, misc, subagents. Wire-compat gaps **T15–T19** closed. **Cookbook parity (data analyst):** P0 + E1 closed — see [gap analysis](../docs/sdk/data-analyst-cookbook-gap-analysis.md); probe `example/example1/data_analyst_agent.py` → `data_analyst_agent_main.py`. **Cookbook parity (iterate):** IF1–IF4 + MT1 closed; probe `example/example2/iterate_fix_failing_tests.py` → `iterate_fix_failing_tests_main.py`; live LLM runs may hit harness turn timeout (`HARNESS_TURN_TIMEOUT_SEC`).
+> **Status (2026-07-01):** SDK implemented in this directory. Managed-agents resources route through `anthropic>=0.111.0` with `base_url`; OMA-only resources use `httpx` wrappers. E2E tests cover agents, sessions, environments, memory_stores, vaults, skills, files, misc, subagents. Wire-compat gaps **T15–T19** closed. **Cookbook parity (data analyst):** P0 + E1 closed — see [gap analysis](../docs/sdk/data-analyst-cookbook-gap-analysis.md). **Cookbook parity (iterate):** IF1–IF4 + MT1 closed. **Cookbook parity (gate HITL):** parity probe `example/example3/gate_human_in_the_loop.py`; platform gaps GT1–GT3 open (custom-tool loop).
 
 ---
 
@@ -337,7 +337,7 @@ These resources exist in **both** anthropic SDK and oma-platform, but OMA SDK de
 - [x] **T5** `tests/conftest.py` — fixtures
 - [x] **T6–T11** E2E tests — agents, sessions, environments, memory_stores, vaults, skills
 - [x] **T12–T14** E2E tests — files, misc, subagents
-- [x] **Examples** — `oma_sdk/api/*`, `example/example1/` + `example/example2/` cookbook parity probes
+- [x] **Examples** — `oma_sdk/api/*`, cookbook probes `example/example1/` … `example/example3/`
 
 ### Cookbook parity — data analyst (2026-06)
 
@@ -404,6 +404,37 @@ SDK module: `oma_sdk/cookbook.py` — `stream_until_end_turn`, `wait_for_idle_st
 
 Fixtures: `sdk/example/example2/iterate/calc.py`, `test_calc.py` (from cookbook `example_data/iterate/`).
 
+### Cookbook parity — gate human-in-the-loop (2026-07-01)
+
+Reference: Anthropic `managed_agents/CMA_gate_human_in_the_loop.ipynb` vs `example/example3/gate_human_in_the_loop.py`.
+
+| ID | Priority | Gap | Cookbook expects | OMA / SDK today | Recommendation |
+|---|---|---|---|---|---|
+| **GT1** | P0 | Custom tool declarations | `tools=[{type: custom, name: decide/escalate}]` | ✅ `register_custom_tools_on_session` + `extensions/custom_tools.py`; tests `test_tools.py` | — |
+| **GT2** | P0 | `agent.custom_tool_use` events | LLM calls decide/escalate → round-trip events | ✅ `harness/oma_adapter/custom_tools.py` + `emit.py`; tests `harness/tests/test_custom_tools.py` | Phase C: live LLM custom tool registration (GT1) |
+| **GT3** | P0 | `requires_action` idle | `stop_reason.type` + `event_ids` sliding window | ✅ idle + Phase D resume (`TestGateCookbookHitlResume`) | — |
+| **GT4** | P1 | HITL stream loop | Full loop: stream → reply → resume until `end_turn` | `stream_hitl_until_end_turn` in `oma_sdk.cookbook` | ✅ SDK helper; depends on GT1–GT3 for live runs |
+| **GT5** | P1 | Parallel tool dedupe | `responded_to` set across sliding `event_ids` window | Helper dedupes in `stream_hitl_until_end_turn` | ✅ SDK; server must not 400 on duplicate replies |
+| **GT6** | P2 | Part B webhooks | `session.status_idled` → async HITL | Webhooks out of scope (operate notebook) | Document; pair with `CMA_operate_in_production` |
+| **S1** | P0 | Session `resources[]` | Mount policy.yaml + receipts.jsonl | ✅ shared with data analyst | — |
+| **F1** | P2 | Files upload path | `client.beta.files.upload` | `client.files` httpx (T20 deferred) | — |
+
+**Why `stream_until_end_turn` is insufficient:** Gate Part A intentionally never exits on bare idle — only on `end_turn` after all custom tools are answered. Iterate IF3 guards against mistaking `requires_action` for completion; gate needs the full responder loop (GT4).
+
+**Example mapping (notebook → script):**
+
+| Notebook | Script block |
+|---|---|
+| Cell 3 setup | `OMAClient`, `FIXTURE_DIR` |
+| §1 upload | `upload_fixture()` → `client.files.upload` |
+| §2 agent/env/session | `GATE_TOOLS` + `sessions.create(resources=[...])` |
+| Part A stream | `stream_hitl_until_end_turn(..., on_custom_tool=...)` |
+| Part B webhooks | print pointer to operate notebook |
+
+SDK: `oma_sdk/cookbook.py` — `stream_hitl_until_end_turn`, `stop_reason_event_ids`, `custom_tool_event_id`. Tests: `tests/test_gate_cookbook.py`.
+
+Fixtures: `sdk/example/example3/gate/policy.yaml`, `gate/inbox/receipts.jsonl`.
+
 ---
 
 ## Test Coverage Diagram
@@ -433,6 +464,9 @@ Cookbook parity (Go server + SDK helpers):
     ├── IF1–IF4: `oma_sdk/cookbook.py` + `tests/test_cookbook.py`
     ├── MT1: Go `TestIterateCookbookMultiTurn` + `tests/test_iterate_cookbook.py`
     └── S1/O1: shared with data analyst (session resources + outputs sync)
+└── gate human-in-the-loop ─────────────────────── example/example3/gate_human_in_the_loop.py [GAP probe]
+    ├── GT4/GT5: `stream_hitl_until_end_turn` + `tests/test_gate_cookbook.py`
+    └── GT1–GT3: platform custom-tool HITL (harness + session machine) open
 ```
 
 Test framework: `pytest` + `pytest-asyncio` (asyncio_mode=auto); live E2E against `:8787`.
@@ -445,13 +479,13 @@ Test framework: `pytest` + `pytest-asyncio` (asyncio_mode=auto); live E2E agains
 |--------|---------|-----|------|--------|----------|
 | CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
 | Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | — |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 3 | clean | Data analyst P0+E1; iterate IF1–IF4+MT1; T15–T19 wire-compat closed |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 3 | issues_open | Gate HITL probe opened; GT1–GT3 platform gaps |
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
 | DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
 
 - **UNRESOLVED (deferred):** T20 `client.beta.files` alias; C6 `DataAnalystExamples` pytest live E2E
-- **OPEN (non-blocking):** turn timeout API (`HARNESS_TURN_TIMEOUT_SEC` env only); cloud runtime parity
-- **VERDICT:** Cookbook parity probes structurally complete; optional live LLM validation may need longer turn timeout
+- **OPEN (gate HITL):** Phase E live gate 探针 + CI（GT1–GT4 ✅；GT5 SDK helper ✅）
+- **OPEN (non-blocking):** turn timeout API; cloud runtime parity; GT6 webhooks (operate notebook)
 
 ### Section Summary
 
