@@ -411,9 +411,9 @@ Reference: Anthropic `managed_agents/CMA_gate_human_in_the_loop.ipynb` vs `examp
 | ID | Priority | Gap | Cookbook expects | OMA / SDK today | Recommendation |
 |---|---|---|---|---|---|
 | **GT1** | P0 | Custom tool declarations | `tools=[{type: custom, name: decide/escalate}]` | ✅ `register_custom_tools_on_session` + `extensions/custom_tools.py`; tests `test_tools.py` | — |
-| **GT2** | P0 | `agent.custom_tool_use` events | LLM calls decide/escalate → round-trip events | ✅ `harness/oma_adapter/custom_tools.py` + `emit.py`; tests `harness/tests/test_custom_tools.py` | Phase C: live LLM custom tool registration (GT1) |
-| **GT3** | P0 | `requires_action` idle | `stop_reason.type` + `event_ids` sliding window | ✅ idle + Phase D resume (`TestGateCookbookHitlResume`) | — |
-| **GT4** | P1 | HITL stream loop | Full loop: stream → reply → resume until `end_turn` | `stream_hitl_until_end_turn` in `oma_sdk.cookbook` | ✅ SDK helper; depends on GT1–GT3 for live runs |
+| **GT2** | P0 | `agent.custom_tool_use` events | LLM calls decide/escalate → round-trip events | ✅ `harness/oma_adapter/custom_tools.py` + `emit.py`; CI `TestGateCookbook*` | — |
+| **GT3** | P0 | `requires_action` idle | `stop_reason.type` + `event_ids` sliding window | ✅ idle + resume (`TestGateCookbookHitlResume`) | — |
+| **GT4** | P1 | HITL stream loop | Full loop: stream → reply → resume until `end_turn` | ✅ `stream_hitl_until_end_turn` + `tests/test_gate_cookbook.py` | Live LLM via `example3/gate_human_in_the_loop.py` |
 | **GT5** | P1 | Parallel tool dedupe | `responded_to` set across sliding `event_ids` window | Helper dedupes in `stream_hitl_until_end_turn` | ✅ SDK; server must not 400 on duplicate replies |
 | **GT6** | P2 | Part B webhooks | `session.status_idled` → async HITL | Webhooks out of scope (operate notebook) | Document; pair with `CMA_operate_in_production` |
 | **S1** | P0 | Session `resources[]` | Mount policy.yaml + receipts.jsonl | ✅ shared with data analyst | — |
@@ -431,7 +431,7 @@ Reference: Anthropic `managed_agents/CMA_gate_human_in_the_loop.ipynb` vs `examp
 | Part A stream | `stream_hitl_until_end_turn(..., on_custom_tool=...)` |
 | Part B webhooks | print pointer to operate notebook |
 
-SDK: `oma_sdk/cookbook.py` — `stream_hitl_until_end_turn`, `stop_reason_event_ids`, `custom_tool_event_id`. Tests: `tests/test_gate_cookbook.py`.
+SDK: `oma_sdk/cookbook.py` — `stream_hitl_until_end_turn`, `stop_reason_event_ids`, `custom_tool_event_id`. Tests: `tests/test_gate_cookbook.py`. Go CI: `TestGateCookbookRequiresAction`, `TestGateCookbookHitlResume` (`.github/workflows/ci.yml`).
 
 Fixtures: `sdk/example/example3/gate/policy.yaml`, `gate/inbox/receipts.jsonl`.
 
@@ -464,9 +464,10 @@ Cookbook parity (Go server + SDK helpers):
     ├── IF1–IF4: `oma_sdk/cookbook.py` + `tests/test_cookbook.py`
     ├── MT1: Go `TestIterateCookbookMultiTurn` + `tests/test_iterate_cookbook.py`
     └── S1/O1: shared with data analyst (session resources + outputs sync)
-└── gate human-in-the-loop ─────────────────────── example/example3/gate_human_in_the_loop.py [GAP probe]
+└── gate human-in-the-loop ─────────────────────── example/example3/gate_human_in_the_loop.py ✅
+    ├── GT1–GT3: harness custom tools + requires_action + resume (Go `TestGateCookbook*`)
     ├── GT4/GT5: `stream_hitl_until_end_turn` + `tests/test_gate_cookbook.py`
-    └── GT1–GT3: platform custom-tool HITL (harness + session machine) open
+    └── GT6: webhooks → operate notebook (out of scope)
 ```
 
 Test framework: `pytest` + `pytest-asyncio` (asyncio_mode=auto); live E2E against `:8787`.
@@ -479,13 +480,12 @@ Test framework: `pytest` + `pytest-asyncio` (asyncio_mode=auto); live E2E agains
 |--------|---------|-----|------|--------|----------|
 | CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
 | Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | — |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 3 | issues_open | Gate HITL probe opened; GT1–GT3 platform gaps |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 3 | resolved | Gate HITL GT1–GT4 in CI; live LLM optional |
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
 | DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
 
 - **UNRESOLVED (deferred):** T20 `client.beta.files` alias; C6 `DataAnalystExamples` pytest live E2E
-- **OPEN (gate HITL):** Phase E live gate 探针 + CI（GT1–GT4 ✅；GT5 SDK helper ✅）
-- **OPEN (non-blocking):** turn timeout API; cloud runtime parity; GT6 webhooks (operate notebook)
+- **OPEN (non-blocking):** turn timeout API; cloud runtime parity; GT6 webhooks (operate notebook); live gate 12-receipt LLM soak (optional)
 
 ### Section Summary
 
@@ -494,7 +494,7 @@ Test framework: `pytest` + `pytest-asyncio` (asyncio_mode=auto); live E2E agains
 | Step 0: Scope | Accepted — gap analysis scoped to anthropic 0.111.0 vs current OMA routes; cookbook P0 tracked separately |
 | Architecture | 6 managed-agent resources via SDK; 9+ OMA-only via httpx — sound split; session create resources + outputs sync landed |
 | Code Quality | SDK implemented; examples in `oma_sdk/api/`; cookbook probes use thin launcher + `*_main.py` (`example/example1/`, `example/example2/`); legacy workaround in `example/example1/v1/` (deprecated) |
-| Tests | pytest modules + Go `TestDataAnalystCookbook` + `TestIterateCookbookMultiTurn`; harness `test_env_packages.py` |
+| Tests | pytest modules + Go cookbook tests (`TestDataAnalystCookbook`, `TestIterateCookbookMultiTurn`, `TestGateCookbook*`) + harness `test_custom_tools.py` |
 | Performance | SSE via anthropic SDK or `client.events.stream`; shared httpx pool in OMAClient |
 | NOT in scope | deployments, user_profiles, webhooks, messages, environments.work, cloud runtime |
 | What already exists | Updated — SDK no longer greenfield; cookbook critical path covered in CI |

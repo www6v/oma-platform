@@ -71,6 +71,53 @@ async def _gate_hitl_stream(_session_id: str):
 
 
 @pytest.mark.asyncio
+async def test_stream_hitl_one_reply_per_requires_action_idle() -> None:
+    """Sliding window: respond to at most one pending id per idle event."""
+
+    async def _stream(_session_id: str):
+        yield _custom_tool_use(
+            "ctu_a",
+            "decide",
+            {"receipt_id": "r01", "action": "approve", "reason": "ok"},
+        )
+        yield _custom_tool_use(
+            "ctu_b",
+            "decide",
+            {"receipt_id": "r02", "action": "approve", "reason": "ok"},
+        )
+        yield _requires_action_idle(11, ["ctu_a", "ctu_b"])
+        yield _requires_action_idle(12, ["ctu_b"])
+        yield _end_turn_idle(13)
+
+    client = MagicMock()
+    client.events.stream = lambda *_a, **_k: _stream("sess_gate")
+    client.events.send = AsyncMock()
+    client.events.list = AsyncMock(return_value={"data": []})
+    client.sessions.events.send = MagicMock()
+    client._http.get = AsyncMock(
+        return_value=MagicMock(
+            raise_for_status=MagicMock(),
+            json=MagicMock(return_value={"status": "idle"}),
+        )
+    )
+
+    state = await stream_hitl_until_end_turn(
+        client,
+        "sess_gate",
+        send_events=[{"type": "user.message", "content": []}],
+        on_custom_tool=lambda *_a, **_k: {"recorded": True},
+        config=StreamConfig(
+            timeout_sec=5.0,
+            stream_connect_delay=0.01,
+            idle_poll_max_wait=1.0,
+        ),
+    )
+
+    assert client.events.send.await_count == 2
+    assert state["responded_ids"] == {"ctu_a", "ctu_b"}
+
+
+@pytest.mark.asyncio
 async def test_stream_hitl_responds_and_dedupes() -> None:
     """GT4/GT5: requires_action loop posts custom_tool_result once per id."""
     client = MagicMock()

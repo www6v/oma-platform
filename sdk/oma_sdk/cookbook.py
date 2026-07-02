@@ -372,6 +372,9 @@ async def stream_hitl_until_end_turn(
                     reason = stop_reason_type(payload)
                     ev_seq = int(ev.get("seq") or 0)
                     if reason == "requires_action":
+                        # One custom_tool_result per idle (GT3 resume). Batching
+                        # multiple runTurn triggers while the prior turn is still
+                        # winding down can return 409 from the session machine.
                         for event_id in stop_reason_event_ids(payload):
                             if event_id in responded_to:
                                 continue
@@ -404,6 +407,7 @@ async def stream_hitl_until_end_turn(
                                 ],
                             )
                             responded_to.add(event_id)
+                            break
                     elif reason == "end_turn" and ev_seq > start_seq:
                         end_turn_seen.set()
                         return

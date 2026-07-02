@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Gate: human-in-the-loop with custom tools — OMA Managed Agents parity probe.
+Gate: human-in-the-loop with custom tools — OMA Managed Agents cookbook example.
 
 Mirrors Anthropic cookbook ``managed_agents/CMA_gate_human_in_the_loop.ipynb``:
 expense approver with ``decide()`` / ``escalate()`` custom tools that round-trip
@@ -15,14 +15,14 @@ Cell 1   Setup              → OMAClient, FIXTURE dir
 Part A   HITL stream loop         → stream_hitl_until_end_turn()
 Part B   Webhooks                 → documented only (operate notebook)
 
-This script is a **parity probe**: live runs expose platform gaps in custom-tool
-HITL (``requires_action``, ``agent.custom_tool_use``). See ``sdk/SDK-PLAN.md``
-§ Cookbook parity — gate HITL.
+Platform coverage (GT1–GT4): custom-tool registration, ``agent.custom_tool_use``,
+``requires_action`` idle, ``user.custom_tool_result`` resume — see CI
+``TestGateCookbook*`` and ``sdk/tests/test_gate_cookbook.py``.
 
 Prerequisites
 -------------
 * Python 3.11+
-* ``oma_sdk`` installed (``pip install -e sdk`` from oma-platform)
+* ``oma_sdk`` on PYTHONPATH or ``pip install -e sdk`` from oma-platform
 * OMA server + harness with a real LLM for live runs
 
 Usage::
@@ -266,11 +266,10 @@ async def main() -> None:
         resources = getattr(session, "resources", None) or []
         if len(resources) < 2:
             raise RuntimeError(
-                "session.resources missing mounted files — platform gap S1"
+                "session.resources missing mounted policy/receipts files"
             )
 
         # Part A — HITL stream loop (Cookbook Cell 7)
-        # Gap GT1–GT3: harness must emit custom_tool_use + requires_action.
         print("=== Part A: streaming HITL ===")
         hitl_state = await stream_hitl_until_end_turn(
             client,
@@ -289,11 +288,12 @@ async def main() -> None:
             f"custom tool replies: {len(hitl_state.get('responded_ids', set()))}"
         )
 
-        if len(decisions) < 12:
+        expected = int(os.getenv("OMA_GATE_EXPECT_DECISIONS", "12"))
+        if len(decisions) < expected:
             raise RuntimeError(
-                f"Expected 12 receipt decisions, got {len(decisions)}. "
-                "Platform gap GT2/GT3 — custom-tool HITL loop may be "
-                "incomplete."
+                f"Expected {expected} receipt decisions, got {len(decisions)}. "
+                "The LLM may not have called decide/escalate for every "
+                "receipt — retry or adjust GATE_TASK / model."
             )
 
         lanes = Counter(str(d.get("lane")) for d in decisions.values())

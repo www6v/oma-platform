@@ -28,6 +28,9 @@ jobs:
       - name: Iterate cookbook MT1 (multi-turn same session)
         run: go test ./internal/api/ ./test/integration/ -run TestIterateCookbookMultiTurn -count=1 -v
 
+      - name: Gate cookbook HITL (requires_action + resume)
+        run: go test ./internal/api/ ./test/integration/ -run TestGateCookbook -count=1 -v
+
       - name: Crash recovery (SIGKILL → restart, ported from main-node)
         run: go test ./internal/api/ -run TestCrashRecovery -count=1 -v
 
@@ -63,3 +66,13 @@ jobs:
       - name: OMA contract tests
         working-directory: harness
         run: PYTHONPATH=. pytest tests/test_oma_contract.py -v
+
+      - name: Gate custom-tool harness tests
+        working-directory: harness
+        run: PYTHONPATH=. pytest tests/test_custom_tools.py tests/test_project.py -q
+
+      - name: SDK cookbook helpers (gate HITL + iterate)
+        working-directory: sdk
+        run: |
+          pip install pytest pytest-asyncio "anthropic>=0.111.0" httpx
+          PYTHONPATH=. pytest tests/test_gate_cookbook.py tests/test_cookbook.py tests/test_iterate_cookbook.py -q

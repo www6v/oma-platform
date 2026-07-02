@@ -527,6 +527,7 @@ async def _run_turn_core(
                     buffer[raw_cursor:],
                     seen_agent_text=seen_agent_text,
                     custom_tool_names=agent_custom_tools,
+                    event_lookup_buffer=buffer,
                 )
                 raw_cursor = len(buffer)
                 # Debug: log what we got and what we emitted

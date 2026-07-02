@@ -12,4 +12,7 @@ Thin launchers pick Python 3.11+ via `_run_with_python3.py`; main logic lives in
 Shared streaming helpers: `oma_sdk.cookbook` (`stream_until_end_turn`,
 `stream_hitl_until_end_turn`, `wait_for_idle_status`).
 
+Gate HITL CI: Go `TestGateCookbook*`; SDK `tests/test_gate_cookbook.py`; harness
+`tests/test_custom_tools.py` (see `.github/workflows/ci.yml`).
+
 Legacy workaround copy: `example1/v1/` (deprecated).

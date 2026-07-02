@@ -47,9 +47,9 @@ Phase E  GateSimulatingClient + CI + live gate 探针
 |---|---|---|
 | A — GT2 事件分类 | ✅ | `harness/oma_adapter/custom_tools.py`, `emit.py`, `turn.py`; `harness/tests/test_custom_tools.py` |
 | B — GT3 requires_action | ✅ | `internal/harness/pending_custom_tools.go`, `internal/session/machine.go`; `machine_idle_test.go` |
-| E（sim 部分） | ✅ | `internal/harness/gate_sim_client.go`, `integrationtest/gate_flow.go`, `TestGateCookbookRequiresAction` |
-| C — GT1 piPy | ✅ | `extensions/custom_tools.py`, `register_custom_tools_on_session`, `custom_tools_runtime.py`; tests in `test_custom_tools.py`, `test_tools.py` |
-| D — 续 turn | ✅ | `custom_tool_promote.go`, `project.py` continuation slice; `TestGateCookbookHitlResume` |
+| C — GT1 piPy | ✅ | `extensions/custom_tools.py`, `register_custom_tools_on_session` |
+| D — 续 turn | ✅ | `custom_tool_promote.go`, `project.py`; `TestGateCookbookHitlResume` |
+| E — CI + docs | ✅ | `ci.yml` `TestGateCookbook*`; `test/integration/gate_cookbook_test.go`; SDK/harness pytest |
 
 ---
 
@@ -249,11 +249,12 @@ oma 若 `project_oma_events` 在仅有 tool_result、无新 user.message 时仍�
 
 ## Phase E — 文档 & CI
 
-| 文件 | 改动 |
+| 文件 | 状态 |
 |---|---|
-| `sdk/SDK-PLAN.md` | GT1–GT3 关闭时更新状态 |
-| `.github/workflows/ci.yml` | 加 `TestGateCookbook` / `TestGateCookbookMultiTurn` |
-| `sdk/example/example3/gate_human_in_the_loop_main.py` | live 跑通后去掉 probe 硬失败 |
+| `sdk/SDK-PLAN.md` | ✅ GT1–GT4 关闭；CI 引用更新 |
+| `.github/workflows/ci.yml` | ✅ `TestGateCookbook*` + harness/SDK pytest |
+| `test/integration/gate_cookbook_test.go` | ✅ 与 `internal/api/` 双跑 |
+| `sdk/example/example3/gate_human_in_the_loop_main.py` | ✅ 去掉 platform gap 硬失败；保留 12 receipt 校验 |
 
 ---
 

@@ -14,9 +14,18 @@ def emit_oma_events(
     *,
     seen_agent_text: set[str] | None = None,
     custom_tool_names: frozenset[str] | None = None,
+    event_lookup_buffer: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     seen_agent_text = seen_agent_text if seen_agent_text is not None else set()
+    lookup_events = (
+        event_lookup_buffer if event_lookup_buffer is not None else raw_events
+    )
+    lookup_offset = (
+        len(lookup_events) - len(raw_events)
+        if event_lookup_buffer is not None
+        else 0
+    )
     for idx, item in enumerate(raw_events):
         # Skip non-dict items (defensive: pi events should be dicts but may include strings)
         if not isinstance(item, dict):
@@ -70,7 +79,11 @@ def emit_oma_events(
                 or item.get("id")
                 or ""
             )
-            tool_name = _tool_name_for_call(raw_events, tool_use_id, idx)
+            tool_name = _tool_name_for_call(
+                lookup_events,
+                tool_use_id,
+                lookup_offset + idx,
+            )
             if (
                 custom_tool_names is not None
                 and tool_name is not None

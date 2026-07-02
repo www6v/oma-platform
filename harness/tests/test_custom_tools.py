@@ -115,6 +115,39 @@ def test_pending_custom_tool_ids_sliding_window() -> None:
     assert pending[0] == "ctu_0"
 
 
+def test_emit_suppresses_custom_tool_result_incremental() -> None:
+    """Streaming listener emits start/end in separate deltas (GT2 regression)."""
+    buffer = [
+        {
+            "type": "tool_execution_start",
+            "toolCallId": "tc_decide",
+            "toolName": "decide",
+            "args": {"receipt_id": "r01", "action": "approve", "reason": "ok"},
+        },
+        {
+            "type": "tool_execution_end",
+            "toolCallId": "tc_decide",
+            "result": {
+                "content": [{"type": "text", "text": "should not emit"}],
+                "is_error": False,
+            },
+        },
+    ]
+    first = emit_oma_events(
+        buffer[:1],
+        custom_tool_names=frozenset({"decide"}),
+        event_lookup_buffer=buffer,
+    )
+    second = emit_oma_events(
+        buffer[1:],
+        custom_tool_names=frozenset({"decide"}),
+        event_lookup_buffer=buffer,
+    )
+    events = [*first, *second]
+    assert [ev["type"] for ev in events] == ["agent.custom_tool_use"]
+    assert pending_custom_tool_ids(events) == ["tc_decide"]
+
+
 def test_emit_suppresses_custom_tool_result() -> None:
     raw = [
         {
