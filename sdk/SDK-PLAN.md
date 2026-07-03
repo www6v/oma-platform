@@ -414,7 +414,7 @@ Reference: Anthropic `managed_agents/CMA_gate_human_in_the_loop.ipynb` vs `examp
 | **GT2** | P0 | `agent.custom_tool_use` events | LLM calls decide/escalate → round-trip events | ✅ `harness/oma_adapter/custom_tools.py` + `emit.py`; CI `TestGateCookbook*` | — |
 | **GT3** | P0 | `requires_action` idle | `stop_reason.type` + `event_ids` sliding window | ✅ idle + resume (`TestGateCookbookHitlResume`) | — |
 | **GT4** | P1 | HITL stream loop | Full loop: stream → reply → resume until `end_turn` | ✅ `stream_hitl_until_end_turn` + `tests/test_gate_cookbook.py` | Live LLM via `example3/gate_human_in_the_loop.py` |
-| **GT5** | P1 | Parallel tool dedupe | `responded_to` set across sliding `event_ids` window | Helper dedupes in `stream_hitl_until_end_turn` | ✅ SDK; server must not 400 on duplicate replies |
+| **GT5** | P1 | Parallel tool dedupe | `responded_to` set across sliding `event_ids` window | ✅ SDK dedupe + server accepts duplicate replies (`TestGateCookbookDuplicateCustomToolResult`); sliding window (`TestGateCookbookSlidingWindow`) | — |
 | **GT6** | P2 | Part B webhooks | `session.status_idled` → async HITL | Webhooks out of scope (operate notebook) | Document; pair with `CMA_operate_in_production` |
 | **S1** | P0 | Session `resources[]` | Mount policy.yaml + receipts.jsonl | ✅ shared with data analyst | — |
 | **F1** | P2 | Files upload path | `client.beta.files.upload` | `client.files` httpx (T20 deferred) | — |
@@ -431,7 +431,7 @@ Reference: Anthropic `managed_agents/CMA_gate_human_in_the_loop.ipynb` vs `examp
 | Part A stream | `stream_hitl_until_end_turn(..., on_custom_tool=...)` |
 | Part B webhooks | print pointer to operate notebook |
 
-SDK: `oma_sdk/cookbook.py` — `stream_hitl_until_end_turn`, `stop_reason_event_ids`, `custom_tool_event_id`. Tests: `tests/test_gate_cookbook.py`. Go CI: `TestGateCookbookRequiresAction`, `TestGateCookbookHitlResume` (`.github/workflows/ci.yml`).
+SDK: `oma_sdk/cookbook.py` — `stream_hitl_until_end_turn`, `stop_reason_event_ids`, `custom_tool_event_id`. Tests: `tests/test_gate_cookbook.py`. Go CI: `TestGateCookbookRequiresAction`, `TestGateCookbookHitlResume`, `TestGateCookbookSlidingWindow`, `TestGateCookbookDuplicateCustomToolResult`, `TestGateCookbookCustomToolResultIsError` (`.github/workflows/ci.yml`). Console: `console/src/components/timeline/derive.ts` pairs custom tools with `user.custom_tool_result` / synthesized `agent.tool_result`.
 
 Fixtures: `sdk/example/example3/gate/policy.yaml`, `gate/inbox/receipts.jsonl`.
 

@@ -36,6 +36,24 @@ func TestGateCookbookHitlResume(t *testing.T) {
 	integrationtest.RunGateCookbookHitlResumeFlow(t, handler, sim)
 }
 
+func TestGateCookbookSlidingWindow(t *testing.T) {
+	sim := &harness.GateSimulatingClient{}
+	handler := newGateCookbookRouter(t, sim)
+	integrationtest.RunGateCookbookHitlSlidingWindowFlow(t, handler, sim)
+}
+
+func TestGateCookbookDuplicateCustomToolResult(t *testing.T) {
+	sim := &harness.GateSimulatingClient{}
+	handler := newGateCookbookRouter(t, sim)
+	integrationtest.RunGateDuplicateCustomToolResultFlow(t, handler, sim)
+}
+
+func TestGateCookbookCustomToolResultIsError(t *testing.T) {
+	sim := &harness.GateSimulatingClient{}
+	handler := newGateCookbookRouter(t, sim)
+	integrationtest.RunGateCustomToolResultIsErrorFlow(t, handler, sim)
+}
+
 func newGateCookbookRouter(
 	t *testing.T,
 	client harness.Client,

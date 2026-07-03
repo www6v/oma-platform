@@ -258,6 +258,17 @@ oma 若 `project_oma_events` 在仅有 tool_result、无新 user.message 时仍�
 
 ---
 
+## Phase F — P1 边界加固（2026-07-03）
+
+| 项 | 状态 | 验证 |
+|---|---|---|
+| GT5 滑动窗口 >5 | ✅ `BuildIdleStopReason` + `GateSimulatingClient.Turn1PendingCount` | `TestBuildIdleStopReasonSlidingWindow`, `TestGateCookbookSlidingWindow` |
+| 重复 `custom_tool_result` 不 400 | ✅ pending 队列照常 promote | `TestGateCookbookDuplicateCustomToolResult` |
+| `is_error` promote | ✅ 合成 `agent.tool_result.is_error` | `TestAppendEventsForPendingPromoteIsError`, `TestGateCookbookCustomToolResultIsError` |
+| Console timeline 配对 | ✅ `custom_tool_use_id` 索引 + 合成 result 回退 | `console/.../derive.test.ts` |
+
+---
+
 ## 文件对照表（移植地图）
 
 | GT | open-managed-agents | oma-platform 目标 |

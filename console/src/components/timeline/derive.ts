@@ -65,7 +65,13 @@ export function deriveSpans(events: Event[]): { spans: Span[]; totalMs: number }
   for (const { e, t } of timed) {
     if (e.type === "agent.tool_result" && e.tool_use_id) toolResults.set(e.tool_use_id, { t, e });
     else if (e.type === "agent.mcp_tool_result" && e.mcp_tool_use_id) mcpResults.set(e.mcp_tool_use_id, { t, e });
-    else if (e.type === "user.custom_tool_result" && (e as Event).id) customResults.set(String(e.id), { t, e });
+    else if (e.type === "user.custom_tool_result") {
+      const toolUseId =
+        (e as { custom_tool_use_id?: string }).custom_tool_use_id
+        ?? (e.data as { custom_tool_use_id?: string } | undefined)?.custom_tool_use_id
+        ?? (e as Event).id;
+      if (toolUseId) customResults.set(String(toolUseId), { t, e });
+    }
     else if (e.type === "span.model_request_end") {
       const data = (e.data as { model_request_start_id?: string; model_usage?: { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number }; finish_reason?: string } | undefined);
       const sid = (e as { model_request_start_id?: string }).model_request_start_id ?? data?.model_request_start_id;
@@ -119,7 +125,7 @@ export function deriveSpans(events: Event[]): { spans: Span[]; totalMs: number }
     if (e.type === "agent.tool_use" || e.type === "agent.custom_tool_use") {
       const result = e.type === "agent.tool_use"
         ? toolResults.get(String(e.id))
-        : customResults.get(String(e.id));
+        : (customResults.get(String(e.id)) ?? toolResults.get(String(e.id)));
       const endMs = result ? result.t - t0 : startMs;
       if (result) sourceEvents.push(result.e);
       pushSpan({

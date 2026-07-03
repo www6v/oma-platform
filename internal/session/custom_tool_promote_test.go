@@ -61,3 +61,32 @@ func TestAppendEventsForPendingPromotePassthrough(t *testing.T) {
 		t.Fatalf("payload mutated: %s", out[0])
 	}
 }
+
+func TestAppendEventsForPendingPromoteIsError(t *testing.T) {
+	t.Parallel()
+	payload, err := json.Marshal(map[string]any{
+		"type":                "user.custom_tool_result",
+		"custom_tool_use_id": "ctu_err",
+		"is_error":            true,
+		"content": []map[string]string{
+			{"type": "text", "text": "rejected by reviewer"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := appendEventsForPendingPromote(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 2 {
+		t.Fatalf("events=%d want 2", len(out))
+	}
+	var toolEv map[string]any
+	if err := json.Unmarshal(out[1], &toolEv); err != nil {
+		t.Fatal(err)
+	}
+	if toolEv["is_error"] != true {
+		t.Fatalf("is_error=%v want true", toolEv["is_error"])
+	}
+}

@@ -181,6 +181,182 @@ func RunGateCookbookHitlResumeFlow(
 	_ = agentID
 }
 
+// RunGateCookbookHitlSlidingWindowFlow asserts GT5 server sliding window: when
+// six custom tools are pending, requires_action exposes only the first five ids.
+func RunGateCookbookHitlSlidingWindowFlow(
+	t *testing.T,
+	handler http.Handler,
+	sim *harness.GateSimulatingClient,
+) {
+	t.Helper()
+	sim.Turn1PendingCount = 6
+
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	client := server.Client()
+	base := server.URL
+
+	policyFileID := uploadGateFile(
+		t, client, base, gatePolicyMount, GatePolicyFixture, "text/yaml",
+	)
+	receiptsFileID := uploadGateFile(
+		t, client, base, gateReceiptsMount, GateReceiptsFixture, "application/x-ndjson",
+	)
+	agentID := createGateAgent(t, client, base)
+	sessionID := createGateSession(
+		t, client, base, agentID, policyFileID, receiptsFileID,
+	)
+
+	eventsURL := base + "/v1/sessions/" + sessionID + "/events"
+	sessionURL := base + "/v1/sessions/" + sessionID
+
+	postGateMessage(t, client, eventsURL, "Process six receipts.")
+	waitForEventMarker(
+		t, client, eventsURL, harness.GateHitlTurn1Marker, 5*time.Second,
+	)
+	waitForSessionIdle(t, client, sessionURL, 5*time.Second)
+
+	idle := findLastStatusIdle(t, client, eventsURL)
+	stopReason, ok := idle["stop_reason"].(map[string]any)
+	if !ok {
+		t.Fatalf("status_idle missing stop_reason: %v", idle)
+	}
+	ids := stopReasonEventIDs(stopReason)
+	if len(ids) != harness.MaxPendingCustomToolEventIDs {
+		t.Fatalf(
+			"event_ids=%v want %d entries",
+			ids,
+			harness.MaxPendingCustomToolEventIDs,
+		)
+	}
+	want := []string{
+		"ctu_gate_00", "ctu_gate_01", "ctu_gate_02", "ctu_gate_03", "ctu_gate_04",
+	}
+	for idx, id := range want {
+		if ids[idx] != id {
+			t.Fatalf("event_ids[%d]=%q want %q (full=%v)", idx, ids[idx], id, ids)
+		}
+	}
+}
+
+// RunGateDuplicateCustomToolResultFlow posts the same custom_tool_result twice
+// (GT5 server tolerance) and still completes the HITL loop.
+func RunGateDuplicateCustomToolResultFlow(
+	t *testing.T,
+	handler http.Handler,
+	sim *harness.GateSimulatingClient,
+) {
+	t.Helper()
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	client := server.Client()
+	base := server.URL
+
+	policyFileID := uploadGateFile(
+		t, client, base, gatePolicyMount, GatePolicyFixture, "text/yaml",
+	)
+	receiptsFileID := uploadGateFile(
+		t, client, base, gateReceiptsMount, GateReceiptsFixture, "application/x-ndjson",
+	)
+	agentID := createGateAgent(t, client, base)
+	sessionID := createGateSession(
+		t, client, base, agentID, policyFileID, receiptsFileID,
+	)
+
+	eventsURL := base + "/v1/sessions/" + sessionID + "/events"
+	sessionURL := base + "/v1/sessions/" + sessionID
+
+	postGateMessage(
+		t, client, eventsURL,
+		"Process receipts r01 and r02 using decide or escalate once each.",
+	)
+	waitForEventMarker(
+		t, client, eventsURL, harness.GateHitlTurn1Marker, 5*time.Second,
+	)
+	waitForSessionIdle(t, client, sessionURL, 5*time.Second)
+
+	resultBody := `{"action":"approve","receipt_id":"r01"}`
+	postGateCustomToolResult(
+		t, client, eventsURL, harness.GateCustomToolDecideID, resultBody,
+	)
+	postGateCustomToolResultExpect(
+		t, client, eventsURL, harness.GateCustomToolDecideID, resultBody,
+		http.StatusAccepted,
+	)
+	waitForSessionIdle(t, client, sessionURL, 5*time.Second)
+
+	postGateCustomToolResult(
+		t, client, eventsURL, harness.GateCustomToolEscalateID,
+		`{"question":"category unclear","receipt_id":"r02"}`,
+	)
+	waitForEventMarker(
+		t, client, eventsURL, harness.GateHitlCompleteMarker, 5*time.Second,
+	)
+	waitForEndTurnIdle(t, client, eventsURL, sessionURL, 5*time.Second)
+
+	userResults := countEventPayloads(
+		t, client, eventsURL, "user.custom_tool_result",
+	)
+	if userResults < 3 {
+		t.Fatalf("user.custom_tool_result count=%d want >=3 (duplicate allowed)", userResults)
+	}
+	toolResults := countToolResultsForID(
+		t, client, eventsURL, harness.GateCustomToolDecideID,
+	)
+	if toolResults < 2 {
+		t.Fatalf(
+			"agent.tool_result for %q count=%d want >=2 after duplicate reply",
+			harness.GateCustomToolDecideID,
+			toolResults,
+		)
+	}
+}
+
+// RunGateCustomToolResultIsError promotes is_error results and synthesizes
+// agent.tool_result with the same flag.
+func RunGateCustomToolResultIsErrorFlow(
+	t *testing.T,
+	handler http.Handler,
+	sim *harness.GateSimulatingClient,
+) {
+	t.Helper()
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	client := server.Client()
+	base := server.URL
+
+	policyFileID := uploadGateFile(
+		t, client, base, gatePolicyMount, GatePolicyFixture, "text/yaml",
+	)
+	receiptsFileID := uploadGateFile(
+		t, client, base, gateReceiptsMount, GateReceiptsFixture, "application/x-ndjson",
+	)
+	agentID := createGateAgent(t, client, base)
+	sessionID := createGateSession(
+		t, client, base, agentID, policyFileID, receiptsFileID,
+	)
+
+	eventsURL := base + "/v1/sessions/" + sessionID + "/events"
+	sessionURL := base + "/v1/sessions/" + sessionID
+
+	postGateMessage(
+		t, client, eventsURL,
+		"Process receipts r01 and r02 using decide or escalate once each.",
+	)
+	waitForEventMarker(
+		t, client, eventsURL, harness.GateHitlTurn1Marker, 5*time.Second,
+	)
+	waitForSessionIdle(t, client, sessionURL, 5*time.Second)
+
+	postGateCustomToolResultIsError(
+		t, client, eventsURL, harness.GateCustomToolDecideID, "reviewer rejected",
+	)
+	assertPromotedToolResultIsError(
+		t, client, eventsURL, harness.GateCustomToolDecideID,
+	)
+	_ = sim
+}
+
 func uploadGateFile(
 	t *testing.T,
 	client *http.Client,
@@ -315,6 +491,17 @@ func postGateCustomToolResult(
 	client *http.Client,
 	eventsURL, customToolUseID, resultText string,
 ) {
+	postGateCustomToolResultExpect(
+		t, client, eventsURL, customToolUseID, resultText, http.StatusAccepted,
+	)
+}
+
+func postGateCustomToolResultExpect(
+	t *testing.T,
+	client *http.Client,
+	eventsURL, customToolUseID, resultText string,
+	wantStatus int,
+) {
 	t.Helper()
 	payload, err := json.Marshal(map[string]any{
 		"events": []any{
@@ -332,9 +519,127 @@ func postGateCustomToolResult(
 	}
 	resp := doJSON(t, client, http.MethodPost, eventsURL, payload)
 	defer resp.Body.Close()
+	if resp.StatusCode != wantStatus {
+		t.Fatalf(
+			"custom_tool_result status=%d want %d body=%s",
+			resp.StatusCode,
+			wantStatus,
+			readBody(resp),
+		)
+	}
+}
+
+func postGateCustomToolResultIsError(
+	t *testing.T,
+	client *http.Client,
+	eventsURL, customToolUseID, resultText string,
+) {
+	t.Helper()
+	payload, err := json.Marshal(map[string]any{
+		"events": []any{
+			map[string]any{
+				"type":                "user.custom_tool_result",
+				"custom_tool_use_id": customToolUseID,
+				"is_error":            true,
+				"content": []any{
+					map[string]string{"type": "text", "text": resultText},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp := doJSON(t, client, http.MethodPost, eventsURL, payload)
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusAccepted {
 		t.Fatalf("custom_tool_result status=%d body=%s", resp.StatusCode, readBody(resp))
 	}
+}
+
+func countEventPayloads(
+	t *testing.T,
+	client *http.Client,
+	eventsURL, eventType string,
+) int {
+	t.Helper()
+	resp, err := client.Get(eventsURL + "?order=asc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	payloads := decodeEventPayloads(t, resp.Body)
+	count := 0
+	for _, raw := range payloads {
+		var meta map[string]any
+		if err := json.Unmarshal(raw, &meta); err != nil {
+			continue
+		}
+		if meta["type"] == eventType {
+			count++
+		}
+	}
+	return count
+}
+
+func countToolResultsForID(
+	t *testing.T,
+	client *http.Client,
+	eventsURL, toolUseID string,
+) int {
+	t.Helper()
+	resp, err := client.Get(eventsURL + "?order=asc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	payloads := decodeEventPayloads(t, resp.Body)
+	count := 0
+	for _, raw := range payloads {
+		var meta map[string]any
+		if err := json.Unmarshal(raw, &meta); err != nil {
+			continue
+		}
+		if meta["type"] == "agent.tool_result" && meta["tool_use_id"] == toolUseID {
+			count++
+		}
+	}
+	return count
+}
+
+func assertPromotedToolResultIsError(
+	t *testing.T,
+	client *http.Client,
+	eventsURL, toolUseID string,
+) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		resp, err := client.Get(eventsURL + "?order=asc")
+		if err != nil {
+			t.Fatal(err)
+		}
+		payloads := decodeEventPayloads(t, resp.Body)
+		resp.Body.Close()
+		for _, raw := range payloads {
+			var meta map[string]any
+			if err := json.Unmarshal(raw, &meta); err != nil {
+				continue
+			}
+			if meta["type"] != "agent.tool_result" {
+				continue
+			}
+			if meta["tool_use_id"] != toolUseID {
+				continue
+			}
+			if meta["is_error"] != true {
+				t.Fatalf("tool_result is_error=%v want true", meta["is_error"])
+			}
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Fatalf("missing is_error agent.tool_result for %q", toolUseID)
 }
 
 func assertPromotedToolResult(

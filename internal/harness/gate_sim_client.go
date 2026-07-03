@@ -27,6 +27,8 @@ type GateSimulatingClient struct {
 
 	mu    sync.Mutex
 	turns int
+	// Turn1PendingCount overrides turn-1 custom_tool_use count (default 2).
+	Turn1PendingCount int
 }
 
 // RunTurn implements Client.
@@ -139,37 +141,49 @@ func (c *GateSimulatingClient) turnCompleteStream() []map[string]any {
 }
 
 func (c *GateSimulatingClient) turn1Stream() []map[string]any {
-	return []map[string]any{
-		{
+	count := c.turn1PendingCount()
+	stream := make([]map[string]any, 0, count+1)
+	for idx := 0; idx < count; idx++ {
+		stream = append(stream, map[string]any{
 			"type": "agent.custom_tool_use",
-			"id":   GateCustomToolDecideID,
+			"id":   fmt.Sprintf("ctu_gate_%02d", idx),
 			"name": "decide",
 			"input": map[string]any{
-				"receipt_id": "r01",
+				"receipt_id": fmt.Sprintf("r%02d", idx+1),
 				"action":     "approve",
-				"reason":     "under auto_approve threshold",
+				"reason":     "test pending window",
 			},
-		},
-		{
-			"type": "agent.custom_tool_use",
-			"id":   GateCustomToolEscalateID,
-			"name": "escalate",
-			"input": map[string]any{
-				"receipt_id": "r02",
-				"question":   "category unclear",
-			},
-		},
-		{
-			"type": "agent.message",
-			"content": []map[string]string{
-				{
-					"type": "text",
-					"text": fmt.Sprintf(
-						"%s pending_custom_tools=2",
-						GateHitlTurn1Marker,
-					),
-				},
-			},
-		},
+		})
 	}
+	if count == 2 {
+		stream[0]["id"] = GateCustomToolDecideID
+		stream[0]["name"] = "decide"
+		stream[1]["id"] = GateCustomToolEscalateID
+		stream[1]["name"] = "escalate"
+		stream[1]["input"] = map[string]any{
+			"receipt_id": "r02",
+			"question":   "category unclear",
+		}
+	}
+	stream = append(stream, map[string]any{
+		"type": "agent.message",
+		"content": []map[string]string{
+			{
+				"type": "text",
+				"text": fmt.Sprintf(
+					"%s pending_custom_tools=%d",
+					GateHitlTurn1Marker,
+					count,
+				),
+			},
+		},
+	})
+	return stream
+}
+
+func (c *GateSimulatingClient) turn1PendingCount() int {
+	if c.Turn1PendingCount > 0 {
+		return c.Turn1PendingCount
+	}
+	return 2
 }

@@ -41,6 +41,27 @@ func TestBuildIdleStopReasonEndTurn(t *testing.T) {
 	}
 }
 
+func TestBuildIdleStopReasonSlidingWindow(t *testing.T) {
+	t.Parallel()
+	pending := []string{
+		"ctu_0", "ctu_1", "ctu_2", "ctu_3", "ctu_4", "ctu_5",
+	}
+	reason := BuildIdleStopReason(pending)
+	if reason["type"] != "requires_action" {
+		t.Fatalf("type=%v", reason["type"])
+	}
+	ids, ok := reason["event_ids"].([]string)
+	if !ok || len(ids) != MaxPendingCustomToolEventIDs {
+		t.Fatalf("event_ids=%v want len %d", reason["event_ids"], MaxPendingCustomToolEventIDs)
+	}
+	want := []string{"ctu_0", "ctu_1", "ctu_2", "ctu_3", "ctu_4"}
+	for idx, id := range want {
+		if ids[idx] != id {
+			t.Fatalf("event_ids[%d]=%q want %q (full=%v)", idx, ids[idx], id, ids)
+		}
+	}
+}
+
 func TestIsWireBuiltinTool(t *testing.T) {
 	t.Parallel()
 	if !IsWireBuiltinTool("bash") {
