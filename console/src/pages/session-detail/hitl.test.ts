@@ -65,4 +65,22 @@ describe("hitl helpers", () => {
       receipt_id: "r01",
     });
   });
+
+  it("builds SRE cookbook default result JSON", () => {
+    expect(JSON.parse(defaultCustomToolResultText({
+      toolCallId: "call_pr",
+      toolName: "open_pull_request",
+      args: { title: "fix OOM" },
+      kind: "custom_tool",
+    }))).toEqual({
+      pr_number: 1,
+      url: "https://github.test/pr/1",
+    });
+    expect(JSON.parse(defaultCustomToolResultText({
+      toolCallId: "call_appr",
+      toolName: "request_approval",
+      args: { summary: "raise memory" },
+      kind: "custom_tool",
+    }))).toEqual({ decision: "approved" });
+  });
 });

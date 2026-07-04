@@ -117,5 +117,20 @@ export function defaultCustomToolResultText(
       receipt_id: item.args.receipt_id ?? "",
     }, null, 2);
   }
+  if (item.toolName === "open_pull_request") {
+    return JSON.stringify({
+      pr_number: 1,
+      url: "https://github.test/pr/1",
+    }, null, 2);
+  }
+  if (item.toolName === "request_approval") {
+    return JSON.stringify({ decision: "approved" }, null, 2);
+  }
+  if (item.toolName === "merge_pull_request") {
+    return JSON.stringify({
+      merged: true,
+      pr_number: item.args.pr_number ?? 1,
+    }, null, 2);
+  }
   return JSON.stringify({}, null, 2);
 }

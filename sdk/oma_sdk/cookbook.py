@@ -298,6 +298,41 @@ async def _send_session_events_async(
     raise AttributeError("client has no events.send or sessions.events.send")
 
 
+async def _resolve_custom_tool_call(
+    client: Any,
+    session_id: str,
+    event_id: str,
+    tool_use_events: dict[str, dict[str, Any]],
+) -> tuple[str, dict[str, Any]]:
+    """Resolve custom tool name/args from stream cache or session metadata."""
+    tool_ev = tool_use_events.get(event_id)
+    if tool_ev is not None:
+        args = tool_ev.get("input")
+        if not isinstance(args, dict):
+            args = {}
+        return str(tool_ev.get("name") or ""), args
+
+    resp = await client._http.get(f"/v1/sessions/{session_id}")
+    resp.raise_for_status()
+    body = resp.json()
+    metadata = body.get("metadata") or {}
+    if isinstance(metadata, str):
+        try:
+            metadata = json.loads(metadata)
+        except json.JSONDecodeError:
+            metadata = {}
+    for call in metadata.get("pending_tool_calls") or []:
+        if not isinstance(call, dict):
+            continue
+        if str(call.get("tool_call_id")) != event_id:
+            continue
+        args = call.get("args")
+        if not isinstance(args, dict):
+            args = {}
+        return str(call.get("tool_name") or ""), args
+    return "", {}
+
+
 CustomToolHandler = Callable[
     [str, str, dict[str, Any]],
     dict[str, Any] | Awaitable[dict[str, Any]],
@@ -378,13 +413,14 @@ async def stream_hitl_until_end_turn(
                         for event_id in stop_reason_event_ids(payload):
                             if event_id in responded_to:
                                 continue
-                            tool_ev = tool_use_events.get(event_id)
-                            if tool_ev is None:
+                            tool_name, args = await _resolve_custom_tool_call(
+                                client,
+                                session_id,
+                                event_id,
+                                tool_use_events,
+                            )
+                            if not tool_name:
                                 continue
-                            tool_name = str(tool_ev.get("name") or "")
-                            args = tool_ev.get("input")
-                            if not isinstance(args, dict):
-                                args = {}
                             result = await _dispatch_custom_tool(
                                 tool_name,
                                 event_id,

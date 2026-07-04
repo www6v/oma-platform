@@ -63,17 +63,36 @@ def _make_sre_custom_tool_handler(pr_state: dict[str, Any]):
 
     def handle_custom_tool(name: str, args: dict[str, Any]) -> dict[str, Any] | None:
         if name == "open_pull_request":
-            pr_state["pr_number"] = pr_state.get("pr_number", 1)
+            if pr_state.get("pr_opened"):
+                return {
+                    "pr_number": pr_state["pr_number"],
+                    "url": pr_state["pr_url"],
+                    "already_open": True,
+                }
+            pr_state["pr_number"] = int(pr_state.get("pr_number", 0)) + 1
+            pr_state["pr_opened"] = True
             pr_state["title"] = args.get("title", "")
+            pr_state["pr_url"] = (
+                f"https://github.test/pr/{pr_state['pr_number']}"
+            )
             return {
                 "pr_number": pr_state["pr_number"],
-                "url": f"https://github.test/pr/{pr_state['pr_number']}",
+                "url": pr_state["pr_url"],
             }
         if name == "merge_pull_request":
+            pr_number = args.get("pr_number", pr_state.get("pr_number", 1))
+            if pr_state.get("merged"):
+                return {
+                    "merged": True,
+                    "pr_number": pr_state["pr_number"],
+                    "already_merged": True,
+                }
             pr_state["merged"] = True
-            pr_state["pr_number"] = args.get("pr_number", pr_state.get("pr_number", 1))
-            return {"merged": True, "pr_number": pr_state["pr_number"]}
+            pr_state["pr_number"] = pr_number
+            return {"merged": True, "pr_number": pr_number}
         if name == "request_approval":
+            if pr_state.get("approved"):
+                return {"decision": "approved", "already_approved": True}
             return None
         return {"error": f"unknown tool {name}"}
 
@@ -148,7 +167,9 @@ async def run_sre_incident_responder_soak(
 
     pr_state: dict[str, Any] = {}
     cfg = _stream_config()
-    alert_text = "PagerDuty alert:\n" + load_alert_json()
+    alert_text = (
+        "PagerDuty alert (handle once, then stop):\n" + load_alert_json()
+    )
 
     async def on_custom_tool(
         name: str,
@@ -158,6 +179,7 @@ async def run_sre_incident_responder_soak(
         handler = _make_sre_custom_tool_handler(pr_state)
         result = handler(name, args)
         if result is None and name == "request_approval" and auto_approve:
+            pr_state["approved"] = True
             return {"decision": "approved"}
         return result
 

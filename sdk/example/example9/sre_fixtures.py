@@ -33,8 +33,13 @@ Consult the team runbooks before proposing any infrastructure fix.
 AGENT_SYSTEM = (
     "You are an on-call SRE. When a PagerDuty alert arrives, read the "
     "service logs, the infra manifest, and the team runbook. Match symptoms "
-    "to a runbook, propose a fix, open a PR, request human approval, and "
-    "only merge after approval."
+    "to a runbook, then follow this exact sequence once: "
+    "(1) call open_pull_request exactly once with the infra fix diff, "
+    "(2) call request_approval exactly once, "
+    "(3) call merge_pull_request exactly once after approval. "
+    "After merge_pull_request succeeds, write one brief incident summary "
+    "and end your turn. Do not call any custom tools again and do not "
+    "repeat the investigation."
 )
 
 AGENT_TOOLS = [
