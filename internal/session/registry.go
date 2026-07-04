@@ -144,7 +144,7 @@ func (lane *sessionLane) handleInterrupt(
 		lane.machine.RecoverStuckRunningOnInterrupt(ctx)
 		return
 	}
-	_ = lane.machine.PublishStatusIdle(ctx)
+	_ = lane.machine.PublishInterruptIdle(ctx)
 }
 
 func (lane *sessionLane) drainPendingTurns() int {

@@ -135,6 +135,17 @@ func pendingToolCallsFromMetadata(metadata map[string]any) []any {
 	}
 }
 
+func sessionHasPendingCustomToolCalls(sess *store.Session) bool {
+	if sess == nil || len(sess.Metadata) == 0 {
+		return false
+	}
+	var metadata map[string]any
+	if err := json.Unmarshal(sess.Metadata, &metadata); err != nil {
+		return false
+	}
+	return len(pendingToolCallsFromMetadata(metadata)) > 0
+}
+
 func outcomeEvaluationsFromMetadata(metadata map[string]any) []any {
 	raw, ok := metadata["outcome_evaluations"]
 	if !ok || raw == nil {

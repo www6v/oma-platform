@@ -318,6 +318,104 @@ func TestInterruptRecoversStuckRunningSession(t *testing.T) {
 	}
 }
 
+func TestInterruptEmitsEndTurnClearsPendingCustomTools(t *testing.T) {
+	db, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close(db)
+
+	ctx := context.Background()
+	agents := store.NewAgentRepo(db)
+	environments := store.NewEnvironmentRepo(db)
+	if err := environments.EnsureDefault(ctx); err != nil {
+		t.Fatal(err)
+	}
+	sessions := store.NewSessionRepo(db, agents, environments)
+	events := store.NewEventRepo(db)
+
+	agent, err := agents.Create(ctx, store.CreateAgentInput{
+		Name:  "hitl-agent",
+		Model: "faux/test",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := sessions.Create(ctx, store.CreateSessionInput{AgentID: agent.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	customUse, _ := json.Marshal(map[string]any{
+		"type": "agent.custom_tool_use",
+		"id":   "ctu_escalate",
+		"name": "escalate",
+		"input": map[string]any{
+			"receipt_id": "r07",
+			"question":   "Needs review",
+		},
+	})
+	if _, err := events.AppendEvents(ctx, sess.ID, []json.RawMessage{customUse}); err != nil {
+		t.Fatal(err)
+	}
+
+	machine := &session.Machine{
+		TenantID:  "default",
+		SessionID: sess.ID,
+		Sessions:  sessions,
+		Events:    events,
+		Hub:       stream.NewHub(),
+		Workdirs:  workdir.NewManager(t.TempDir(), ""),
+		Harness:   &harness.FakeClient{},
+	}
+	reg := session.NewRegistry()
+	reg.Register(sess.ID, machine)
+
+	interruptEvent, _ := json.Marshal(map[string]any{"type": "user.interrupt"})
+	if err := reg.EnqueueEvents(
+		ctx, sess.ID, []json.RawMessage{interruptEvent}, false, true, nil,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := sessions.Get(ctx, "default", sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != store.SessionStatusIdle {
+		t.Fatalf("status=%s want idle", got.Status)
+	}
+
+	var metadata map[string]any
+	if err := json.Unmarshal(got.Metadata, &metadata); err != nil {
+		t.Fatal(err)
+	}
+	calls, _ := metadata["pending_tool_calls"].([]any)
+	if len(calls) != 0 {
+		t.Fatalf("pending_tool_calls=%v want empty", calls)
+	}
+
+	list, err := events.ListEvents(ctx, sess.ID, 0, 100, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ev := range list {
+		if ev.Type != "session.status_idle" {
+			continue
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(ev.Payload, &payload); err != nil {
+			t.Fatal(err)
+		}
+		stopReason, _ := payload["stop_reason"].(map[string]any)
+		if stopReason["type"] != "end_turn" {
+			t.Fatalf("stop_reason.type=%v want end_turn", stopReason["type"])
+		}
+		return
+	}
+	t.Fatal("expected session.status_idle with end_turn after interrupt")
+}
+
 func TestNoOpInterruptDoesNotEmitIdle(t *testing.T) {
 	db, err := store.Open(":memory:")
 	if err != nil {

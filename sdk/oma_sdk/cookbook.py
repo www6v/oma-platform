@@ -214,6 +214,9 @@ async def stream_until_end_turn(
             ):
                 handler(ev)
                 ev_type = event_type(ev)
+                if ev_type == "user.interrupt":
+                    end_turn_seen.set()
+                    return
                 if ev_type == "session.status_idle":
                     payload = event_payload(ev)
                     ev_seq = int(ev.get("seq") or 0)
@@ -368,6 +371,7 @@ async def stream_hitl_until_end_turn(
     )
     tool_use_events: dict[str, dict[str, Any]] = {}
     responded_to: set[str] = set()
+    interrupted = False
 
     start_seq = 0
     try:
@@ -389,7 +393,7 @@ async def stream_hitl_until_end_turn(
         return outcome
 
     async def consume() -> None:
-        nonlocal stream_error
+        nonlocal stream_error, interrupted
         try:
             async for ev in client.events.stream(
                 session_id,
@@ -399,6 +403,10 @@ async def stream_hitl_until_end_turn(
                 handler(ev)
                 ev_type = event_type(ev)
                 payload = event_payload(ev)
+                if ev_type == "user.interrupt":
+                    interrupted = True
+                    end_turn_seen.set()
+                    return
                 if ev_type == "agent.custom_tool_use":
                     tool_id = custom_tool_event_id(ev)
                     if tool_id:
@@ -406,6 +414,9 @@ async def stream_hitl_until_end_turn(
                 elif ev_type == "session.status_idle":
                     reason = stop_reason_type(payload)
                     ev_seq = int(ev.get("seq") or 0)
+                    if interrupted:
+                        end_turn_seen.set()
+                        return
                     if reason == "requires_action":
                         # One custom_tool_result per idle (GT3 resume). Batching
                         # multiple runTurn triggers while the prior turn is still

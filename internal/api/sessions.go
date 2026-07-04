@@ -230,6 +230,24 @@ func mountSessionRoutes(
 		if hasInterrupt {
 			runTurn = false
 		}
+		if runTurn {
+			hasCustomToolResult := false
+			for _, ev := range body.Events {
+				var meta struct {
+					Type string `json:"type"`
+				}
+				if err := json.Unmarshal(ev, &meta); err != nil {
+					continue
+				}
+				if meta.Type == "user.custom_tool_result" {
+					hasCustomToolResult = true
+					break
+				}
+			}
+			if hasCustomToolResult && !sessionHasPendingCustomToolCalls(sess) {
+				runTurn = false
+			}
+		}
 
 		if err := h.registry.EnqueueEvents(
 			req.Context(), id, body.Events, runTurn, hasInterrupt, nil,

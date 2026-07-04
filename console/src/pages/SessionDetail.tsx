@@ -139,6 +139,9 @@ export function SessionDetail() {
   const [status, setStatus] = useState("idle");
   const [pendingToolCalls, setPendingToolCalls] = useState<PendingToolCallWire[]>([]);
   const [hitlSubmittingId, setHitlSubmittingId] = useState<string | null>(null);
+  /** Set when user.interrupt lands — suppresses HITL panel so Stop does
+   *  not leave requires_action UI that resumes the turn on submit. */
+  const [sessionStopped, setSessionStopped] = useState(false);
   /** Lazy-fetched Trajectory v1 envelope. Drives the outcome + reward
    *  chips in the header strip and the Trajectory viewer modal. We don't
    *  block initial render on this — chips render as `—` until it lands.
@@ -217,7 +220,7 @@ export function SessionDetail() {
     () => latestIdleStopReason(events),
     [events],
   );
-  const hitlActive = isHitlActive(status, idleStopReason);
+  const hitlActive = !sessionStopped && isHitlActive(status, idleStopReason);
   const hitlItems = useMemo(() => {
     if (!idleStopReason || !hitlActive) {
       return [];
@@ -457,6 +460,8 @@ export function SessionDetail() {
     // SDK posts user.interrupt without a thread filter and we want to
     // drop everything for the active thread).
     if (ev.type === "user.interrupt") {
+      setSessionStopped(true);
+      setPendingToolCalls([]);
       const tid = (ev as { session_thread_id?: string }).session_thread_id ?? "sthr_primary";
       setPendingByEventId((prev) => {
         if (prev.size === 0) return prev;
@@ -640,6 +645,7 @@ export function SessionDetail() {
     setStatus("idle");
     setPendingToolCalls([]);
     setHitlSubmittingId(null);
+    setSessionStopped(false);
     setTrajectory(undefined);
     setThreads([]);
     setActiveThreadId("sthr_primary");
@@ -951,6 +957,8 @@ export function SessionDetail() {
       // Optimistic idle — covers stuck-Running where user.interrupt is
       // appended but no status_idle was emitted before the server fix.
       setStatus("idle");
+      setSessionStopped(true);
+      setPendingToolCalls([]);
       setPendingByEventId(new Map());
       toast.success("Session stopped");
     } catch (e) {
@@ -1064,13 +1072,11 @@ export function SessionDetail() {
           <SessionDurationBadge events={events} />
           {sessionMeta.createdAt && <RelativeTimeBadge iso={sessionMeta.createdAt} />}
           <div className="ml-auto flex items-center gap-2">
-            {/* Stop / Interrupt — only while the session is actively running.
+            {/* Stop / Interrupt — while running or waiting on HITL input.
                 Posts user.interrupt scoped to the active thread; server fires
                 thread AbortController + flushes pending events + emits
-                status_idle. Recovery path for stuck-Running sessions where a
-                DO eviction killed the stream and no clean status_idle ever
-                landed. */}
-            {status === "running" && (
+                status_idle with end_turn (not requires_action). */}
+            {(status === "running" || hitlActive) && (
               <button
                 onClick={() => void interrupt()}
                 disabled={interrupting}

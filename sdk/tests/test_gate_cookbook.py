@@ -176,3 +176,59 @@ def test_stop_reason_event_ids() -> None:
 def test_custom_tool_event_id() -> None:
     ev = _custom_tool_use("ctu_x", "decide", {})
     assert custom_tool_event_id(ev) == "ctu_x"
+
+
+@pytest.mark.asyncio
+async def test_stream_hitl_stops_on_user_interrupt() -> None:
+    """user.interrupt must halt auto custom_tool_result replies."""
+
+    async def _stream(_session_id: str):
+        yield _custom_tool_use(
+            "ctu_a",
+            "escalate",
+            {"receipt_id": "r01", "question": "review?"},
+        )
+        yield {
+            "seq": 12,
+            "type": "user.interrupt",
+            "data": {"type": "user.interrupt"},
+        }
+        yield _requires_action_idle(11, ["ctu_a"])
+        yield _end_turn_idle(13)
+
+    client = MagicMock()
+    client.events.stream = lambda *_a, **_k: _stream("sess_gate")
+    client.events.send = AsyncMock()
+    client.events.list = AsyncMock(return_value={"data": []})
+    client.sessions.events.send = MagicMock()
+    client._http.get = AsyncMock(
+        return_value=MagicMock(
+            raise_for_status=MagicMock(),
+            json=MagicMock(return_value={"status": "idle"}),
+        )
+    )
+
+    sent: list[list[dict[str, Any]]] = []
+
+    import oma_sdk.cookbook as cookbook
+
+    original = cookbook._send_session_events_async
+    cookbook._send_session_events_async = AsyncMock(
+        side_effect=lambda _c, _s, events: sent.append(events),
+    )
+    try:
+        state = await stream_hitl_until_end_turn(
+            client,
+            "sess_gate",
+            on_custom_tool=lambda *_a, **_k: {"human_decision": "approve"},
+            config=StreamConfig(
+                timeout_sec=5.0,
+                stream_connect_delay=0,
+                idle_poll_max_wait=0.1,
+            ),
+        )
+    finally:
+        cookbook._send_session_events_async = original
+
+    assert len(sent) == 0
+    assert state["responded_ids"] == set()

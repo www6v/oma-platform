@@ -316,6 +316,25 @@ func (m *Machine) PublishStatusIdle(ctx context.Context) error {
 	return m.publishStatusIdle(ctx, nil)
 }
 
+// PublishInterruptIdle appends session.status_idle with stop_reason end_turn
+// and clears pending_tool_calls. user.interrupt must not leave the session in
+// requires_action — that would show the HITL panel and resume on the next
+// custom_tool_result (open-managed-agents SessionDO uses end_turn here).
+func (m *Machine) PublishInterruptIdle(ctx context.Context) error {
+	stopReason := map[string]any{"type": "end_turn"}
+	if err := m.syncPendingToolCallsMetadata(ctx, nil, stopReason); err != nil {
+		return err
+	}
+	idleEvent, err := json.Marshal(map[string]any{
+		"type":        "session.status_idle",
+		"stop_reason": stopReason,
+	})
+	if err != nil {
+		return err
+	}
+	return m.publishEvents(ctx, []json.RawMessage{idleEvent})
+}
+
 // RecoverStuckRunningOnInterrupt force-idles a session whose DB row is still
 // "running" but has no in-memory turn (orphan after crash, harness error
 // without status_idle, server restart, etc.). Mirrors open-managed-agents
@@ -338,7 +357,7 @@ func (m *Machine) RecoverStuckRunningOnInterrupt(ctx context.Context) bool {
 	if err := m.Sessions.EndTurn(ctx, m.TenantID, m.SessionID, turnID); err != nil {
 		return false
 	}
-	if err := m.PublishStatusIdle(ctx); err != nil {
+	if err := m.PublishInterruptIdle(ctx); err != nil {
 		return false
 	}
 	return true
