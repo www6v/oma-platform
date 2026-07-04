@@ -45,7 +45,7 @@ Commands:
   down        Stop and remove containers
   build       Build images without starting
   restart     Restart all services
-  logs        Tail logs (optional service: oma-platform | oma-harness)
+  logs        Tail logs (optional service: oma-platform | oma-auth | oma-harness)
   ps          Show container status
   smoke       Run scripts/e2e/smoke-test.sh against the running stack
 

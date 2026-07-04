@@ -232,7 +232,7 @@ The OMA Console SPA in `console/` is served on the same port as the API when `CO
 ./deploy/docker.sh up
 ```
 
-Copy `.env.example` to `.env`. For real model calls set `OMA_FAKE_HARNESS=0` and configure piPy via `~/.pi/agent/settings.json`, `models.json`, and `auth.json` (mounted into the harness container in compose).
+Copy `.env.example` to `.env`. For remote Docker hosts set `PUBLIC_BASE_URL` to the browser-facing URL (e.g. `http://124.221.28.203:8787`) and set `BETTER_AUTH_SECRET`. For real model calls set `OMA_FAKE_HARNESS=0` and configure piPy via `~/.pi/agent/settings.json`, `models.json`, and `auth.json` (mounted into the harness container in compose).
 
 ## Configuration
 

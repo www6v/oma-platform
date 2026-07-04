@@ -40,7 +40,7 @@
 
 - **Console 控制台** — 本仓库 `console/` 下的 SPA，与 API 同端口。
 - **认证** — API Key（`x-api-key` / `Authorization: Bearer`）或 better-auth Cookie 会话。
-- **Docker Compose** — 双服务栈（`oma-platform` + `oma-harness`），含健康检查。
+- **Docker Compose** — 三服务栈（`oma-platform` + `oma-auth` + `oma-harness`），含健康检查。
 - **Fake Harness 模式** — `OMA_FAKE_HARNESS=1` 可在无 LLM API Key 时本地开发与 CI 运行。
 - **冒烟与集成脚本** — `scripts/e2e/smoke-test.sh`、`scripts/e2e/console-integration.sh`、各 provider webhook、MCP、runtime、子 Agent E2E。
 
@@ -232,7 +232,7 @@ SMOKE_SKIP_LLM=1 ./scripts/e2e/smoke-test.sh
 ./deploy/docker.sh up
 ```
 
-复制 `.env.example` 为 `.env`。真实模型调用请设置 `OMA_FAKE_HARNESS=0`，并通过 `~/.pi/agent/settings.json`、`models.json`、`auth.json` 配置 piPy（compose 会挂载到 harness 容器）。
+复制 `.env.example` 为 `.env`。远程部署时将 `PUBLIC_BASE_URL` 设为浏览器访问地址（如 `http://124.221.28.203:8787`），并设置 `BETTER_AUTH_SECRET`。真实模型调用请设置 `OMA_FAKE_HARNESS=0`，并通过 `~/.pi/agent/settings.json`、`models.json`、`auth.json` 配置 piPy（compose 会挂载到 harness 容器）。
 
 ## 配置项
 

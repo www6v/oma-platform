@@ -1,4 +1,32 @@
 services:
+  oma-auth:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.auth
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
+        APT_MIRROR: ${APT_MIRROR:-mirrors.aliyun.com}
+    env_file:
+      - ../.env
+    environment:
+      AUTH_LISTEN_ADDR: 0.0.0.0:8788
+      AUTH_DATABASE_PATH: /data/auth.db
+      OMA_DATABASE_PATH: /data/oma.db
+    volumes:
+      - ../data:/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8788/auth/get-session').then((r)=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
   oma-platform:
     build:
       context: ..
@@ -21,11 +49,13 @@ services:
       # Harness schedule/MCP tools call oma-server from the sidecar container.
       OMA_HARNESS_PLATFORM_BASE: http://oma-platform:8787
       CONSOLE_DIR: /app/console
-      AUTH_UPSTREAM_URL: http://host.docker.internal:8788
+      AUTH_UPSTREAM_URL: http://oma-auth:8788
     volumes:
       - ../data:/data
       # - ${CONSOLE_DIST:-../console/dist}:/app/console:ro
     depends_on:
+      oma-auth:
+        condition: service_healthy
       oma-harness:
         condition: service_healthy
 
