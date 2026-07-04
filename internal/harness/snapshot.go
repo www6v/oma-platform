@@ -22,6 +22,7 @@ func AgentSnapshotFromConfig(cfg store.AgentConfig) AgentSnapshot {
 		Description:    cfg.Description,
 		Tools:          cfg.Tools,
 		MCPServers:     cfg.MCPServers,
+		Skills:         cfg.Skills,
 		CallableAgents: cfg.CallableAgents,
 		Metadata:       cfg.Metadata,
 		Version:        cfg.Version,

@@ -68,6 +68,8 @@ func testRouterDeps(
 			Files:        files,
 			FileBlobs:    fileBlobs,
 			MemoryStores: store.NewMemoryStoreRepo(db, nil),
+			Skills:       skills,
+			SkillFiles:   skillFiles,
 		},
 		store.NewWakeupRepo(db),
 		store.NewTeamRepo(db),
@@ -210,7 +212,10 @@ func testRouterSharedDB(
 		AuthDisabled:   true,
 		Sessions: api.NewSessionHandlers(
 			sessions, agents, events, pending, hub, reg, workdirs, outputs, client, models,
-			&harness.ResourceResolver{Files: files, FileBlobs: fileBlobs},
+			&harness.ResourceResolver{
+				Files: files, FileBlobs: fileBlobs,
+				Skills: skills, SkillFiles: skillFiles,
+			},
 			store.NewWakeupRepo(db),
 			store.NewTeamRepo(db),
 			nil,

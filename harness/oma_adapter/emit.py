@@ -9,6 +9,14 @@ from typing import Any
 from oma_adapter.custom_tools import wire_tool_use_type
 
 
+def _thread_sent_event_id(tool_call_id: str) -> str:
+    return f"sevt-thread-sent-{tool_call_id}"
+
+
+def _call_agent_tool_name(name: str | None) -> bool:
+    return bool(name and name.startswith("call_agent_"))
+
+
 def emit_oma_events(
     raw_events: list[dict[str, Any]],
     *,
@@ -64,14 +72,25 @@ def emit_oma_events(
                 wire_type = "agent.custom_tool_use"
             else:
                 wire_type = wire_tool_use_type(str(tool_name))
+            tool_input = item.get("args") or item.get("input") or {}
             out.append(
                 {
                     "type": wire_type,
                     "id": tool_id,
                     "name": tool_name,
-                    "input": item.get("args") or item.get("input") or {},
+                    "input": tool_input,
                 }
             )
+            if _call_agent_tool_name(str(tool_name)):
+                message = tool_input.get("message") or tool_input.get("task") or ""
+                out.append(
+                    {
+                        "type": "agent.thread_message_sent",
+                        "id": _thread_sent_event_id(str(tool_id)),
+                        "to_thread_id": str(tool_id),
+                        "content": [{"type": "text", "text": str(message)}],
+                    }
+                )
         elif kind in {"tool_result", "agent.tool_result", "tool_execution_end"}:
             tool_use_id = (
                 item.get("toolCallId")
@@ -90,6 +109,7 @@ def emit_oma_events(
                 and tool_name in custom_tool_names
             ):
                 continue
+            result_text = _stringify(item.get("result") or item.get("content"))
             out.append(
                 {
                     "type": "agent.tool_result",
@@ -97,13 +117,23 @@ def emit_oma_events(
                     "content": [
                         {
                             "type": "text",
-                            "text": _stringify(
-                                item.get("result") or item.get("content")
-                            ),
+                            "text": result_text,
                         }
                     ],
                 }
             )
+            if _call_agent_tool_name(tool_name):
+                received: dict[str, Any] = {
+                    "type": "agent.thread_message_received",
+                    "from_thread_id": tool_use_id,
+                    "content": [{"type": "text", "text": result_text}],
+                    "parent_event_id": _thread_sent_event_id(tool_use_id),
+                }
+                if tool_name is not None:
+                    agent_id = tool_name[len("call_agent_") :]
+                    if agent_id:
+                        received["from_agent_id"] = agent_id
+                out.append(received)
     return out
 
 

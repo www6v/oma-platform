@@ -67,11 +67,11 @@ Fixture 地图：`example_data/OVERVIEW.md`（iterate / orchestrate / gate 等�
 | `CMA_iterate_fix_failing_tests` | ✅ | 同 files-path 细微差异 | defer | 已结项 |
 | `CMA_gate_human_in_the_loop` | ✅ | GT6 Part B webhooks；live 12-receipt soak 可选 | defer | 已结项 |
 | `CMA_verify_with_outcome_grader` | ✅ | OG4 file rubric ✅；rule-based verifier 可选 | defer | Phase A–D 已落地 |
-| `CMA_coordinate_specialist_team` | 🟡 | `multiagent` API + 分散 subagent 测试；**无 cookbook 形 CI**（3 专家 + web_search + threads） | **P0** | 一次性验证 multi-agent 协调路径 |
-| `CMA_remember_user_preferences` | 🟡 | memory API ✅；harness `_mount_memory_store` 偏 fixture；**无跨 session 召回 E2E** | **P0** | 验证 memory resource → turn → 下一会话持久化 |
-| `CMA_explore_unfamiliar_codebase` | 🟡 | `sessions.resources.*` CRUD ✅；**无 mid-session add/delete cookbook 探针** | **P1** | 轻量补资源生命周期验证 |
-| `CMA_orchestrate_issue_to_pr` | 🟡 | 无 example；`github_repository` harness **跳过 clone**；长链 multi-turn 未测 | **P1** | 比 iterate 更深的多轮 + 失败恢复 |
-| `sre_incident_responder` | ❌ | **Skill 未进 harness turn 注入**；Skill + custom + webhook 复合流 | **P1（延后）** | 最佳 applied 综合题，前置多 |
+| `CMA_coordinate_specialist_team` | ✅ | `example5/coordinate_team` + Go `TestCoordinateCookbook*` | defer | Phase CT1–CT3 landed |
+| `CMA_remember_user_preferences` | ✅ | `example6/remember_preferences` + Go `TestRememberCookbook*` | defer | RP1–RP5 landed |
+| `CMA_explore_unfamiliar_codebase` | ✅ | `example7/explore_unfamiliar_codebase` + Go `TestExploreCookbook*` | defer | EX1–EX4 landed |
+| `CMA_orchestrate_issue_to_pr` | ✅ | `example8/orchestrate_issue_to_pr` + Go `TestOrchestrateCookbook*` | defer | OR1–OR4 landed |
+| `sre_incident_responder` | 🟡 | Skill harness ✅；仍缺 custom+webhook 复合流探针 | **P1** | 见 [skill-harness-injection-migration.md](./skill-harness-injection-migration.md) |
 | `CMA_prompt_versioning_and_rollback` | 🟡 | agent versioning API ✅；无批量评估 / 回滚 workflow 探针 | **P2** | 偏 workflow/DX，平台 API 已齐 |
 | `CMA_operate_in_production` | 🟡 | **`beta.webhooks` 明确 out of scope**；vault MCP turn 注入未 E2E | **P2** | 生产模式文档价值 > 立即 parity |
 | `slack_data_bot` | ❌ | 无 SDK example；Slack gateway 仅签名级测试 | **P2** | 集成层，依赖 analyst ✅ |
@@ -82,15 +82,15 @@ Fixture 地图：`example_data/OVERVIEW.md`（iterate / orchestrate / gate 等�
 
 ```
 Layer A — 平台 runtime 缺口（开 cookbook 会暴露硬失败）
-├── Skill → harness turn 注入                          ← sre_incident_responder
+├── Skill → harness turn  injection                          ← sre ✅ SK1–SK4
 ├── github_repository 真实 clone（或 mock 等价）         ← orchestrate sidebar
 └── （已关闭）Outcome grader 循环                       ← verify ✅ example4
 
 Layer B — API 有、缺 cookbook 探针（开新 = 补 CI / 文档）
 ├── memory 跨 session 召回                             ← remember
 ├── multiagent 3 专家协调                              ← coordinate
-├── sessions.resources.add mid-session                 ← explore
-└── 长链 issue→PR mock gh                               ← orchestrate
+├── ~~sessions.resources.add mid-session~~                 ← explore ✅
+└── ~~长链 issue→PR mock gh~~                               ← orchestrate ✅
 
 Layer C — 集成 / 生产模式（刻意 defer）
 ├── beta.webhooks / session.status_idled               ← operate, slack, gate Part B
@@ -109,15 +109,15 @@ Layer C — 集成 / 生产模式（刻意 defer）
 | 顺序 | Cookbook | 建议 example | 先要补的平台 |
 |------|----------|--------------|--------------|
 | ~~1~~ | ~~`CMA_verify_with_outcome_grader`~~ | ~~`example4/outcome_grader`~~ | ✅ 见 [outcome-grader-migration.md](./outcome-grader-migration.md) |
-| **1** | `CMA_coordinate_specialist_team` | `example5/coordinate_team` | 整合 multiagent + `call_agent` + thread events → 一条 Go CI |
-| **2** | `CMA_remember_user_preferences` | `example6/remember_preferences` | ResourceResolver 拉 live memories + 两 session 召回断言 |
+| **1** | ~~`CMA_coordinate_specialist_team`~~ | ~~`example5/coordinate_team`~~ | ✅ 见 [coordinate-specialist-team-migration.md](./coordinate-specialist-team-migration.md) |
+| **1** | ~~`CMA_remember_user_preferences`~~ | ~~`example6/remember_preferences`~~ | ✅ 见 [remember-user-preferences-migration.md](./remember-user-preferences-migration.md) |
 
 ### 5.2 阶段 2 — 扩能力边界（P1）
 
 | Cookbook | 价值 |
 |----------|------|
-| `CMA_explore_unfamiliar_codebase` | 最快落地：`sessions.resources.add` + zip fixture + Go integration |
-| `CMA_orchestrate_issue_to_pr` | 在 iterate MT1 之上加「CI 失败 / review 恢复」；可先 file-mount mock `gh` |
+| ~~`CMA_explore_unfamiliar_codebase`~~ | ~~`example7/explore_unfamiliar_codebase`~~ | ✅ 见 [explore-unfamiliar-codebase-migration.md](./explore-unfamiliar-codebase-migration.md) |
+| ~~`CMA_orchestrate_issue_to_pr`~~ | ~~`example8/orchestrate_issue_to_pr`~~ | ✅ 见 [orchestrate-issue-to-pr-migration.md](./orchestrate-issue-to-pr-migration.md) |
 
 ### 5.3 阶段 3 — Applied / 生产（P2，前置完成后）
 
@@ -138,10 +138,10 @@ sdk/example/
 ├── example2/  iterate                   ✅
 ├── example3/  gate HITL                 ✅
 ├── example4/  outcome_grader            ✅（含 ev_charging 变体 / soak）
-├── example5/  coordinate_team           ← P0 next
-├── example6/  remember_preferences      ← P0
-├── example7/  explore_codebase          ← P1
-└── example8/  orchestrate_issue_pr      ← P1
+├── example5/  coordinate_team           ✅
+├── example6/  remember_preferences      ✅
+├── example7/  explore_codebase          ✅
+└── example8/  orchestrate_issue_pr      ✅
 ```
 
 每条遵循同一模板：
@@ -158,12 +158,12 @@ sdk/example/
 
 | 能力 | API / 代码现状 | Cookbook 探针 |
 |------|----------------|---------------|
-| Session resources CRUD | ✅ T16；`session_resources_handlers.go` | explore / orchestrate 未开 |
+| Session resources CRUD | ✅ T16；`session_resources_handlers.go` | explore ✅；orchestrate ✅ |
 | Memory stores | ✅ SDK `tests/test_memory_stores.py`；harness `resource_mounter.py` | remember 未开 |
 | Multiagent / subagent | ✅ `tests/test_subagents.py`；Go `subagent_e2e_test.go` | coordinate 未开 |
 | Agent versions | ✅ agents CRUD + versions | prompt_versioning 未开 |
 | Vaults + integrations | ✅ vaults API；GitHub/Slack/Linear gateway 测试 | operate / slack 未开 |
-| Skills | ✅ skills CRUD + zip download | **harness turn 未 mount skill** → SRE 阻塞 |
+| Skills | ✅ skills CRUD + **harness turn inject** | sre ✅ |
 | Webhooks | ❌ `beta.webhooks` out of scope（SDK-PLAN） | operate / slack Part B |
 | Outcome supervisor | ✅ example4 + `outcome_supervisor.go` | verify ✅ |
 
@@ -171,18 +171,13 @@ sdk/example/
 
 ## 8. 下一个开新建议（2026-07-04 更新）
 
-**首选：`CMA_coordinate_specialist_team.ipynb`**
+**Layer A 已关闭：** Skill harness 注入 — [skill-harness-injection-migration.md](./skill-harness-injection-migration.md)
 
-- multiagent 能力分散在 subagent 测试与 eval suite，缺一条 **cookbook 形 CI** 串起 coordinator + 3 专家 + `session.thread_created`。
-- 不依赖 webhooks / 外部 SaaS，适合 sim client + Go integration。
+**SRE incident responder ✅** — [sre-incident-responder-migration.md](./sre-incident-responder-migration.md)
 
-**次选：`CMA_remember_user_preferences.ipynb`**
+~~explore / orchestrate / remember / coordinate / sre~~ ✅ — 见各 migration doc。
 
-- memory API 全；需证明 **跨 session 召回** 与 per-resource `instructions` 在 harness 路径生效。
-
-**第三：`CMA_explore_unfamiliar_codebase.ipynb`**
-
-- 工作量小，专门验证 **运行中 session 增删 resource**。
+**下一步候选：** `CMA_operate_in_production.ipynb` 或 `slack_data_bot.ipynb`（需 webhooks / integrations）。
 
 ---
 

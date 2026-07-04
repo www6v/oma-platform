@@ -29,7 +29,7 @@ jobs:
         run: go test ./internal/api/ ./test/integration/ -run TestIterateCookbookMultiTurn -count=1 -v
 
       - name: Gate cookbook HITL (requires_action + resume)
-        run: go test ./internal/api/ ./test/integration/ -run 'TestGateCookbook|TestOutcomeGrader' -count=1 -v
+        run: go test ./internal/api/ ./test/integration/ -run 'TestGateCookbook|TestOutcomeGrader|TestCoordinateCookbook|TestRememberCookbook|TestExploreCookbook|TestOrchestrateCookbook|TestSkillHarness|TestSreCookbook' -count=1 -v
 
       - name: Crash recovery (SIGKILL → restart, ported from main-node)
         run: go test ./internal/api/ -run TestCrashRecovery -count=1 -v

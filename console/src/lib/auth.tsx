@@ -23,9 +23,8 @@ const AuthContext = createContext<AuthCtx>({
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { data: session, isPending } = authClient.useSession();
 
-  // DEV BYPASS: when no real session exists, inject a stub user so all
-  // pages are accessible without login. Remove this block for production.
-  const DEV_BYPASS = true;
+  // When AUTH is enabled, require a real session; no dev stub user.
+  const DEV_BYPASS = false;
 
   const user = DEV_BYPASS
     ? {

@@ -447,7 +447,91 @@ Reference: Anthropic `managed_agents/CMA_verify_with_outcome_grader.ipynb` vs `e
 | **OG4** | P2 | Rubric file | `rubric: {type:file,file_id}` → lazy fetch + cache | ✅ `resolve_rubric.go` + `TestOutcomeGraderRubricFile` | RewardSpec verifiers still deferred |
 | **OG5** | P2 | Live EV charging soak | Full cookbook scenario with files | ✅ `outcome_grader_ev_charging.py` + opt-in pytest | Run via `OMA_RUN_LIVE_OUTCOME_EV=1` |
 
-Migration: `docs/migrate/outcome-grader-migration.md`. Go CI: `TestOutcomeGraderCookbook`. Sim: `OutcomeSimulatingClient` (turn 1 fail → revision pass).
+### Cookbook parity — coordinate specialist team (2026-07-04)
+
+Reference: Anthropic `managed_agents/CMA_coordinate_specialist_team.ipynb` vs `example/example5/coordinate_team.py`.
+
+| ID | Priority | Gap | Cookbook expects | OMA / SDK today | Recommendation |
+|---|---|---|---|---|---|
+| **CT1** | P0 | `multiagent` roster | 3 specialists on coordinator | ✅ `multiagentToCallableAgents` + agent create | — |
+| **CT2** | P0 | Harness sub_agents | TurnRequest carries 3 worker snapshots | ✅ `ResolveSubAgents` + sim validation | — |
+| **CT3** | P0 | Thread events | `thread_created` + `thread_message_received` | ✅ `CoordinateSimulatingClient` + `TestCoordinateCookbook*` | — |
+| **CT4** | P1 | SDK example | example5 launcher + fixtures | ✅ `coordinate_team.py` | — |
+| **CT5** | P1 | pytest helpers | `build_multiagent`, thread counters | ✅ `test_coordinate_cookbook.py` | — |
+| **CT6** | P2 | Live LLM soak | Real web_search delegation | ✅ `coordinate_team_live.py` + opt-in pytest | Run via `OMA_RUN_LIVE_COORDINATE=1` |
+
+Migration: `docs/migrate/coordinate-specialist-team-migration.md`. Go CI: `TestCoordinateCookbookSpecialistTeam`.
+
+### Cookbook parity — remember user preferences (2026-07-04)
+
+Reference: Anthropic `managed_agents/CMA_remember_user_preferences.ipynb` vs `example/example6/remember_preferences.py`.
+
+| ID | Priority | Gap | Cookbook expects | OMA / SDK today | Recommendation |
+|---|---|---|---|---|---|
+| **RP1** | P0 | `memory_store` mount | `/mnt/memory/<store_name>/` in sandbox | ✅ `resource_mounter` + `resolveMemoryStore` | — |
+| **RP2** | P0 | Workdir → API sync | Agent file writes persist to memory API | ✅ `SyncMemoryStoresFromWorkdir` + `machine.go` | — |
+| **RP3** | P0 | Cross-session recall | Session 2 sees session 1 memories | ✅ `TestRememberCookbookPreferences` | — |
+| **RP4** | P1 | Platform reminders | Per-resource `instructions` in system prompt | ✅ `memory_platform_reminders()` | — |
+| **RP5** | P1 | SDK example | example6 launcher + fixtures | ✅ `remember_preferences.py` | — |
+| **RP6** | P2 | Live LLM soak | Real two-session preference recall | ✅ `remember_preferences_soak.py` + opt-in pytest | Run via `OMA_RUN_LIVE_REMEMBER=1` |
+
+Migration: `docs/migrate/remember-user-preferences-migration.md`. Go CI: `TestRememberCookbookPreferences`.
+
+### Cookbook parity — explore unfamiliar codebase (2026-07-04)
+
+Reference: Anthropic `managed_agents/CMA_explore_unfamiliar_codebase.ipynb` vs `example/example7/explore_unfamiliar_codebase.py`.
+
+| ID | Priority | Gap | Cookbook expects | OMA / SDK today | Recommendation |
+|---|---|---|---|---|---|
+| **EX1** | P0 | Zip fixture | Stale `ARCHITECTURE.md` + `services/` trap | ✅ `explore_fixtures.make_unfamiliar_repo_zip` | — |
+| **EX2** | P0 | File mount resolve | `repo.zip` → `/mnt/session/uploads/repo.zip` | ✅ `resolveFile` + `resource_mounter` | — |
+| **EX3** | P0 | Mid-session resources | `sessions.resources.add` / delete on live session | ✅ `TestExploreCookbookUnfamiliarCodebase` | — |
+| **EX4** | P1 | SDK example | example7 launcher + fixtures | ✅ `explore_unfamiliar_codebase.py` | — |
+| **EX5** | P2 | Live LLM soak | Real explore + bash unzip | ✅ `explore_unfamiliar_codebase_soak.py` + opt-in pytest | Run via `OMA_RUN_LIVE_EXPLORE=1` |
+
+Migration: `docs/migrate/explore-unfamiliar-codebase-migration.md`. Go CI: `TestExploreCookbookUnfamiliarCodebase`.
+
+### Cookbook parity — orchestrate issue to PR (2026-07-04)
+
+Reference: Anthropic `managed_agents/CMA_orchestrate_issue_to_pr.ipynb` vs `example/example8/orchestrate_issue_to_pr.py`.
+
+| ID | Priority | Gap | Cookbook expects | OMA / SDK today | Recommendation |
+|---|---|---|---|---|---|
+| **OR1** | P0 | Mock gh zip fixture | `gh-mock`, issue JSON, planted bug | ✅ `example8/orchestrate/` | — |
+| **OR2** | P0 | Env pytest packages | `packages.pip: [pytest]` | ✅ `env_packages.py` + sim validation | — |
+| **OR3** | P0 | Multi-turn chain + verify | 2 turns same session | ✅ `TestOrchestrateCookbookIssueToPR` | — |
+| **OR4** | P1 | SDK example | example8 launcher + fixtures | ✅ `orchestrate_issue_to_pr.py` | — |
+| **OR5** | P2 | Live LLM soak | Real gh-mock chain | ✅ soak + opt-in pytest | Run via `OMA_RUN_LIVE_ORCHESTRATE=1` |
+| **OR6** | defer | `github_repository` sidebar | Real repo clone | stub in `resources.go` | document only |
+
+Migration: `docs/migrate/orchestrate-issue-to-pr-migration.md`. Go CI: `TestOrchestrateCookbookIssueToPR`.
+
+### Platform — skill harness injection (2026-07-04)
+
+Reference: open-managed-agents `harness/skills.ts` + `session-do.ts` skill mount/inject.
+
+| ID | Item | Status |
+|----|------|--------|
+| **SK1** | Go `ResolveSkillsForTurn` | ✅ |
+| **SK2** | `TurnRequest.skills` in machine | ✅ |
+| **SK3** | Harness `mount_skills` + prompt reminders | ✅ |
+| **SK4** | `TestSkillHarnessInjection` | ✅ |
+
+Migration: `docs/migrate/skill-harness-injection-migration.md`. Unblocks `sre_incident_responder` cookbook.
+
+### Cookbook parity — SRE incident responder (2026-07-04)
+
+Reference: Anthropic `managed_agents/sre_incident_responder.ipynb` vs `example/example9/sre_incident_responder.py`.
+
+| ID | Item | Status |
+|----|------|--------|
+| **SRE1** | Fixtures (alert, logs, manifest, runbook) | ✅ |
+| **SRE2** | Skill + 3 file mounts + sim client | ✅ |
+| **SRE3** | HITL open_pr → approval Go CI | ✅ `TestSreCookbookIncidentResponder` |
+| **SRE4** | SDK example9 + pytest | ✅ |
+| **SRE5** | Live soak (optional) | ✅ `OMA_RUN_LIVE_SRE=1` |
+
+Migration: `docs/migrate/sre-incident-responder-migration.md`. Webhook handler deferred (inline alert in CI).
 
 ---
 
@@ -486,6 +570,26 @@ Cookbook parity (Go server + SDK helpers):
     ├── OG1–OG3: in-session supervisor + `TestOutcomeGraderCookbook`
     ├── OG4: file rubric via Files API + `TestOutcomeGraderRubricFile`
     └── OG5: EV charging live soak (`outcome_grader_ev_charging.py`, opt-in pytest)
+└── coordinate specialist team ─────────────────── example/example5/coordinate_team.py ✅
+    ├── CT1–CT3: multiagent + sub_agents + thread events (`TestCoordinateCookbook*`)
+    ├── CT4/CT5: `build_multiagent` + `tests/test_coordinate_cookbook.py`
+    └── CT6: live soak (`coordinate_team_live.py`, opt-in pytest)
+└── remember user preferences ──────────────────── example/example6/remember_preferences.py ✅
+    ├── RP1–RP3: memory mount + workdir sync + cross-session recall (`TestRememberCookbook*`)
+    ├── RP4/RP5: platform reminders + `tests/test_remember_cookbook.py`
+    └── RP6: live soak (`remember_preferences_soak.py`, opt-in pytest)
+└── explore unfamiliar codebase ────────────────── example/example7/explore_unfamiliar_codebase.py ✅
+    ├── EX1–EX3: zip mount + mid-session resources add/delete (`TestExploreCookbook*`)
+    ├── EX4: `tests/test_explore_cookbook.py`
+    └── EX5: live soak (`explore_unfamiliar_codebase_soak.py`, opt-in pytest)
+└── orchestrate issue to PR ────────────────────── example/example8/orchestrate_issue_to_pr.py ✅
+    ├── OR1–OR3: mock gh zip + env pytest + multi-turn verify (`TestOrchestrateCookbook*`)
+    ├── OR4: `tests/test_orchestrate_cookbook.py`
+    └── OR5: live soak (`orchestrate_issue_to_pr_soak.py`, opt-in pytest)
+└── SRE incident responder ─────────────────────── example/example9/sre_incident_responder.py ✅
+    ├── SRE1–SRE3: skill + 3 mounts + HITL approval (`TestSreCookbook*`)
+    ├── SRE4: `tests/test_sre_cookbook.py`
+    └── SRE5: live soak (`sre_incident_responder_soak.py`, opt-in pytest)
 ```
 
 Test framework: `pytest` + `pytest-asyncio` (asyncio_mode=auto); live E2E against `:8787`.

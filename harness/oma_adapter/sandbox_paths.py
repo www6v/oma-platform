@@ -38,6 +38,18 @@ def normalize_sandbox_path(workdir: str, path: str) -> str:
         if normalised == "/mnt/session/uploads":
             return "mnt/session/uploads"
         return "mnt/session/uploads/" + normalised[len("/mnt/session/uploads/") :]
+    if normalised.startswith("/mnt/user-data/") or normalised == "/mnt/user-data":
+        if root_mount_exists("/mnt/user-data"):
+            return normalised
+        if normalised == "/mnt/user-data":
+            return "mnt/user-data"
+        return "mnt/user-data/" + normalised[len("/mnt/user-data/") :]
+    if normalised.startswith("/mnt/memory/") or normalised == "/mnt/memory":
+        if root_mount_exists("/mnt/memory"):
+            return normalised
+        if normalised == "/mnt/memory":
+            return "mnt/memory"
+        return "mnt/memory/" + normalised[len("/mnt/memory/") :]
     if normalised.startswith("/workspace/"):
         return normalised[len("/workspace/") :]
     if normalised == "/workspace":
@@ -87,6 +99,8 @@ def rewrite_bash_session_paths(command: str, cwd: str) -> str:
     markers = (
         "/mnt/session/outputs",
         "/mnt/session/uploads",
+        "/mnt/user-data",
+        "/mnt/memory",
     )
     for marker in markers:
         if marker not in command:

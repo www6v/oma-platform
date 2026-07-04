@@ -33,6 +33,7 @@ type AgentSnapshot struct {
 	Description    string          `json:"description,omitempty"`
 	Tools          json.RawMessage `json:"tools,omitempty"`
 	MCPServers     json.RawMessage `json:"mcp_servers,omitempty"`
+	Skills         json.RawMessage `json:"skills,omitempty"`
 	CallableAgents json.RawMessage `json:"callable_agents,omitempty"`
 	Metadata       json.RawMessage `json:"metadata,omitempty"`
 	Version        int             `json:"version"`
@@ -49,6 +50,7 @@ type TurnRequest struct {
 	AuxModel              *ModelConfig               `json:"aux_model,omitempty"`
 	Environment           json.RawMessage            `json:"environment,omitempty"`
 	Resources             []json.RawMessage          `json:"resources,omitempty"`
+	Skills                []json.RawMessage          `json:"skills,omitempty"`
 	Events                []json.RawMessage          `json:"events"`
 	Workdir               string                     `json:"workdir"`
 	McpProxyBase          string                     `json:"mcp_proxy_base,omitempty"`

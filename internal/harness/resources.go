@@ -15,6 +15,8 @@ type ResourceResolver struct {
 	Files        *store.FileRepo
 	FileBlobs    *fileblob.Store
 	MemoryStores *store.MemoryStoreRepo
+	Skills       *store.SkillRepo
+	SkillFiles   *store.SkillFileStore
 }
 
 // ResolveForTurn returns harness-ready resource payloads from environment
@@ -180,13 +182,21 @@ func (r *ResourceResolver) resolveMemoryStore(
 		})
 	}
 	access, _ := spec["access"].(string)
-	return map[string]any{
-		"type":        "memory_store",
-		"store_id":    storeID,
-		"store_name":  meta.Name,
-		"read_only":   access == "read_only",
-		"memories":    memories,
-	}, nil
+	readOnly := access == "read_only"
+	out := map[string]any{
+		"type":       "memory_store",
+		"store_id":   storeID,
+		"store_name": meta.Name,
+		"read_only":  readOnly,
+		"memories":   memories,
+	}
+	if meta.Description.Valid && meta.Description.String != "" {
+		out["store_description"] = meta.Description.String
+	}
+	if instructions, ok := spec["instructions"].(string); ok && instructions != "" {
+		out["instructions"] = instructions
+	}
+	return out, nil
 }
 
 func resolveEnvResource(spec map[string]any) map[string]any {

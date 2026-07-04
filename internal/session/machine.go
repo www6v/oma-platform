@@ -191,6 +191,16 @@ func (m *Machine) runSingleHarnessTurn(ctx context.Context, threadID string) err
 		}
 	}
 
+	var skills []json.RawMessage
+	if m.Resources != nil && len(agent.Skills) > 0 {
+		resolvedSkills, skillErr := m.Resources.ResolveSkillsForTurn(
+			ctx, m.TenantID, agent.Skills,
+		)
+		if skillErr == nil {
+			skills = resolvedSkills
+		}
+	}
+
 	var subAgents map[string]harness.AgentSnapshot
 	if threadID == defaultThreadID {
 		subAgents, err = harness.ResolveSubAgents(
@@ -236,6 +246,7 @@ func (m *Machine) runSingleHarnessTurn(ctx context.Context, threadID string) err
 			AuxModel:          auxCfg,
 			Environment:       envSnap,
 			Resources:         resources,
+			Skills:            skills,
 			Events:            eventPayloads,
 			Workdir:           workdirPath,
 			McpProxyBase:      m.McpProxyBase,
@@ -254,6 +265,13 @@ func (m *Machine) runSingleHarnessTurn(ctx context.Context, threadID string) err
 		); syncErr != nil {
 			_ = syncErr
 		}
+	}
+	if m.Resources != nil && m.Resources.MemoryStores != nil {
+		bindings := harness.MemoryStoreBindings(resources)
+		_ = harness.SyncMemoryStoresFromWorkdir(
+			ctx, workdirPath, m.TenantID, m.SessionID,
+			bindings, m.Resources.MemoryStores,
+		)
 	}
 	if streamErr != nil {
 		if errors.Is(streamErr, context.Canceled) {

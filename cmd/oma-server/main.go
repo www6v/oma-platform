@@ -164,6 +164,8 @@ func main() {
 		Files:        files,
 		FileBlobs:    fileBlobs,
 		MemoryStores: memoryStores,
+		Skills:       skills,
+		SkillFiles:   skillFiles,
 	}
 	wakeups := store.NewWakeupRepo(db)
 	teams := store.NewTeamRepo(db)

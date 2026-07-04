@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 AUTHENTICATED_COMMAND_GUIDANCE = (
     "For commands that may require authentication, prefer issuing a single "
     "command instead of a chained shell command. If an authenticated chained "
@@ -40,6 +42,44 @@ PLATFORM_GUIDANCE = (
     f"{SESSION_UPLOADS_GUIDANCE}\n\n"
     f"{SESSION_OUTPUTS_GUIDANCE}"
 )
+
+
+def memory_platform_reminders(
+    resources: list[dict[str, Any]] | None,
+) -> list[dict[str, str]]:
+    """Build memory store mount descriptors (AMA platformReminders parity)."""
+    if not resources:
+        return []
+    out: list[dict[str, str]] = []
+    for res in resources:
+        if res.get("type") != "memory_store":
+            continue
+        store_name = res.get("store_name") or res.get("store_id") or "memory"
+        store_id = res.get("store_id") or store_name
+        access_label = (
+            "read-only" if res.get("read_only") else "read-write"
+        )
+        lines = [
+            f"## Memory store: {store_name}",
+            f"Mounted at /mnt/memory/{store_name}/ ({access_label})",
+        ]
+        description = res.get("store_description")
+        if isinstance(description, str) and description.strip():
+            lines.append(description.strip())
+        instructions = res.get("instructions")
+        if isinstance(instructions, str) and instructions.strip():
+            lines.append(instructions.strip())
+        if res.get("read_only"):
+            lines.append(
+                "(read-only mount — write attempts to this directory will fail)",
+            )
+        out.append(
+            {
+                "source": f"memory:{store_id}",
+                "text": "\n".join(lines),
+            },
+        )
+    return out
 
 
 def compose_system_prompt(

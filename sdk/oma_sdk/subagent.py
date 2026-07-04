@@ -83,6 +83,18 @@ def count_thread_created(events: list[Any]) -> int:
     return len(events_of_type(events, "session.thread_created"))
 
 
+def count_thread_message_received(events: list[Any]) -> int:
+    """Count ``agent.thread_message_received`` (specialist → coordinator)."""
+    return len(events_of_type(events, "agent.thread_message_received"))
+
+
+# Coordinate specialist team cookbook (example5).
+COORDINATE_COMPLETE_MARKER = "coordinate-cookbook-complete-ok"
+SPECIALIST_RESEARCHER = "prospect_researcher"
+SPECIALIST_LIBRARIAN = "case_study_picker"
+SPECIALIST_PRICER = "pricing_modeler"
+
+
 def extract_event_data(event: Any) -> dict[str, Any]:
     """Normalize a stored/list event to a plain dict."""
     if isinstance(event, dict):

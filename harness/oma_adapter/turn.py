@@ -35,7 +35,11 @@ from oma_adapter.custom_tools_runtime import (
     configure_custom_tools_runtime,
 )
 from oma_adapter.emit import emit_oma_events
-from oma_adapter.platform_guidance import compose_system_prompt
+from oma_adapter.platform_guidance import (
+    compose_system_prompt,
+    memory_platform_reminders,
+)
+from oma_adapter.skill_mounter import mount_skills, skill_platform_reminders
 from oma_adapter.project import (
     PRIMARY_THREAD_ID,
     filter_events_for_thread,
@@ -256,6 +260,7 @@ async def _run_turn_core(
     aux_model: ModelConfig | None = None,
     environment: dict[str, Any] | None = None,
     resources: list[dict[str, Any]] | None = None,
+    skills: list[dict[str, Any]] | None = None,
     events: list[dict[str, Any]],
     workdir: str,
     mcp_proxy_base: str | None = None,
@@ -355,6 +360,7 @@ async def _run_turn_core(
     patch_path_utils(workdir)
     ensure_session_output_mounts(workdir)
     saved_env = mount_resources(workdir, resources)
+    mount_skills(workdir, skills)
     ensure_environment_packages(environment)
 
     outbound_host = normalize_outbound_proxy_addr(outbound_proxy_addr)
@@ -490,7 +496,11 @@ async def _run_turn_core(
                     model=session_model,
                     pi_provider=pi_provider,
                     api_key=model.api_key if model is not None else None,
-                    system_prompt=compose_system_prompt(agent.resolved_system_prompt),
+                    system_prompt=compose_system_prompt(
+                        agent.resolved_system_prompt,
+                        memory_platform_reminders(resources)
+                        + skill_platform_reminders(skills),
+                    ),
                     builtin_tools=tool_cfg.builtin_tools,
                     extension_paths=tool_cfg.extension_paths,
                     outbound_curl_home=outbound_curl_home,
@@ -678,6 +688,7 @@ async def run_turn(
     aux_model: ModelConfig | None = None,
     environment: dict[str, Any] | None = None,
     resources: list[dict[str, Any]] | None = None,
+    skills: list[dict[str, Any]] | None = None,
     events: list[dict[str, Any]],
     workdir: str,
     mcp_proxy_base: str | None = None,
@@ -699,6 +710,7 @@ async def run_turn(
         aux_model=aux_model,
         environment=environment,
         resources=resources,
+        skills=skills,
         events=events,
         workdir=workdir,
         mcp_proxy_base=mcp_proxy_base,
@@ -724,6 +736,7 @@ async def run_turn_stream(
     aux_model: ModelConfig | None = None,
     environment: dict[str, Any] | None = None,
     resources: list[dict[str, Any]] | None = None,
+    skills: list[dict[str, Any]] | None = None,
     events: list[dict[str, Any]],
     workdir: str,
     mcp_proxy_base: str | None = None,
@@ -746,6 +759,7 @@ async def run_turn_stream(
         aux_model=aux_model,
         environment=environment,
         resources=resources,
+        skills=skills,
         events=events,
         workdir=workdir,
         mcp_proxy_base=mcp_proxy_base,

@@ -66,6 +66,7 @@ class TurnRequest(BaseModel):
     aux_model: ModelConfig | None = None
     environment: dict[str, Any] | None = None
     resources: list[dict[str, Any]] = Field(default_factory=list)
+    skills: list[dict[str, Any]] = Field(default_factory=list)
     events: list[dict[str, Any]] = Field(default_factory=list)
     workdir: str
     mcp_proxy_base: str | None = None
