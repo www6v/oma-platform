@@ -141,6 +141,7 @@ func (lane *sessionLane) handleInterrupt(
 	hadActive := lane.machine.CancelActiveTurn()
 	drained := lane.drainPendingTurns()
 	if !hadActive && drained == 0 && !hadCancelledPending {
+		lane.machine.RecoverStuckRunningOnInterrupt(ctx)
 		return
 	}
 	_ = lane.machine.PublishStatusIdle(ctx)

@@ -244,6 +244,80 @@ func TestInterruptDrainsQueuedTurns(t *testing.T) {
 	}
 }
 
+func TestInterruptRecoversStuckRunningSession(t *testing.T) {
+	db, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close(db)
+
+	ctx := context.Background()
+	agents := store.NewAgentRepo(db)
+	environments := store.NewEnvironmentRepo(db)
+	if err := environments.EnsureDefault(ctx); err != nil {
+		t.Fatal(err)
+	}
+	sessions := store.NewSessionRepo(db, agents, environments)
+	events := store.NewEventRepo(db)
+
+	agent, err := agents.Create(ctx, store.CreateAgentInput{
+		Name:  "stuck-agent",
+		Model: "faux/test",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := sessions.Create(ctx, store.CreateSessionInput{AgentID: agent.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := sessions.BeginTurn(ctx, "default", sess.ID, "turn_orphan"); err != nil {
+		t.Fatal(err)
+	}
+
+	machine := &session.Machine{
+		TenantID:  "default",
+		SessionID: sess.ID,
+		Sessions:  sessions,
+		Events:    events,
+		Hub:       stream.NewHub(),
+		Workdirs:  workdir.NewManager(t.TempDir(), ""),
+		Harness:   &harness.FakeClient{},
+	}
+	reg := session.NewRegistry()
+	reg.Register(sess.ID, machine)
+
+	interruptEvent, _ := json.Marshal(map[string]any{"type": "user.interrupt"})
+	if err := reg.EnqueueEvents(
+		ctx, sess.ID, []json.RawMessage{interruptEvent}, false, true, nil,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := sessions.Get(ctx, "default", sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != store.SessionStatusIdle {
+		t.Fatalf("status=%s want idle", got.Status)
+	}
+
+	list, err := events.ListEvents(ctx, sess.ID, 0, 100, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var hasIdle bool
+	for _, ev := range list {
+		if ev.Type == "session.status_idle" {
+			hasIdle = true
+		}
+	}
+	if !hasIdle {
+		t.Fatal("expected session.status_idle for stuck-running interrupt")
+	}
+}
+
 func TestNoOpInterruptDoesNotEmitIdle(t *testing.T) {
 	db, err := store.Open(":memory:")
 	if err != nil {

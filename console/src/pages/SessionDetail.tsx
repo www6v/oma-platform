@@ -948,6 +948,11 @@ export function SessionDetail() {
           }],
         }),
       });
+      // Optimistic idle — covers stuck-Running where user.interrupt is
+      // appended but no status_idle was emitted before the server fix.
+      setStatus("idle");
+      setPendingByEventId(new Map());
+      toast.success("Session stopped");
     } catch (e) {
       console.error("interrupt failed", e);
     }

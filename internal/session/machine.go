@@ -316,6 +316,34 @@ func (m *Machine) PublishStatusIdle(ctx context.Context) error {
 	return m.publishStatusIdle(ctx, nil)
 }
 
+// RecoverStuckRunningOnInterrupt force-idles a session whose DB row is still
+// "running" but has no in-memory turn (orphan after crash, harness error
+// without status_idle, server restart, etc.). Mirrors open-managed-agents
+// SessionDO _checkOrphanTurns / minimal-orphan recovery.
+func (m *Machine) RecoverStuckRunningOnInterrupt(ctx context.Context) bool {
+	if m.Sessions == nil {
+		return false
+	}
+	sess, err := m.Sessions.Get(ctx, m.TenantID, m.SessionID)
+	if err != nil || sess == nil {
+		return false
+	}
+	if sess.Status != store.SessionStatusRunning {
+		return false
+	}
+	turnID := ""
+	if sess.TurnID != nil {
+		turnID = *sess.TurnID
+	}
+	if err := m.Sessions.EndTurn(ctx, m.TenantID, m.SessionID, turnID); err != nil {
+		return false
+	}
+	if err := m.PublishStatusIdle(ctx); err != nil {
+		return false
+	}
+	return true
+}
+
 func (m *Machine) publishStatusIdle(
 	ctx context.Context,
 	turnEvents []json.RawMessage,
