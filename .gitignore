@@ -7,6 +7,7 @@ __pycache__/
 .pytest_cache/
 .DS_Store
 .gstack/
+.go-build-cache/
 auth-sidecar/node_modules/
 scripts/node_modules/
 console/node_modules/
