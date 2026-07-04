@@ -9,6 +9,7 @@ import (
 	"github.com/open-ma/oma-building/internal/dream"
 	"github.com/open-ma/oma-building/internal/fileblob"
 	"github.com/open-ma/oma-building/internal/harness"
+	"github.com/open-ma/oma-building/internal/harness/demo"
 	"github.com/open-ma/oma-building/internal/integrationtest"
 	"github.com/open-ma/oma-building/internal/modelresolve"
 	"github.com/open-ma/oma-building/internal/oauthflow"
@@ -23,7 +24,7 @@ import (
 // TestDataAnalystCookbookCriticalPath is the Go-server parity probe for
 // cookbook steps 3–6 (files upload through files.list/download).
 func TestDataAnalystCookbookCriticalPath(t *testing.T) {
-	sim := &harness.DataAnalystSimulatingClient{ReportMinBytes: 11 * 1024}
+	sim := &demo.DataAnalystSimulatingClient{ReportMinBytes: 11 * 1024}
 	handler := newCookbookRouter(t, sim)
 	integrationtest.RunDataAnalystCookbookFlow(
 		t, handler, sim, integrationtest.SalesDataCSV,

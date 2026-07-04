@@ -34,8 +34,9 @@ type Machine struct {
 	Pending     *store.PendingRepo
 	Hub         Broadcaster
 	Workdirs    *workdir.Manager
-	Harness      harness.Client
-	Models       *modelresolve.Resolver
+	Harness          harness.Client
+	OutcomeEvaluator harness.OutcomeEvaluator
+	Models           *modelresolve.Resolver
 	Resources    *harness.ResourceResolver
 	McpProxyBase        string
 	McpProxyAPIKey      string
@@ -71,6 +72,7 @@ func (m *Machine) syncDeps(src *Machine) {
 	m.Hub = src.Hub
 	m.Workdirs = src.Workdirs
 	m.Harness = src.Harness
+	m.OutcomeEvaluator = src.OutcomeEvaluator
 	m.Models = src.Models
 	m.Resources = src.Resources
 	m.McpProxyBase = src.McpProxyBase
@@ -114,6 +116,21 @@ func (m *Machine) RunTurn(ctx context.Context, threadID string) error {
 		m.clearCancelTurn()
 		m.activeTurnM.Unlock()
 	}()
+
+	if err := m.runSingleHarnessTurn(turnCtx, threadID); err != nil {
+		return err
+	}
+	if err := m.maybeRunOutcomeSupervisor(turnCtx, threadID); err != nil {
+		return err
+	}
+	return m.publishStatusIdle(ctx, nil)
+}
+
+func (m *Machine) runSingleHarnessTurn(ctx context.Context, threadID string) error {
+	if threadID == "" {
+		threadID = defaultThreadID
+	}
+	turnID := randomTurnID()
 
 	if err := m.Sessions.BeginTurn(ctx, m.TenantID, m.SessionID, turnID); err != nil {
 		return err
@@ -207,27 +224,27 @@ func (m *Machine) RunTurn(ctx context.Context, threadID string) error {
 	})
 
 	streamErr := harness.RunTurnStreaming(
-		turnCtx,
+		ctx,
 		m.Harness,
 		harness.TurnRequest{
 			SessionID:           m.SessionID,
-			SessionThreadID:       threadID,
-			TenantID:            m.TenantID,
-			Agent:               agent,
-			SubAgents:           subAgents,
-			Model:               modelCfg,
-			AuxModel:            auxCfg,
-			Environment:         envSnap,
-			Resources:           resources,
-			Events:              eventPayloads,
-			Workdir:             workdirPath,
-			McpProxyBase:        m.McpProxyBase,
-			McpProxyAPIKey:      m.McpProxyAPIKey,
-			PlatformBase:        m.PlatformBase,
-			InternalSecret:      m.InternalSecret,
-			OutboundProxyAddr:   m.OutboundProxyAddr,
+			SessionThreadID:   threadID,
+			TenantID:          m.TenantID,
+			Agent:             agent,
+			SubAgents:         subAgents,
+			Model:             modelCfg,
+			AuxModel:          auxCfg,
+			Environment:       envSnap,
+			Resources:         resources,
+			Events:            eventPayloads,
+			Workdir:           workdirPath,
+			McpProxyBase:      m.McpProxyBase,
+			McpProxyAPIKey:    m.McpProxyAPIKey,
+			PlatformBase:      m.PlatformBase,
+			InternalSecret:    m.InternalSecret,
+			OutboundProxyAddr: m.OutboundProxyAddr,
 			OutboundProxyAPIKey: m.OutboundProxyAPIKey,
-			DatabasePath:        m.DatabasePath,
+			DatabasePath:      m.DatabasePath,
 		},
 		onEvent,
 	)
@@ -235,7 +252,6 @@ func (m *Machine) RunTurn(ctx context.Context, threadID string) error {
 		if syncErr := m.Workdirs.SyncSessionOutputs(
 			workdirPath, m.TenantID, m.SessionID,
 		); syncErr != nil {
-			// Best-effort: output sync must not fail the turn.
 			_ = syncErr
 		}
 	}
@@ -257,7 +273,8 @@ func (m *Machine) RunTurn(ctx context.Context, threadID string) error {
 	if err := m.publishEvents(ctx, []json.RawMessage{lifecycleEnd}); err != nil {
 		return err
 	}
-	return m.publishStatusIdle(ctx, *turnEvents)
+	_ = turnEvents
+	return nil
 }
 
 // turnEventCollector tracks events emitted during a harness stream.
@@ -299,6 +316,9 @@ func (m *Machine) publishStatusIdle(
 	stopReason := harness.BuildIdleStopReason(
 		harness.PendingCustomToolIDs(eventPayloads),
 	)
+	if err := m.syncPendingToolCallsMetadata(ctx, eventPayloads, stopReason); err != nil {
+		return err
+	}
 	idleEvent, err := json.Marshal(map[string]any{
 		"type":        "session.status_idle",
 		"stop_reason": stopReason,

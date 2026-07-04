@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/open-ma/oma-building/internal/harness"
+	"github.com/open-ma/oma-building/internal/harness/demo"
 )
 
 const (
@@ -28,7 +29,7 @@ var GateReceiptsFixture []byte
 func RunGateCookbookHitlFlow(
 	t *testing.T,
 	handler http.Handler,
-	sim *harness.GateSimulatingClient,
+	sim *demo.GateSimulatingClient,
 ) {
 	t.Helper()
 	server := httptest.NewServer(handler)
@@ -55,7 +56,7 @@ func RunGateCookbookHitlFlow(
 		"Process receipts r01 and r02 using decide or escalate once each.",
 	)
 	waitForEventMarker(
-		t, client, eventsURL, harness.GateHitlTurn1Marker, 5*time.Second,
+		t, client, eventsURL, demo.GateHitlTurn1Marker, 5*time.Second,
 	)
 	waitForSessionIdle(t, client, sessionURL, 5*time.Second)
 
@@ -82,8 +83,8 @@ func RunGateCookbookHitlFlow(
 		t.Fatalf("event_ids=%v want 2 pending custom tools", ids)
 	}
 	want := map[string]struct{}{
-		harness.GateCustomToolDecideID:   {},
-		harness.GateCustomToolEscalateID: {},
+		demo.GateCustomToolDecideID:   {},
+		demo.GateCustomToolEscalateID: {},
 	}
 	for _, id := range ids {
 		if _, ok := want[id]; !ok {
@@ -109,7 +110,7 @@ func RunGateCookbookHitlFlow(
 func RunGateCookbookHitlResumeFlow(
 	t *testing.T,
 	handler http.Handler,
-	sim *harness.GateSimulatingClient,
+	sim *demo.GateSimulatingClient,
 ) {
 	t.Helper()
 	server := httptest.NewServer(handler)
@@ -136,7 +137,7 @@ func RunGateCookbookHitlResumeFlow(
 		"Process receipts r01 and r02 using decide or escalate once each.",
 	)
 	waitForEventMarker(
-		t, client, eventsURL, harness.GateHitlTurn1Marker, 5*time.Second,
+		t, client, eventsURL, demo.GateHitlTurn1Marker, 5*time.Second,
 	)
 	waitForSessionIdle(t, client, sessionURL, 5*time.Second)
 
@@ -146,12 +147,12 @@ func RunGateCookbookHitlResumeFlow(
 
 	postGateCustomToolResult(
 		t, client, eventsURL,
-		harness.GateCustomToolDecideID,
+		demo.GateCustomToolDecideID,
 		`{"action":"approve","receipt_id":"r01"}`,
 	)
-	assertPromotedToolResult(t, client, eventsURL, harness.GateCustomToolDecideID)
+	assertPromotedToolResult(t, client, eventsURL, demo.GateCustomToolDecideID)
 	waitForEventMarker(
-		t, client, eventsURL, harness.GateHitlResumeMarker, 5*time.Second,
+		t, client, eventsURL, demo.GateHitlResumeMarker, 5*time.Second,
 	)
 	waitForSessionIdle(t, client, sessionURL, 5*time.Second)
 
@@ -166,12 +167,12 @@ func RunGateCookbookHitlResumeFlow(
 
 	postGateCustomToolResult(
 		t, client, eventsURL,
-		harness.GateCustomToolEscalateID,
+		demo.GateCustomToolEscalateID,
 		`{"question":"category unclear","receipt_id":"r02"}`,
 	)
-	assertPromotedToolResult(t, client, eventsURL, harness.GateCustomToolEscalateID)
+	assertPromotedToolResult(t, client, eventsURL, demo.GateCustomToolEscalateID)
 	waitForEventMarker(
-		t, client, eventsURL, harness.GateHitlCompleteMarker, 5*time.Second,
+		t, client, eventsURL, demo.GateHitlCompleteMarker, 5*time.Second,
 	)
 	waitForEndTurnIdle(t, client, eventsURL, sessionURL, 5*time.Second)
 
@@ -186,7 +187,7 @@ func RunGateCookbookHitlResumeFlow(
 func RunGateCookbookHitlSlidingWindowFlow(
 	t *testing.T,
 	handler http.Handler,
-	sim *harness.GateSimulatingClient,
+	sim *demo.GateSimulatingClient,
 ) {
 	t.Helper()
 	sim.Turn1PendingCount = 6
@@ -212,7 +213,7 @@ func RunGateCookbookHitlSlidingWindowFlow(
 
 	postGateMessage(t, client, eventsURL, "Process six receipts.")
 	waitForEventMarker(
-		t, client, eventsURL, harness.GateHitlTurn1Marker, 5*time.Second,
+		t, client, eventsURL, demo.GateHitlTurn1Marker, 5*time.Second,
 	)
 	waitForSessionIdle(t, client, sessionURL, 5*time.Second)
 
@@ -244,7 +245,7 @@ func RunGateCookbookHitlSlidingWindowFlow(
 func RunGateDuplicateCustomToolResultFlow(
 	t *testing.T,
 	handler http.Handler,
-	sim *harness.GateSimulatingClient,
+	sim *demo.GateSimulatingClient,
 ) {
 	t.Helper()
 	server := httptest.NewServer(handler)
@@ -271,26 +272,26 @@ func RunGateDuplicateCustomToolResultFlow(
 		"Process receipts r01 and r02 using decide or escalate once each.",
 	)
 	waitForEventMarker(
-		t, client, eventsURL, harness.GateHitlTurn1Marker, 5*time.Second,
+		t, client, eventsURL, demo.GateHitlTurn1Marker, 5*time.Second,
 	)
 	waitForSessionIdle(t, client, sessionURL, 5*time.Second)
 
 	resultBody := `{"action":"approve","receipt_id":"r01"}`
 	postGateCustomToolResult(
-		t, client, eventsURL, harness.GateCustomToolDecideID, resultBody,
+		t, client, eventsURL, demo.GateCustomToolDecideID, resultBody,
 	)
 	postGateCustomToolResultExpect(
-		t, client, eventsURL, harness.GateCustomToolDecideID, resultBody,
+		t, client, eventsURL, demo.GateCustomToolDecideID, resultBody,
 		http.StatusAccepted,
 	)
 	waitForSessionIdle(t, client, sessionURL, 5*time.Second)
 
 	postGateCustomToolResult(
-		t, client, eventsURL, harness.GateCustomToolEscalateID,
+		t, client, eventsURL, demo.GateCustomToolEscalateID,
 		`{"question":"category unclear","receipt_id":"r02"}`,
 	)
 	waitForEventMarker(
-		t, client, eventsURL, harness.GateHitlCompleteMarker, 5*time.Second,
+		t, client, eventsURL, demo.GateHitlCompleteMarker, 5*time.Second,
 	)
 	waitForEndTurnIdle(t, client, eventsURL, sessionURL, 5*time.Second)
 
@@ -301,12 +302,12 @@ func RunGateDuplicateCustomToolResultFlow(
 		t.Fatalf("user.custom_tool_result count=%d want >=3 (duplicate allowed)", userResults)
 	}
 	toolResults := countToolResultsForID(
-		t, client, eventsURL, harness.GateCustomToolDecideID,
+		t, client, eventsURL, demo.GateCustomToolDecideID,
 	)
 	if toolResults < 2 {
 		t.Fatalf(
 			"agent.tool_result for %q count=%d want >=2 after duplicate reply",
-			harness.GateCustomToolDecideID,
+			demo.GateCustomToolDecideID,
 			toolResults,
 		)
 	}
@@ -317,7 +318,7 @@ func RunGateDuplicateCustomToolResultFlow(
 func RunGateCustomToolResultIsErrorFlow(
 	t *testing.T,
 	handler http.Handler,
-	sim *harness.GateSimulatingClient,
+	sim *demo.GateSimulatingClient,
 ) {
 	t.Helper()
 	server := httptest.NewServer(handler)
@@ -344,15 +345,15 @@ func RunGateCustomToolResultIsErrorFlow(
 		"Process receipts r01 and r02 using decide or escalate once each.",
 	)
 	waitForEventMarker(
-		t, client, eventsURL, harness.GateHitlTurn1Marker, 5*time.Second,
+		t, client, eventsURL, demo.GateHitlTurn1Marker, 5*time.Second,
 	)
 	waitForSessionIdle(t, client, sessionURL, 5*time.Second)
 
 	postGateCustomToolResultIsError(
-		t, client, eventsURL, harness.GateCustomToolDecideID, "reviewer rejected",
+		t, client, eventsURL, demo.GateCustomToolDecideID, "reviewer rejected",
 	)
 	assertPromotedToolResultIsError(
-		t, client, eventsURL, harness.GateCustomToolDecideID,
+		t, client, eventsURL, demo.GateCustomToolDecideID,
 	)
 	_ = sim
 }

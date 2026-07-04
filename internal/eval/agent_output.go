@@ -25,6 +25,25 @@ func AgentOutputFromEvents(events []json.RawMessage) string {
 	return strings.TrimSpace(strings.Join(parts, "\n\n"))
 }
 
+// LastAgentOutputFromEvents returns text from the most recent agent.message.
+func LastAgentOutputFromEvents(events []json.RawMessage) string {
+	for i := len(events) - 1; i >= 0; i-- {
+		var ev map[string]any
+		if err := json.Unmarshal(events[i], &ev); err != nil {
+			continue
+		}
+		evType, _ := ev["type"].(string)
+		if evType != "agent.message" {
+			continue
+		}
+		text := textFromContent(ev["content"])
+		if text != "" {
+			return strings.TrimSpace(text)
+		}
+	}
+	return ""
+}
+
 func textFromContent(raw any) string {
 	switch blocks := raw.(type) {
 	case []any:

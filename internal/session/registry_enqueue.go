@@ -65,6 +65,27 @@ func (r *Registry) EnqueueEvents(
 	}
 
 	if len(directEvents) > 0 {
+		prepared := make([]json.RawMessage, 0, len(directEvents))
+		for _, ev := range directEvents {
+			var meta struct {
+				Type string `json:"type"`
+			}
+			if err := json.Unmarshal(ev, &meta); err != nil {
+				return err
+			}
+			if meta.Type == "user.define_outcome" {
+				echoed, err := PrepareDefineOutcome(ev)
+				if err != nil {
+					return err
+				}
+				if err := lane.machine.ActivateOutcomeFromEvent(ctx, echoed); err != nil {
+					return err
+				}
+				ev = echoed
+			}
+			prepared = append(prepared, ev)
+		}
+		directEvents = prepared
 		lane.appendMu.Lock()
 		stored, err := lane.machine.Events.AppendEvents(
 			ctx, sessionID, directEvents,

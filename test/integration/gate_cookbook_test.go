@@ -9,6 +9,7 @@ import (
 	"github.com/open-ma/oma-building/internal/dream"
 	"github.com/open-ma/oma-building/internal/fileblob"
 	"github.com/open-ma/oma-building/internal/harness"
+	"github.com/open-ma/oma-building/internal/harness/demo"
 	"github.com/open-ma/oma-building/internal/integrationtest"
 	"github.com/open-ma/oma-building/internal/modelresolve"
 	"github.com/open-ma/oma-building/internal/oauthflow"
@@ -23,7 +24,7 @@ import (
 // TestGateCookbookRequiresAction is the Go-server parity probe for gate HITL
 // GT2/GT3: custom_tool_use without tool_result → requires_action idle.
 func TestGateCookbookRequiresAction(t *testing.T) {
-	sim := &harness.GateSimulatingClient{}
+	sim := &demo.GateSimulatingClient{}
 	handler := newGateCookbookRouter(t, sim)
 	integrationtest.RunGateCookbookHitlFlow(t, handler, sim)
 }
@@ -31,25 +32,25 @@ func TestGateCookbookRequiresAction(t *testing.T) {
 // TestGateCookbookHitlResume covers Phase D: custom_tool_result promote,
 // synthesized agent.tool_result, resume turns, and final end_turn.
 func TestGateCookbookHitlResume(t *testing.T) {
-	sim := &harness.GateSimulatingClient{}
+	sim := &demo.GateSimulatingClient{}
 	handler := newGateCookbookRouter(t, sim)
 	integrationtest.RunGateCookbookHitlResumeFlow(t, handler, sim)
 }
 
 func TestGateCookbookSlidingWindow(t *testing.T) {
-	sim := &harness.GateSimulatingClient{}
+	sim := &demo.GateSimulatingClient{}
 	handler := newGateCookbookRouter(t, sim)
 	integrationtest.RunGateCookbookHitlSlidingWindowFlow(t, handler, sim)
 }
 
 func TestGateCookbookDuplicateCustomToolResult(t *testing.T) {
-	sim := &harness.GateSimulatingClient{}
+	sim := &demo.GateSimulatingClient{}
 	handler := newGateCookbookRouter(t, sim)
 	integrationtest.RunGateDuplicateCustomToolResultFlow(t, handler, sim)
 }
 
 func TestGateCookbookCustomToolResultIsError(t *testing.T) {
-	sim := &harness.GateSimulatingClient{}
+	sim := &demo.GateSimulatingClient{}
 	handler := newGateCookbookRouter(t, sim)
 	integrationtest.RunGateCustomToolResultIsErrorFlow(t, handler, sim)
 }

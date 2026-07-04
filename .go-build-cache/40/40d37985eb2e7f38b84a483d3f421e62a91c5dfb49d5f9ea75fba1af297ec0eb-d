@@ -1,0 +1,7 @@
+./dispatch.go
+./handler.go
+./install.go
+./manifest.go
+./oauth.go
+./signature.go
+./webhook_parse.go

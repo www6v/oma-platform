@@ -401,6 +401,13 @@ func (r *RecordingClient) RunTurnStream(
 	return r.FakeClient.RunTurnStream(ctx, req, onEvent)
 }
 
+// RecordRequest appends a turn request to the internal recording buffer.
+func (r *RecordingClient) RecordRequest(req TurnRequest) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.requests = append(r.requests, req)
+}
+
 // LastRequest returns the most recent turn request, if any.
 func (r *RecordingClient) LastRequest() (TurnRequest, bool) {
 	r.mu.Lock()

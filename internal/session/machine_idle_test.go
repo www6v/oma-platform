@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/open-ma/oma-building/internal/harness"
+	"github.com/open-ma/oma-building/internal/harness/demo"
 	"github.com/open-ma/oma-building/internal/session"
 	"github.com/open-ma/oma-building/internal/store"
 	"github.com/open-ma/oma-building/internal/stream"
@@ -35,7 +36,7 @@ func (g *gateHitlHarness) RunTurnStream(
 	stream := []map[string]any{
 		{
 			"type": "agent.custom_tool_use",
-			"id":   harness.GateCustomToolDecideID,
+			"id":   demo.GateCustomToolDecideID,
 			"name": "decide",
 			"input": map[string]any{
 				"receipt_id": "r01",
@@ -44,7 +45,7 @@ func (g *gateHitlHarness) RunTurnStream(
 		},
 		{
 			"type": "agent.custom_tool_use",
-			"id":   harness.GateCustomToolEscalateID,
+			"id":   demo.GateCustomToolEscalateID,
 			"name": "escalate",
 			"input": map[string]any{
 				"receipt_id": "r02",
@@ -161,6 +162,19 @@ func TestRunTurnIdleRequiresActionWhenCustomToolsPending(t *testing.T) {
 	rawIDs, ok := stopReason["event_ids"].([]any)
 	if !ok || len(rawIDs) != 2 {
 		t.Fatalf("event_ids=%v want 2 ids", stopReason["event_ids"])
+	}
+
+	updated, err := sessions.Get(ctx, "default", sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var meta map[string]any
+	if err := json.Unmarshal(updated.Metadata, &meta); err != nil {
+		t.Fatal(err)
+	}
+	calls, ok := meta["pending_tool_calls"].([]any)
+	if !ok || len(calls) != 2 {
+		t.Fatalf("metadata.pending_tool_calls=%v want 2 entries", meta["pending_tool_calls"])
 	}
 }
 

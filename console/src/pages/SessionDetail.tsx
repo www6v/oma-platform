@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { useParams, Link, useSearchParams } from "react-router";
 import { useApi } from "../lib/api";
 import { toast } from "sonner";
@@ -9,6 +9,14 @@ import { Modal } from "../components/Modal";
 import { Button } from "@/components/ui/button";
 import { AgentIcon, ClockIcon, DurationIcon, EnvIcon, VaultIcon } from "../components/icons";
 import { FilesPanel, ResourcePanel } from "./session-detail/Panels";
+import { HitlActionPanel } from "./session-detail/HitlActionPanel";
+import {
+  isHitlActive,
+  latestIdleStopReason,
+  parseStopReason,
+  resolveHitlPendingItems,
+  type PendingToolCallWire,
+} from "./session-detail/hitl";
 import {
   TeamPanel,
   type TeamMessageRow,
@@ -129,6 +137,8 @@ export function SessionDetail() {
     publicationId?: string;
   } | null>(null);
   const [status, setStatus] = useState("idle");
+  const [pendingToolCalls, setPendingToolCalls] = useState<PendingToolCallWire[]>([]);
+  const [hitlSubmittingId, setHitlSubmittingId] = useState<string | null>(null);
   /** Lazy-fetched Trajectory v1 envelope. Drives the outcome + reward
    *  chips in the header strip and the Trajectory viewer modal. We don't
    *  block initial render on this — chips render as `—` until it lands.
@@ -188,6 +198,32 @@ export function SessionDetail() {
   const eventKey = (e: Event) =>
     (e as { id?: string }).id
     ?? `${e.type}:${JSON.stringify(e.content || e.tool_use_id || e.error || "").slice(0, 120)}`;
+
+  const refreshPendingToolCalls = (sessionId: string) => {
+    void api<{
+      pending_tool_calls?: PendingToolCallWire[];
+      metadata?: { pending_tool_calls?: PendingToolCallWire[] };
+    }>(`/v1/sessions/${sessionId}`)
+      .then((s) => {
+        const calls = s.pending_tool_calls
+          ?? s.metadata?.pending_tool_calls
+          ?? [];
+        setPendingToolCalls(calls);
+      })
+      .catch(() => {});
+  };
+
+  const idleStopReason = useMemo(
+    () => latestIdleStopReason(events),
+    [events],
+  );
+  const hitlActive = isHitlActive(status, idleStopReason);
+  const hitlItems = useMemo(() => {
+    if (!idleStopReason || !hitlActive) {
+      return [];
+    }
+    return resolveHitlPendingItems(events, idleStopReason, pendingToolCalls);
+  }, [events, hitlActive, idleStopReason, pendingToolCalls]);
 
   const addEvent = (e: Record<string, unknown>) => {
     const ev = e as Event;
@@ -327,7 +363,18 @@ export function SessionDetail() {
     seenKeys.current.add(key);
 
     if (ev.type === "session.status_running") setStatus("running");
-    if (ev.type === "session.status_idle") setStatus("idle");
+    if (ev.type === "session.status_idle") {
+      setStatus("idle");
+      const stopReason = parseStopReason(
+        (ev as { stop_reason?: unknown }).stop_reason
+        ?? (ev.data as { stop_reason?: unknown } | undefined)?.stop_reason,
+      );
+      if (stopReason?.type === "requires_action" && id) {
+        refreshPendingToolCalls(id);
+      } else {
+        setPendingToolCalls([]);
+      }
+    }
     // session.error → idle: defense-in-depth for the catch-all status_idle
     // emit (processUserMessage finally) in case a future code path forgets
     // to pair status_running with status_idle. Note: do NOT also map
@@ -591,6 +638,8 @@ export function SessionDetail() {
     setAgentId("");
     setSessionMeta({});
     setStatus("idle");
+    setPendingToolCalls([]);
+    setHitlSubmittingId(null);
     setTrajectory(undefined);
     setThreads([]);
     setActiveThreadId("sthr_primary");
@@ -606,9 +655,15 @@ export function SessionDetail() {
       created_at?: string | number;
       agent?: { id?: string; name?: string; model?: string | { id: string }; description?: string; version?: number };
       metadata?: Record<string, unknown>;
+      pending_tool_calls?: PendingToolCallWire[];
     }>(`/v1/sessions/${id}`)
       .then((s) => {
         setAgentId(s.agent?.id || "");
+        setPendingToolCalls(
+          s.pending_tool_calls
+          ?? (s.metadata?.pending_tool_calls as PendingToolCallWire[] | undefined)
+          ?? [],
+        );
         setSessionMeta({
           environmentId: s.environment_id,
           vaultIds: s.vault_ids,
@@ -897,6 +952,58 @@ export function SessionDetail() {
       console.error("interrupt failed", e);
     }
     setInterrupting(false);
+  };
+
+  const submitCustomToolResult = async (
+    toolCallId: string,
+    text: string,
+    isError: boolean,
+  ) => {
+    if (!id) return;
+    setHitlSubmittingId(toolCallId);
+    try {
+      await api(`/v1/sessions/${id}/events`, {
+        method: "POST",
+        body: JSON.stringify({
+          events: [{
+            type: "user.custom_tool_result",
+            custom_tool_use_id: toolCallId,
+            ...(isError ? { is_error: true } : {}),
+            content: [{ type: "text", text }],
+          }],
+        }),
+      });
+    } catch {
+      // api() already toasted
+    }
+    setHitlSubmittingId(null);
+  };
+
+  const submitToolConfirmation = async (
+    toolCallId: string,
+    result: "allow" | "deny",
+    denyMessage?: string,
+  ) => {
+    if (!id) return;
+    setHitlSubmittingId(toolCallId);
+    try {
+      await api(`/v1/sessions/${id}/events`, {
+        method: "POST",
+        body: JSON.stringify({
+          events: [{
+            type: "user.tool_confirmation",
+            tool_use_id: toolCallId,
+            result,
+            ...(result === "deny" && denyMessage
+              ? { deny_message: denyMessage }
+              : {}),
+          }],
+        }),
+      });
+    } catch {
+      // api() already toasted
+    }
+    setHitlSubmittingId(null);
   };
 
   return (
@@ -1360,6 +1467,15 @@ export function SessionDetail() {
               line, no top padding, just `pb-4` for breathing room
               below. */}
           <div className="pl-3 pr-4 pb-4 bg-bg shrink-0">
+            {hitlActive && idleStopReason?.action_type && hitlItems.length > 0 && (
+              <HitlActionPanel
+                actionType={idleStopReason.action_type}
+                items={hitlItems}
+                submittingId={hitlSubmittingId}
+                onSubmitCustomResult={submitCustomToolResult}
+                onSubmitToolConfirmation={submitToolConfirmation}
+              />
+            )}
             <PromptInput
               accept="image/*"
               multiple
@@ -1368,6 +1484,10 @@ export function SessionDetail() {
               onError={(err) => toast.error(err.message)}
               globalDrop
               onSubmit={async ({ text, files }) => {
+                if (hitlActive) {
+                  toast.error("Reply to pending tool calls before sending a message.");
+                  return;
+                }
                 // PromptInput captured the textarea's value into `text`
                 // and the picked/dropped files into `files`, then
                 // form.reset() before this handler runs. send() owns
@@ -1380,8 +1500,12 @@ export function SessionDetail() {
               }}
             >
               <PromptInputTextarea
-                placeholder="Send a message…  (drag an image in or click ＋)"
-                disabled={sending}
+                placeholder={
+                  hitlActive
+                    ? "Reply to pending tool calls above to continue…"
+                    : "Send a message…  (drag an image in or click ＋)"
+                }
+                disabled={sending || hitlActive}
                 onChange={(e) => setInput(e.currentTarget.value)}
               />
               <PromptInputFooter>
@@ -1390,7 +1514,7 @@ export function SessionDetail() {
                 </PromptInputTools>
                 <PromptInputSubmit
                   status={sending ? "submitted" : undefined}
-                  disabled={sending}
+                  disabled={sending || hitlActive}
                 />
               </PromptInputFooter>
             </PromptInput>

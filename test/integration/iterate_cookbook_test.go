@@ -9,6 +9,7 @@ import (
 	"github.com/open-ma/oma-building/internal/dream"
 	"github.com/open-ma/oma-building/internal/fileblob"
 	"github.com/open-ma/oma-building/internal/harness"
+	"github.com/open-ma/oma-building/internal/harness/demo"
 	"github.com/open-ma/oma-building/internal/integrationtest"
 	"github.com/open-ma/oma-building/internal/modelresolve"
 	"github.com/open-ma/oma-building/internal/oauthflow"
@@ -23,7 +24,7 @@ import (
 // TestIterateCookbookMultiTurn is the Go-server parity probe for iterate
 // cookbook MT1: two user.message turns on one session (fix + verify).
 func TestIterateCookbookMultiTurn(t *testing.T) {
-	sim := &harness.IterateSimulatingClient{}
+	sim := &demo.IterateSimulatingClient{}
 	handler := newIterateCookbookRouter(t, sim)
 	integrationtest.RunIterateCookbookFlow(t, handler, sim)
 }

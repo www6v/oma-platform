@@ -133,10 +133,11 @@ PublishStatusIdle(ctx, stopReason StopReason)
 
 ### B2. 会话状态（可选）
 
-**改：** `internal/store/sessions.go`
+**改：** `internal/store/sessions.go` + `internal/session/pending_tool_metadata.go`
 
-- 存 `pending_tool_calls` JSON（参考 `session-do.ts:4580-4607`）
-- 或仅依赖 event log + 每 turn 重算
+- ✅ 存 `pending_tool_calls` JSON（参考 `session-do.ts:4580-4607`）
+- `PublishStatusIdle` 时同步 metadata；`GET /v1/sessions/{id}` 暴露顶层 `pending_tool_calls`
+- 仍依赖 event log 重算 stop_reason；metadata 供 Console/SDK 快速渲染 HITL 表单
 
 ### B3. 测试
 
@@ -266,6 +267,15 @@ oma 若 `project_oma_events` 在仅有 tool_result、无新 user.message 时仍�
 | 重复 `custom_tool_result` 不 400 | ✅ pending 队列照常 promote | `TestGateCookbookDuplicateCustomToolResult` |
 | `is_error` promote | ✅ 合成 `agent.tool_result.is_error` | `TestAppendEventsForPendingPromoteIsError`, `TestGateCookbookCustomToolResultIsError` |
 | Console timeline 配对 | ✅ `custom_tool_use_id` 索引 + 合成 result 回退 | `console/.../derive.test.ts` |
+
+---
+
+## Phase G — P2 体验 / 产品化（2026-07-03）
+
+| 项 | 状态 | 验证 |
+|---|---|---|
+| B2 `pending_tool_calls` metadata | ✅ turn idle 时写入 session metadata + `GET /v1/sessions/{id}` 顶层字段 | `TestBuildPendingToolCalls*`, `TestRunTurnIdleRequiresActionWhenCustomToolsPending` |
+| Console HITL UI | ✅ `HitlActionPanel` 提交 `user.custom_tool_result` / `user.tool_confirmation` | `console/.../hitl.test.ts` |
 
 ---
 

@@ -107,8 +107,9 @@ func formatAPISession(s *store.Session) map[string]any {
 		"created_at":      formatISO(s.CreatedAt),
 		"vault_ids":       []any{},
 		"metadata":        metadata,
+		"pending_tool_calls": pendingToolCallsFromMetadata(metadata),
 		"resources":       resources,
-		"outcome_evaluations": []any{},
+		"outcome_evaluations": outcomeEvaluationsFromMetadata(metadata),
 		"usage":           map[string]any{},
 		"stats":           map[string]any{},
 	}
@@ -119,4 +120,30 @@ func formatAPISession(s *store.Session) map[string]any {
 		out["archived_at"] = formatISO(*s.ArchivedAt)
 	}
 	return out
+}
+
+func pendingToolCallsFromMetadata(metadata map[string]any) []any {
+	raw, ok := metadata["pending_tool_calls"]
+	if !ok || raw == nil {
+		return []any{}
+	}
+	switch items := raw.(type) {
+	case []any:
+		return items
+	default:
+		return []any{}
+	}
+}
+
+func outcomeEvaluationsFromMetadata(metadata map[string]any) []any {
+	raw, ok := metadata["outcome_evaluations"]
+	if !ok || raw == nil {
+		return []any{}
+	}
+	switch items := raw.(type) {
+	case []any:
+		return items
+	default:
+		return []any{}
+	}
 }

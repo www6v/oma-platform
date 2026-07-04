@@ -11,12 +11,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/open-ma/oma-building/internal/harness"
+	"github.com/open-ma/oma-building/internal/harness/demo"
 )
 
 const (
 	cookbookMountPath  = "/mnt/session/uploads/sales_data.csv"
-	cookbookReportName = harness.DataAnalystReportFilename
+	cookbookReportName = demo.DataAnalystReportFilename
 )
 
 //go:embed testdata/sales_data.csv
@@ -26,7 +26,7 @@ var SalesDataCSV []byte
 func RunDataAnalystCookbookFlow(
 	t *testing.T,
 	handler http.Handler,
-	sim *harness.DataAnalystSimulatingClient,
+	sim *demo.DataAnalystSimulatingClient,
 	csvContent []byte,
 ) {
 	t.Helper()
@@ -230,14 +230,14 @@ func waitForCookbookReply(
 			}
 			for _, block := range meta.Content {
 				if block.Type == "text" &&
-					bytes.Contains([]byte(block.Text), []byte(harness.DataAnalystReportMarker)) {
+					bytes.Contains([]byte(block.Text), []byte(demo.DataAnalystReportMarker)) {
 					return
 				}
 			}
 		}
 		time.Sleep(25 * time.Millisecond)
 	}
-	t.Fatalf("timeout waiting for %q reply", harness.DataAnalystReportMarker)
+	t.Fatalf("timeout waiting for %q reply", demo.DataAnalystReportMarker)
 }
 
 func waitForSessionIdle(

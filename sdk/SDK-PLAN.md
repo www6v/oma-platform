@@ -1,6 +1,6 @@
 # OMA Platform Python SDK — Engineering Review & Implementation Plan
 
-> **Status (2026-07-01):** SDK implemented in this directory. Managed-agents resources route through `anthropic>=0.111.0` with `base_url`; OMA-only resources use `httpx` wrappers. E2E tests cover agents, sessions, environments, memory_stores, vaults, skills, files, misc, subagents. Wire-compat gaps **T15–T19** closed. **Cookbook parity (data analyst):** P0 + E1 closed — see [gap analysis](../docs/sdk/data-analyst-cookbook-gap-analysis.md). **Cookbook parity (iterate):** IF1–IF4 + MT1 closed. **Cookbook parity (gate HITL):** parity probe `example/example3/gate_human_in_the_loop.py`; platform gaps GT1–GT3 open (custom-tool loop).
+> **Status (2026-07-04):** SDK implemented in this directory. Managed-agents resources route through `anthropic>=0.111.0` with `base_url`; OMA-only resources use `httpx` wrappers. E2E tests cover agents, sessions, environments, memory_stores, vaults, skills, files, misc, subagents. Wire-compat gaps **T15–T19** closed. **Cookbook parity (data analyst):** P0 + E1 closed. **Cookbook parity (iterate):** IF1–IF4 + MT1 closed. **Cookbook parity (gate HITL):** GT1–GT5 closed. **Cookbook parity (outcome grader):** OG1–OG3 closed — `example/example4/outcome_grader.py`.
 
 ---
 
@@ -431,9 +431,23 @@ Reference: Anthropic `managed_agents/CMA_gate_human_in_the_loop.ipynb` vs `examp
 | Part A stream | `stream_hitl_until_end_turn(..., on_custom_tool=...)` |
 | Part B webhooks | print pointer to operate notebook |
 
-SDK: `oma_sdk/cookbook.py` — `stream_hitl_until_end_turn`, `stop_reason_event_ids`, `custom_tool_event_id`. Tests: `tests/test_gate_cookbook.py`. Go CI: `TestGateCookbookRequiresAction`, `TestGateCookbookHitlResume`, `TestGateCookbookSlidingWindow`, `TestGateCookbookDuplicateCustomToolResult`, `TestGateCookbookCustomToolResultIsError` (`.github/workflows/ci.yml`). Console: `console/src/components/timeline/derive.ts` pairs custom tools with `user.custom_tool_result` / synthesized `agent.tool_result`.
+SDK: `oma_sdk/cookbook.py` — `stream_hitl_until_end_turn`, `stop_reason_event_ids`, `custom_tool_event_id`. Tests: `tests/test_gate_cookbook.py`. Go CI: `TestGateCookbookRequiresAction`, `TestGateCookbookHitlResume`, `TestGateCookbookSlidingWindow`, `TestGateCookbookDuplicateCustomToolResult`, `TestGateCookbookCustomToolResultIsError` (`.github/workflows/ci.yml`). Console: timeline pairing (`derive.ts`) + HITL reply panel (`session-detail/HitlActionPanel.tsx`, `hitl.ts`); session API exposes `pending_tool_calls`.
 
 Fixtures: `sdk/example/example3/gate/policy.yaml`, `gate/inbox/receipts.jsonl`.
+
+### Cookbook parity — outcome grader (2026-07-04)
+
+Reference: Anthropic `managed_agents/CMA_verify_with_outcome_grader.ipynb` vs `example/example4/outcome_grader.py`.
+
+| ID | Priority | Gap | Cookbook expects | OMA / SDK today | Recommendation |
+|---|---|---|---|---|---|
+| **OG1** | P0 | `user.define_outcome` | Mint `outc_*`, persist active outcome | ✅ `registry_enqueue` + `outcome_state.go` | — |
+| **OG2** | P0 | Grade-revise loop | Post-turn supervisor, outcome spans, `<outcome_feedback>` | ✅ `outcome_supervisor.go` + `TestOutcomeGraderCookbook` | — |
+| **OG3** | P0 | Session aggregate | `outcome_evaluations[]` on GET session | ✅ `sessionwire.go` from metadata | — |
+| **OG4** | P2 | Rubric file | `rubric: {type:file,file_id}` → lazy fetch + cache | ✅ `resolve_rubric.go` + `TestOutcomeGraderRubricFile` | RewardSpec verifiers still deferred |
+| **OG5** | P2 | Live EV charging soak | Full cookbook scenario with files | ✅ `outcome_grader_ev_charging.py` + opt-in pytest | Run via `OMA_RUN_LIVE_OUTCOME_EV=1` |
+
+Migration: `docs/migrate/outcome-grader-migration.md`. Go CI: `TestOutcomeGraderCookbook`. Sim: `OutcomeSimulatingClient` (turn 1 fail → revision pass).
 
 ---
 
@@ -468,6 +482,10 @@ Cookbook parity (Go server + SDK helpers):
     ├── GT1–GT3: harness custom tools + requires_action + resume (Go `TestGateCookbook*`)
     ├── GT4/GT5: `stream_hitl_until_end_turn` + `tests/test_gate_cookbook.py`
     └── GT6: webhooks → operate notebook (out of scope)
+└── outcome grader ─────────────────────────────── example/example4/outcome_grader.py ✅
+    ├── OG1–OG3: in-session supervisor + `TestOutcomeGraderCookbook`
+    ├── OG4: file rubric via Files API + `TestOutcomeGraderRubricFile`
+    └── OG5: EV charging live soak (`outcome_grader_ev_charging.py`, opt-in pytest)
 ```
 
 Test framework: `pytest` + `pytest-asyncio` (asyncio_mode=auto); live E2E against `:8787`.

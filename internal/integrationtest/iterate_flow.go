@@ -9,13 +9,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/open-ma/oma-building/internal/harness"
+	"github.com/open-ma/oma-building/internal/harness/demo"
 )
 
 const (
 	iterateCalcMount  = "calc.py"
 	iterateTestMount  = "test_calc.py"
-	iterateOutputName = harness.IterateOutputFilename
+	iterateOutputName = demo.IterateOutputFilename
 )
 
 //go:embed testdata/iterate/calc.py
@@ -30,7 +30,7 @@ var IterateTestFixture []byte
 func RunIterateCookbookFlow(
 	t *testing.T,
 	handler http.Handler,
-	sim *harness.IterateSimulatingClient,
+	sim *demo.IterateSimulatingClient,
 ) {
 	t.Helper()
 	server := httptest.NewServer(handler)
@@ -64,7 +64,7 @@ func RunIterateCookbookFlow(
 		"Fix calc.py until tests pass and write /mnt/session/outputs/calc.py",
 	)
 	waitForEventMarker(
-		t, client, eventsURL, harness.IterateTurn1Marker, 5*time.Second,
+		t, client, eventsURL, demo.IterateTurn1Marker, 5*time.Second,
 	)
 	waitForSessionIdle(t, client, sessionURL, 5*time.Second)
 
@@ -77,7 +77,7 @@ func RunIterateCookbookFlow(
 		"Re-run assertions and cat /mnt/session/outputs/calc.py",
 	)
 	waitForEventMarker(
-		t, client, eventsURL, harness.IterateTurn2Marker, 5*time.Second,
+		t, client, eventsURL, demo.IterateTurn2Marker, 5*time.Second,
 	)
 	waitForSessionIdle(t, client, sessionURL, 5*time.Second)
 
