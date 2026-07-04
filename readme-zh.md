@@ -234,6 +234,8 @@ SMOKE_SKIP_LLM=1 ./scripts/e2e/smoke-test.sh
 
 复制 `.env.example` 为 `.env`。远程部署时将 `PUBLIC_BASE_URL` 设为浏览器访问地址（如 `http://124.221.28.203:8787`），并设置 `BETTER_AUTH_SECRET`。真实模型调用请设置 `OMA_FAKE_HARNESS=0`，并通过 `~/.pi/agent/settings.json`、`models.json`、`auth.json` 配置 piPy（compose 会挂载到 harness 容器）。
 
+Compose 会把 `SESSION_OUTPUTS_DIR`、`FILES_DATA_DIR` 等指向共享卷 `/data/...`（见 `deploy/docker-compose.yml`）。若 agent 写入 `/mnt/session/outputs/` 后 `files.list(scope_id=session.id)` 看不到 `out:` 前缀文件，通常是 platform 与 harness 容器的数据目录未对齐——重新 `./deploy/docker.sh up --build` 即可。
+
 ## 配置项
 
 | 变量 | 默认值 | 说明 |

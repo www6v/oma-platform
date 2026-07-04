@@ -45,6 +45,12 @@ services:
       # env_file above — do not re-declare them here or they override .env.
       DATABASE_PATH: /data/oma.db
       SANDBOX_WORKDIR: /data/sandboxes
+      # All artifact dirs must live on the shared /data volume so harness
+      # (separate container) can follow workdir symlinks into session outputs.
+      SESSION_OUTPUTS_DIR: /data/session-outputs
+      FILES_DATA_DIR: /data/files
+      SKILLS_DATA_DIR: /data/skills
+      MEMORY_DATA_DIR: /data/memory
       HARNESS_URL: http://oma-harness:8090
       # Harness schedule/MCP tools call oma-server from the sidecar container.
       OMA_HARNESS_PLATFORM_BASE: http://oma-platform:8787
