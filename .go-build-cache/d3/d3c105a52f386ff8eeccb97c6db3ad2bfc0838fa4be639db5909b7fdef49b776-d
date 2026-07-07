@@ -1,5 +1,0 @@
-./dispatch.go
-./handler.go
-./oauth.go
-./webhook_hmac.go
-./webhook_parse.go

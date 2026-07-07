@@ -4,7 +4,7 @@
 
 可自托管的 **Open Managed Agents (OMA)** 栈：Go 平台运行时 + Python piPy 执行侧车（sidecar）。平台负责持久化、并发与 HTTP API；执行器负责 LLM 循环与工具调用。
 
-本仓库实现了 [open-managed-agents](https://github.com/open-ma/open-managed-agents) 协议在自托管场景下的大部分能力。功能对齐矩阵见 [MVP-MIGRATION-PLAN.md](./docs/api-migrate/MVP-MIGRATION-PLAN.md)。
+本仓库实现了 [open-managed-agents](https://github.com/open-ma/open-managed-agents) 协议在自托管场景下的大部分能力。截至 2026-07-07，**功能对齐约 91%**（52 个功能域中 44 个已对齐）。完整矩阵见 [MVP-MIGRATION-PLAN.md](./docs/api-migrate/MVP-MIGRATION-PLAN.md)。
 
 ## 系统特性
 
@@ -14,13 +14,18 @@
 - **持久化 Session** — 基于 SQLite 的追加式事件日志；创建 Session 时固定 Agent 版本与环境配置。
 - **Harness 回合** — 用户消息触发无状态 LLM 回合，经 piPy 侧车处理（`POST /internal/turn`）。
 - **实时流式推送** — Server-Sent Events（`GET /v1/sessions/:id/events/stream`），支持可选回放。
-- **回合中断** — `user.interrupt` 可取消正在执行的 harness 回合，并将 Session 置为 idle。
+- **回合中断** — `user.interrupt` 可取消正在执行的 harness 回合（可选按 `session_thread_id` 范围取消），清空 HITL pending 状态并将 Session 置为 idle。Console 支持 Stop 按钮。
 - **崩溃恢复** — 平台启动时将孤儿 `running` Session 重置为 `idle`。
 - **按 Session 隔离沙箱** — 在 `SANDBOX_WORKDIR/<session_id>/` 下隔离工作目录。
-- **Agent 工具集** — OMA `agent_toolset_20260401` 映射到 piPy 内置工具及 `web_fetch`。
+- **Agent 工具集** — OMA `agent_toolset_20260401` 映射到 piPy 内置工具及 `web_fetch`、`web_search`。
+- **Custom tools + HITL** — Agent 声明的自定义工具，支持 `requires_action` / `user.custom_tool_result` 人机协同流程（[设计文档](./docs/design/loop-task-termination.md)）。
+- **Session resources** — 创建 Session 时或中途挂载 skill、文件等资源（`/v1/sessions/:id/resources`）。
 - **子 Agent** — `call_agent_*` 与 `general_subagent` 委派，配合 Session 线程（[设计文档](./docs/design/subagent.md)）。
+- **Agent Team** — 多 Agent 协作，经 `team_*` harness 工具与 `/v1/sessions/:id/teams/*`（[设计文档](./docs/design/agent-team.md)）。
 - **上下文压缩** — 长回合前的事件摘要（`harness/oma_adapter/compaction.py`）。
+- **Schedule 工具** — `schedule`、`cancel_schedule`、`list_schedules`，SQLite 后台 worker 驱动。
 - **MCP 工具** — Agent 声明的 MCP 服务，经 harness loader + `/v1/mcp-proxy` 挂载。
+- **Resource mounter + outcome evaluator** — Session 资源挂载与基于 rubric 的结果评估（[设计文档](./docs/design/resource-mounter-and-outcome-evaluator.md)）。
 
 ### 平台 API（对齐 Console）
 
@@ -31,10 +36,18 @@
 - **Vaults 与凭据** — 密钥存储与 OAuth 刷新；outbound HTTP 代理注入凭据。
 - **Session 辅助接口** — 线程（从事件派生）、待确认工具、轨迹导出、输出文件。
 - **统计与身份** — `/v1/stats`、`/v1/me`、`/v1/api_keys`。
-- **Integrations** — Linear、GitHub、Slack 的 publication、OAuth 与 webhook 分发。
+- **Integrations** — Linear、GitHub、Slack 的 publication、OAuth、install proxy 与 webhook 分发。
 - **Eval runs** — CRUD + 后台 worker（`internal/eval/worker.go`）。
+- **Dreams** — CRUD + 后台 dream worker（`internal/dream/worker.go`）。
+- **Cost report** — 用量与成本汇总（`/v1/cost_report`）。
 - **Runtimes** — ACP daemon connect/exchange，供本地 IDE 挂载（[设计文档](./docs/design/runtime-architecture.md)）。
 - **Memory stores** — 大对象存储 + retention worker。
+
+### Python SDK
+
+- **`oma-sdk` v0.1.0** — `sdk/` 下的 Python 客户端，managed-agents 资源经 `anthropic` SDK 自定义 `base_url` 路由，OMA 专属端点经 `httpx` 调用。
+- **Cookbook 对齐** — Managed Agents Cookbook example1–9 位于 `sdk/example/`，共享辅助函数在 `oma_sdk.cookbook`。
+- **E2E 测试** — `sdk/tests/` 下 pytest 套件对运行中服务器验证完整 API 面。
 
 ### 运维与开发
 
@@ -42,7 +55,7 @@
 - **认证** — API Key（`x-api-key` / `Authorization: Bearer`）或 better-auth Cookie 会话。
 - **Docker Compose** — 三服务栈（`oma-platform` + `oma-auth` + `oma-harness`），含健康检查。
 - **Fake Harness 模式** — `OMA_FAKE_HARNESS=1` 可在无 LLM API Key 时本地开发与 CI 运行。
-- **冒烟与集成脚本** — `scripts/e2e/smoke-test.sh`、`scripts/e2e/console-integration.sh`、各 provider webhook、MCP、runtime、子 Agent E2E。
+- **冒烟与集成脚本** — `scripts/e2e/smoke-all.sh`（全量套件）、`scripts/e2e/smoke-test.sh`、`scripts/e2e/console-integration.sh`、各 provider webhook、MCP、runtime、子 Agent E2E。
 
 ## 系统架构
 
@@ -55,7 +68,8 @@
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  oma-server（Go）                                           :8787        │
 │  agents · sessions · vaults · skills · files · model_cards              │
-│  integrations · eval worker · runtimes · memory_stores                  │
+│  integrations · eval worker · dream worker · runtimes · memory_stores   │
+│  teams · session resources · custom tool HITL                           │
 │  mcp-proxy · outbound-proxy · internal API · Console SPA                │
 │  session.Registry + stream.Hub（SSE）                                   │
 ├─────────────────────────────────────────────────────────────────────────┤
@@ -66,8 +80,14 @@
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  oma-harness（Python / FastAPI）                            :8090        │
-│  turn · tools · compaction · web_fetch · mcp_loader · call_agent        │
+│  turn · tools · compaction · web_fetch · web_search · mcp_loader        │
+│  call_agent · custom tools · team_* · outcome supervisor                │
 │  工具在 $SANDBOX_WORKDIR/<session_id>/ 内执行                           │
+└─────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│  oma-sdk（Python，可选客户端）                                           │
+│  anthropic base_url + httpx OMA-only 资源 · cookbook 辅助函数            │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -85,15 +105,18 @@
 | | `internal/harness` | 调用 Python 侧车的 HTTP 客户端（开发态可用 `FakeClient`）。 |
 | | `internal/outbound` | Vault 凭据注入（沙箱 HTTP 出站代理）。 |
 | | `internal/eval` | Eval run 后台 worker。 |
+| | `internal/dream` | Dream 后台 worker。 |
 | | `internal/memory` | Memory retention 定时任务。 |
 | | `internal/runtime` | ACP daemon 的 runtime room 注册表。 |
 | | `internal/integrations/*` | Linear、GitHub、Slack gateway 处理器。 |
 | **执行器（Python）** | `harness/oma_adapter` | 基于 piPy `create_agent_session` 的 FastAPI 适配层。 |
 | | `turn.py` | 无状态回合：投影事件 → 执行 prompt → 输出 OMA 事件。 |
 | | `tools.py` | 将 OMA 工具声明映射为 piPy 内置/扩展工具名。 |
+| | `custom_tools.py` | 自定义工具执行与 HITL `requires_action` 流程。 |
 | | `compaction.py` | 回合前上下文压缩。 |
 | | `call_agent/` | 子 Agent 委派运行时。 |
-| | `extensions/` | `web_fetch`、`mcp_loader`、`call_agent` 等 piPy 扩展。 |
+| | `extensions/` | `web_fetch`、`web_search`、`mcp_loader`、`call_agent` 等 piPy 扩展。 |
+| **SDK（Python）** | `sdk/oma_sdk` | `OMAClient` + 资源类；cookbook 流式辅助函数。 |
 
 ### 一次用户回合的请求流程
 
@@ -141,6 +164,8 @@ Harness 侧回合是**无状态**的：每次调用都携带完整事件历史�
 | `GET` | `/v1/sessions/:id/pending` | 待确认工具 |
 | `GET` | `/v1/sessions/:id/trajectory` | 轨迹导出 |
 | `GET` | `/v1/sessions/:id/outputs` | Session 输出文件 |
+| `GET` / `POST` / `DELETE` | `/v1/sessions/:id/resources` | Session 资源挂载 CRUD |
+| `GET` / `POST` | `/v1/sessions/:id/teams/*` | Agent Team 协作 |
 
 ### 平台资源
 
@@ -158,6 +183,8 @@ Harness 侧回合是**无状态**的：每次调用都携带完整事件历史�
 | `POST` / `GET` | `/v1/runtimes` | Runtimes |
 | `POST` / `GET` | `/v1/memory_stores` | Memory stores |
 | `POST` / `GET` | `/v1/evals/runs` | Eval runs |
+| `POST` / `GET` | `/v1/dreams` | Dreams |
+| `GET` | `/v1/cost_report` | 用量与成本报告 |
 | `GET` | `/v1/integrations/*` | 集成 publication |
 
 受保护路由支持请求头 `x-api-key: $OMA_API_KEY`、`Authorization: Bearer $OMA_API_KEY` 或 better-auth Cookie 会话。仅本地开发可设 `AUTH_DISABLED=1`（勿用于生产）。
@@ -192,6 +219,33 @@ go run ./cmd/oma-server/
 
 浏览器打开 http://localhost:8787
 
+## Python SDK
+
+SDK 位于 `sdk/`，版本 `oma-sdk` v0.1.0（仅本地安装，尚未发布到 PyPI）。
+
+```bash
+# 需 platform 在 :8787 运行
+cd sdk
+uv sync
+export OMA_API_KEY=dev-key
+
+# 运行示例（完整输出需真实 LLM）
+uv run python example/example1/data_analyst_agent.py
+
+# 对运行中服务器执行 SDK E2E 测试
+uv run pytest tests/ -x
+```
+
+```python
+from oma_sdk import OMAClient
+
+client = OMAClient()  # 默认 http://localhost:8787
+agent = client.agents.create(name="hello", model={"id": "claude-sonnet-4-6"})
+session = client.sessions.create(agent=agent.id)
+```
+
+资源覆盖与 Cookbook 示例见 [sdk/SDK-PLAN.md](./sdk/SDK-PLAN.md) 与 [sdk/example/README.md](./sdk/example/README.md)。
+
 ## 验收测试
 
 ### 冒烟测试（完整 P1+P2 API + 可选真实 LLM）
@@ -202,6 +256,9 @@ go run ./cmd/oma-server/
 
 # 仅 API，无需 harness / LLM
 SMOKE_SKIP_LLM=1 ./scripts/e2e/smoke-test.sh
+
+# 全量 E2E 套件（core + integrations + runtime + dreams）
+./scripts/e2e/smoke-all.sh
 ```
 
 在 `.env` 中设置 `ANTHROPIC_API_KEY`，或通过 `~/.pi/agent/{settings,models,auth}.json` 配置 piPy，即可进行真实模型调用。
@@ -210,8 +267,13 @@ SMOKE_SKIP_LLM=1 ./scripts/e2e/smoke-test.sh
 
 | 脚本 | 用途 |
 |------|------|
+| `scripts/e2e/smoke-all.sh` | 运行全部冒烟套件（core + noncore） |
 | `scripts/e2e/console-integration.sh` | Console 线型契约集成测试 |
 | `scripts/e2e/smoke-mcp-e2e.sh` | MCP proxy + harness MCP loader |
+| `scripts/e2e/smoke-web-search-e2e.sh` | web_search 工具（DDG / Tavily） |
+| `scripts/e2e/smoke-schedule-e2e.sh` | schedule / cancel / list 工具 |
+| `scripts/e2e/smoke-resource-outcome-e2e.sh` | Resource mounter + outcome evaluator |
+| `scripts/e2e/smoke-dreams-e2e.sh` | Dreams API + dream worker |
 | `scripts/multi-agent/smoke-subagent-e2e.sh` | 子 Agent 委派 E2E |
 | `scripts/e2e/smoke-runtime-e2e.sh` | Runtime / ACP daemon |
 | `scripts/e2e/smoke-linear-webhook.sh` | Linear webhook 分发 |
@@ -224,7 +286,7 @@ SMOKE_SKIP_LLM=1 ./scripts/e2e/smoke-test.sh
 
 **Docker：** `./deploy/docker.sh up` 在存在构建产物时，可将 `./console/dist` 挂载到 `/app/console`。需先运行 `./scripts/build-console.sh`，或在 compose 中设置 `CONSOLE_DIST`。
 
-**覆盖范围：** Agents、sessions、environments、model cards、skills、vaults、files、integrations、evals、runtimes、memory stores 已对接 oma-platform API。Dreams、cost report、browser tools 及部分 CF 专属能力仍延后 — 详见 [MVP-MIGRATION-PLAN.md](./docs/api-migrate/MVP-MIGRATION-PLAN.md)。
+**覆盖范围：** Agents、sessions、environments、model cards、skills、vaults、files、integrations、evals、dreams、runtimes、memory stores 已对接 oma-platform API。browser tools、`/v1/cap-cli/oauth`（Vault CLI tab）及部分 CF 专属能力仍延后 — 详见 [MVP-MIGRATION-PLAN.md](./docs/api-migrate/MVP-MIGRATION-PLAN.md)。
 
 ## Docker
 
@@ -271,19 +333,24 @@ Compose 会把 `SESSION_OUTPUTS_DIR`、`FILES_DATA_DIR` 等指向共享卷 `/dat
 | 文档 | 主题 |
 |------|------|
 | [docs/design/streaming-turn-and-sse.md](./docs/design/streaming-turn-and-sse.md) | 回合生命周期与 SSE |
+| [docs/design/loop-task-termination.md](./docs/design/loop-task-termination.md) | Custom tools、HITL 与中断 |
 | [docs/design/subagent.md](./docs/design/subagent.md) | 子 Agent 委派 |
+| [docs/design/agent-team.md](./docs/design/agent-team.md) | Agent Team 协作 |
 | [docs/design/session-threads.md](./docs/design/session-threads.md) | Session 线程 |
 | [docs/design/mcp-architecture.md](./docs/design/mcp-architecture.md) | MCP proxy 与 loader |
 | [docs/design/vault-and-credentials.md](./docs/design/vault-and-credentials.md) | Vault 与 outbound 代理 |
+| [docs/design/resource-mounter-and-outcome-evaluator.md](./docs/design/resource-mounter-and-outcome-evaluator.md) | Resource mounter 与 outcome 评估 |
 | [docs/design/runtime-architecture.md](./docs/design/runtime-architecture.md) | Runtimes 与 ACP daemon |
 | [docs/design/eval-run-background-worker.md](./docs/design/eval-run-background-worker.md) | Eval worker |
+| [docs/design/schedule-session-wakeup.md](./docs/design/schedule-session-wakeup.md) | Schedule 工具与 Session 唤醒 |
 
 ## 技术栈
 
 - **平台：** Go 1.22+、chi、modernc.org/sqlite（纯 Go，无 CGO）
 - **执行器：** Python 3.11+、FastAPI、piPy（`pi_coding_agent`）
+- **SDK：** Python 3.11+、anthropic SDK 0.111+ 自定义 `base_url`、httpx
 - **部署：** 单个 Go 静态二进制 + Python 侧车；Docker Compose 用于本地/类生产运行
 
 ## 仍属延后范围
 
-Cloudflare Workers / SessionDO、CF Container 沙箱、R2/FUSE memory、Analytics Engine 计费、Dreams API、browser tools、web search、多区域 D1 分片，以及官方 SDK/CLI 包仍在范围外或仅部分实现。完整对齐矩阵与 backlog 见 [MVP-MIGRATION-PLAN.md](./docs/api-migrate/MVP-MIGRATION-PLAN.md)。
+Cloudflare Workers / SessionDO、CF Container 沙箱、R2/FUSE memory、Analytics Engine 计费、**browser tools**（T16）、多区域 D1 分片、**`/v1/cap-cli/oauth`**、Integration install → vault 双写，以及 **TypeScript SDK / `oma` CLI** 包仍在范围外或仅部分实现。**Python SDK**（`oma-sdk` v0.1.0）已在 `sdk/` 本地可用，尚未发布到 PyPI。完整对齐矩阵与 backlog 见 [MVP-MIGRATION-PLAN.md](./docs/api-migrate/MVP-MIGRATION-PLAN.md)。

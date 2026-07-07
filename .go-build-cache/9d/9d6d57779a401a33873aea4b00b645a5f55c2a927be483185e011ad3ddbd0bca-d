@@ -1,9 +1,0 @@
-./machine_error_test.go
-./machine_idle_test.go
-./machine_interrupt_test.go
-./machine_model_test.go
-./machine_test.go
-./registry_enqueue_thread_test.go
-./registry_enqueue_wakeup_test.go
-./registry_mutex_test.go
-./registry_pending_test.go
