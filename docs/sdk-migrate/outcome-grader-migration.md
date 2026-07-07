@@ -97,6 +97,6 @@ Fixtures: `sdk/example/example4/ev_charging/{task,rubric,system_prompt}.*`
 
 ## Related
 
-- Gate HITL migration: `docs/migrate/gate-hitl-gt1-gt3-migration.md`
+- Gate HITL migration: `docs/sdk-migrate/gate-hitl-gt1-gt3-migration.md`
 - Eval-only outcome path: `docs/design/resource-mounter-and-outcome-evaluator.md`
 - SDK plan: `sdk/SDK-PLAN.md`

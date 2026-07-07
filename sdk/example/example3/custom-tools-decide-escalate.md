@@ -303,4 +303,4 @@ sequenceDiagram
 | `sdk/oma_sdk/cookbook.py` | `stream_hitl_until_end_turn` HITL 循环 |
 | `internal/harness/pending_custom_tools.go` | `requires_action` idle 构建 |
 | `internal/session/custom_tool_promote.go` | `user.custom_tool_result` → `agent.tool_result` |
-| `docs/migrate/gate-hitl-gt1-gt3-migration.md` | GT1–GT3 迁移与架构说明 |
+| `docs/sdk-migrate/gate-hitl-gt1-gt3-migration.md` | GT1–GT3 迁移与架构说明 |

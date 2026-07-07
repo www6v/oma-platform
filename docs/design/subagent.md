@@ -616,4 +616,4 @@ Harness 将 `Sub-agent error:` 前缀的结果标记为 `is_error=True` 的 tool
 - [Harness 流式 Turn 与 SSE](./streaming-turn-and-sse.md) — 事件如何从 harness 推到客户端
 - [Runtime 架构](./runtime-architecture.md) — ACP 路径下子 Agent 同样继承父 Session tenant
 - [Claude Code Agent Teams 迁移方案](../multi-agent/claude-code-agent-teams-migration-plan.md) — Team / mailbox / 任务看板后续路线
-- [MVP 迁移计划](../../MVP-MIGRATION-PLAN.md) — P2-1 / T12 进度
+- [MVP 迁移计划](../api-migrate/MVP-MIGRATION-PLAN.md) — P2-1 / T12 进度

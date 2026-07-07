@@ -247,4 +247,4 @@ open-managed-agents Console（`SessionDetail.tsx`）的消费方式：
 - [Sub-agent](./subagent.md) — 子 Agent 是什么、如何委派、`call_agent` 实现
 - [Runtime 架构](./runtime-architecture.md) — 子 Agent 若走 ACP Runtime，同样继承父 Session 的 tenant
 - [Harness 流式 Turn 与 SSE](./streaming-turn-and-sse.md) — 事件如何通过 SSE 推到 Console
-- [MVP 迁移计划](../../MVP-MIGRATION-PLAN.md) — P1-7 / T11 / P2-1 进度
+- [MVP 迁移计划](../api-migrate/MVP-MIGRATION-PLAN.md) — P1-7 / T11 / P2-1 进度

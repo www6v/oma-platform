@@ -479,7 +479,7 @@ POST   /v1/internal/swarms/{id}/agents
 - [streaming-turn-and-sse.md](./streaming-turn-and-sse.md)
 - [eval-run-background-worker.md](./eval-run-background-worker.md)
 - [memory.md](./memory.md)
-- [MVP-MIGRATION-PLAN.md](../MVP-MIGRATION-PLAN.md)
+- [MVP-MIGRATION-PLAN.md](../api-migrate/MVP-MIGRATION-PLAN.md)
 
 ---
 

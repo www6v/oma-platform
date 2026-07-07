@@ -4,7 +4,7 @@
 
 Self-hostable **Open Managed Agents (OMA)** stack: a Go platform runtime plus a Python piPy harness sidecar. The platform owns durability, concurrency, and the HTTP API; the harness owns the LLM loop and tool execution.
 
-This repo implements a large slice of the [open-managed-agents](https://github.com/open-ma/open-managed-agents) contract for self-hosted deployments. See [MVP-MIGRATION-PLAN.md](./MVP-MIGRATION-PLAN.md) for the feature parity matrix.
+This repo implements a large slice of the [open-managed-agents](https://github.com/open-ma/open-managed-agents) contract for self-hosted deployments. See [MVP-MIGRATION-PLAN.md](./docs/api-migrate/MVP-MIGRATION-PLAN.md) for the feature parity matrix.
 
 ## Features
 
@@ -224,7 +224,7 @@ The OMA Console SPA in `console/` is served on the same port as the API when `CO
 
 **Docker:** `./deploy/docker.sh up` can mount `./console/dist` at `/app/console` when present. Build the console first (`./scripts/build-console.sh`), or set `CONSOLE_DIST` in compose.
 
-**Coverage:** Agents, sessions, environments, model cards, skills, vaults, files, integrations, evals, runtimes, and memory stores are wired to oma-platform APIs. Dreams, cost reports, browser tools, and some CF-only features remain deferred — see [MVP-MIGRATION-PLAN.md](./MVP-MIGRATION-PLAN.md).
+**Coverage:** Agents, sessions, environments, model cards, skills, vaults, files, integrations, evals, runtimes, and memory stores are wired to oma-platform APIs. Dreams, cost reports, browser tools, and some CF-only features remain deferred — see [MVP-MIGRATION-PLAN.md](./docs/api-migrate/MVP-MIGRATION-PLAN.md).
 
 ## Docker
 
@@ -284,4 +284,4 @@ See `.env.example` for smoke-test and OAuth-related variables.
 
 ## Still deferred
 
-Cloudflare Workers / SessionDO, CF Container sandboxes, R2/FUSE memory, Analytics Engine billing, Dreams API, browser tools, web search, multi-region D1 sharding, and the official SDK/CLI packages remain out of scope or partial. See [MVP-MIGRATION-PLAN.md](./MVP-MIGRATION-PLAN.md) for the full parity matrix and backlog.
+Cloudflare Workers / SessionDO, CF Container sandboxes, R2/FUSE memory, Analytics Engine billing, Dreams API, browser tools, web search, multi-region D1 sharding, and the official SDK/CLI packages remain out of scope or partial. See [MVP-MIGRATION-PLAN.md](./docs/api-migrate/MVP-MIGRATION-PLAN.md) for the full parity matrix and backlog.

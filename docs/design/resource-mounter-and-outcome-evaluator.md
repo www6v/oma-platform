@@ -312,4 +312,4 @@ go test ./internal/harness/... ./internal/eval/...
 - [Eval Run Background Worker](./eval-run-background-worker.md) — Trial 状态机与 Worker Tick
 - [Memory 设计](./memory.md) — memory_store resource 与挂载路径
 - [Runtime 架构](./runtime-architecture.md) — GitHub 等资源在远端 Runtime 的扩展点
-- [MVP 迁移计划](../MVP-MIGRATION-PLAN.md) — P2-3 / P2-4 任务表
+- [MVP 迁移计划](../api-migrate/MVP-MIGRATION-PLAN.md) — P2-3 / P2-4 任务表

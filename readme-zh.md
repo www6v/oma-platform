@@ -4,7 +4,7 @@
 
 可自托管的 **Open Managed Agents (OMA)** 栈：Go 平台运行时 + Python piPy 执行侧车（sidecar）。平台负责持久化、并发与 HTTP API；执行器负责 LLM 循环与工具调用。
 
-本仓库实现了 [open-managed-agents](https://github.com/open-ma/open-managed-agents) 协议在自托管场景下的大部分能力。功能对齐矩阵见 [MVP-MIGRATION-PLAN.md](./MVP-MIGRATION-PLAN.md)。
+本仓库实现了 [open-managed-agents](https://github.com/open-ma/open-managed-agents) 协议在自托管场景下的大部分能力。功能对齐矩阵见 [MVP-MIGRATION-PLAN.md](./docs/api-migrate/MVP-MIGRATION-PLAN.md)。
 
 ## 系统特性
 
@@ -224,7 +224,7 @@ SMOKE_SKIP_LLM=1 ./scripts/e2e/smoke-test.sh
 
 **Docker：** `./deploy/docker.sh up` 在存在构建产物时，可将 `./console/dist` 挂载到 `/app/console`。需先运行 `./scripts/build-console.sh`，或在 compose 中设置 `CONSOLE_DIST`。
 
-**覆盖范围：** Agents、sessions、environments、model cards、skills、vaults、files、integrations、evals、runtimes、memory stores 已对接 oma-platform API。Dreams、cost report、browser tools 及部分 CF 专属能力仍延后 — 详见 [MVP-MIGRATION-PLAN.md](./MVP-MIGRATION-PLAN.md)。
+**覆盖范围：** Agents、sessions、environments、model cards、skills、vaults、files、integrations、evals、runtimes、memory stores 已对接 oma-platform API。Dreams、cost report、browser tools 及部分 CF 专属能力仍延后 — 详见 [MVP-MIGRATION-PLAN.md](./docs/api-migrate/MVP-MIGRATION-PLAN.md)。
 
 ## Docker
 
@@ -286,4 +286,4 @@ Compose 会把 `SESSION_OUTPUTS_DIR`、`FILES_DATA_DIR` 等指向共享卷 `/dat
 
 ## 仍属延后范围
 
-Cloudflare Workers / SessionDO、CF Container 沙箱、R2/FUSE memory、Analytics Engine 计费、Dreams API、browser tools、web search、多区域 D1 分片，以及官方 SDK/CLI 包仍在范围外或仅部分实现。完整对齐矩阵与 backlog 见 [MVP-MIGRATION-PLAN.md](./MVP-MIGRATION-PLAN.md)。
+Cloudflare Workers / SessionDO、CF Container 沙箱、R2/FUSE memory、Analytics Engine 计费、Dreams API、browser tools、web search、多区域 D1 分片，以及官方 SDK/CLI 包仍在范围外或仅部分实现。完整对齐矩阵与 backlog 见 [MVP-MIGRATION-PLAN.md](./docs/api-migrate/MVP-MIGRATION-PLAN.md)。

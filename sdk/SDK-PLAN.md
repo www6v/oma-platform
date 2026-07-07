@@ -460,7 +460,7 @@ Reference: Anthropic `managed_agents/CMA_coordinate_specialist_team.ipynb` vs `e
 | **CT5** | P1 | pytest helpers | `build_multiagent`, thread counters | ✅ `test_coordinate_cookbook.py` | — |
 | **CT6** | P2 | Live LLM soak | Real web_search delegation | ✅ `coordinate_team_live.py` + opt-in pytest | Run via `OMA_RUN_LIVE_COORDINATE=1` |
 
-Migration: `docs/migrate/coordinate-specialist-team-migration.md`. Go CI: `TestCoordinateCookbookSpecialistTeam`.
+Migration: `docs/sdk-migrate/coordinate-specialist-team-migration.md`. Go CI: `TestCoordinateCookbookSpecialistTeam`.
 
 ### Cookbook parity — remember user preferences (2026-07-04)
 
@@ -475,7 +475,7 @@ Reference: Anthropic `managed_agents/CMA_remember_user_preferences.ipynb` vs `ex
 | **RP5** | P1 | SDK example | example6 launcher + fixtures | ✅ `remember_preferences.py` | — |
 | **RP6** | P2 | Live LLM soak | Real two-session preference recall | ✅ `remember_preferences_soak.py` + opt-in pytest | Run via `OMA_RUN_LIVE_REMEMBER=1` |
 
-Migration: `docs/migrate/remember-user-preferences-migration.md`. Go CI: `TestRememberCookbookPreferences`.
+Migration: `docs/sdk-migrate/remember-user-preferences-migration.md`. Go CI: `TestRememberCookbookPreferences`.
 
 ### Cookbook parity — explore unfamiliar codebase (2026-07-04)
 
@@ -489,7 +489,7 @@ Reference: Anthropic `managed_agents/CMA_explore_unfamiliar_codebase.ipynb` vs `
 | **EX4** | P1 | SDK example | example7 launcher + fixtures | ✅ `explore_unfamiliar_codebase.py` | — |
 | **EX5** | P2 | Live LLM soak | Real explore + bash unzip | ✅ `explore_unfamiliar_codebase_soak.py` + opt-in pytest | Run via `OMA_RUN_LIVE_EXPLORE=1` |
 
-Migration: `docs/migrate/explore-unfamiliar-codebase-migration.md`. Go CI: `TestExploreCookbookUnfamiliarCodebase`.
+Migration: `docs/sdk-migrate/explore-unfamiliar-codebase-migration.md`. Go CI: `TestExploreCookbookUnfamiliarCodebase`.
 
 ### Cookbook parity — orchestrate issue to PR (2026-07-04)
 
@@ -504,7 +504,7 @@ Reference: Anthropic `managed_agents/CMA_orchestrate_issue_to_pr.ipynb` vs `exam
 | **OR5** | P2 | Live LLM soak | Real gh-mock chain | ✅ soak + opt-in pytest | Run via `OMA_RUN_LIVE_ORCHESTRATE=1` |
 | **OR6** | defer | `github_repository` sidebar | Real repo clone | stub in `resources.go` | document only |
 
-Migration: `docs/migrate/orchestrate-issue-to-pr-migration.md`. Go CI: `TestOrchestrateCookbookIssueToPR`.
+Migration: `docs/sdk-migrate/orchestrate-issue-to-pr-migration.md`. Go CI: `TestOrchestrateCookbookIssueToPR`.
 
 ### Platform — skill harness injection (2026-07-04)
 
@@ -517,7 +517,7 @@ Reference: open-managed-agents `harness/skills.ts` + `session-do.ts` skill mount
 | **SK3** | Harness `mount_skills` + prompt reminders | ✅ |
 | **SK4** | `TestSkillHarnessInjection` | ✅ |
 
-Migration: `docs/migrate/skill-harness-injection-migration.md`. Unblocks `sre_incident_responder` cookbook.
+Migration: `docs/sdk-migrate/skill-harness-injection-migration.md`. Unblocks `sre_incident_responder` cookbook.
 
 ### Cookbook parity — SRE incident responder (2026-07-04)
 
@@ -531,7 +531,7 @@ Reference: Anthropic `managed_agents/sre_incident_responder.ipynb` vs `example/e
 | **SRE4** | SDK example9 + pytest | ✅ |
 | **SRE5** | Live soak (optional) | ✅ `OMA_RUN_LIVE_SRE=1` |
 
-Migration: `docs/migrate/sre-incident-responder-migration.md`. Webhook handler deferred (inline alert in CI).
+Migration: `docs/sdk-migrate/sre-incident-responder-migration.md`. Webhook handler deferred (inline alert in CI).
 
 ---
 
