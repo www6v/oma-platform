@@ -101,7 +101,7 @@ func TestRuntimeHarnessRelayToDaemon(t *testing.T) {
 	t.Cleanup(func() { _ = store.Close(db) })
 
 	const internalSecret = "test-internal-secret"
-	deps, _ := testRouterDeps(t, db, &harness.FakeClient{}, "")
+	deps, _ := testRouterDeps(t, db, &harness.FakeClient{}, "", "")
 	deps.InternalSecret = internalSecret
 	handler := api.NewRouter(deps)
 	token, runtimeID := exchangeRuntimeToken(t, handler)

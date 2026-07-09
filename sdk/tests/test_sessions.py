@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import anthropic
 
-from oma_sdk.examples import SessionExamples
+from oma_sdk.examples import SessionExamples, VaultExamples
 
 
 def test_sessions_crud_and_events(client: anthropic.Anthropic, tmp_agent, tmp_env):
@@ -47,3 +47,17 @@ def test_sessions_threads(client: anthropic.Anthropic, tmp_agent, tmp_env):
         client, tmp_agent.id, tmp_env,
     )
     assert result["archived"].status == "archived"
+
+
+def test_sessions_vault_ids(
+    client: anthropic.Anthropic, tmp_agent, tmp_env,
+):
+    created = VaultExamples.create_and_retrieve(
+        client, name="sdk-session-vault",
+    )
+    vault_id = created["vault"].id
+    result = SessionExamples.vault_ids_round_trip(
+        client, tmp_agent.id, tmp_env, vault_id,
+    )
+    assert result["retrieved"].vault_ids == [vault_id]
+    client.beta.vaults.archive(vault_id)

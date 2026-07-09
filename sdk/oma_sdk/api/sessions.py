@@ -32,6 +32,7 @@ class SessionExamples:
         environment_id: str,
         *,
         title: str | None = None,
+        vault_ids: list[str] | None = None,
     ):
         """Create a session, retrying up to _SESSION_RETRY_MAX times on 429."""
         for attempt in range(_SESSION_RETRY_MAX + 1):
@@ -42,6 +43,8 @@ class SessionExamples:
                 }
                 if title is not None:
                     kwargs["title"] = title
+                if vault_ids:
+                    kwargs["vault_ids"] = vault_ids
                 return client.beta.sessions.create(**kwargs)
             except RateLimitError as exc:
                 if "session" not in str(exc).lower() or attempt == _SESSION_RETRY_MAX:
@@ -51,6 +54,29 @@ class SessionExamples:
                     f"for sliding window to clear (attempt {attempt + 1}/{_SESSION_RETRY_MAX})..."
                 )
                 time.sleep(_SESSION_RETRY_WAIT)
+
+    @staticmethod
+    def vault_ids_round_trip(
+        client: anthropic.Anthropic,
+        agent_id: str,
+        environment_id: str,
+        vault_id: str,
+    ) -> dict:
+        """Create a session with vault_ids and verify round-trip on retrieve."""
+        sess = SessionExamples._create_session(
+            client,
+            agent_id,
+            environment_id,
+            vault_ids=[vault_id],
+        )
+        try:
+            assert sess.id
+            got = client.beta.sessions.retrieve(sess.id)
+            assert got.vault_ids == [vault_id]
+            return {"session": sess, "retrieved": got}
+        finally:
+            if not _KEEP:
+                client.beta.sessions.archive(sess.id)
 
     @staticmethod
     def create_retrieve_and_list(

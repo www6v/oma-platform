@@ -70,7 +70,7 @@ func (r *SessionRepo) ListPage(
 	fetch := limit + 1
 	query := `
 		SELECT id, tenant_id, agent_id, agent_version, agent_snapshot,
-			environment_id, environment_snapshot, resources,
+			environment_id, environment_snapshot, resources, vault_ids,
 			title, metadata, status, turn_id, created_at, updated_at, archived_at
 		FROM sessions ` + where + `
 		ORDER BY created_at ASC, id ASC

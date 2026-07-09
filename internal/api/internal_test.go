@@ -30,7 +30,7 @@ func testRouterInternalWithDB(t *testing.T) (http.Handler, *sql.DB) {
 	}
 	t.Cleanup(func() { _ = store.Close(db) })
 
-	deps, _ := testRouterDeps(t, db, &harness.FakeClient{}, "")
+	deps, _ := testRouterDeps(t, db, &harness.FakeClient{}, "", "")
 	deps.InternalSecret = testInternalSecret
 	deps.ModelResolver = &modelresolve.Resolver{Cards: deps.ModelCards}
 	return api.NewRouter(deps), db
@@ -43,7 +43,7 @@ func TestInternalRoutes503WhenPlatformSecretUnset(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = store.Close(db) })
 
-	deps, _ := testRouterDeps(t, db, nil, "")
+	deps, _ := testRouterDeps(t, db, nil, "", "")
 	deps.InternalSecret = ""
 	deps.LinearGateway = nil
 	handler := api.NewRouter(deps)

@@ -32,6 +32,7 @@ type createSessionRequest struct {
 	EnvironmentID string          `json:"environment_id"`
 	Environment   string          `json:"environment"`
 	Resources     json.RawMessage `json:"resources"`
+	VaultIDs      []string        `json:"vault_ids"`
 }
 
 type appendEventsRequest struct {
@@ -124,6 +125,7 @@ func mountSessionRoutes(
 			AgentID:       agentID,
 			Title:         body.Title,
 			EnvironmentID: envID,
+			VaultIDs:      body.VaultIDs,
 		})
 		if err == store.ErrNotFound {
 			writeError(w, http.StatusNotFound, "not found")

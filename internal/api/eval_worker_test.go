@@ -22,7 +22,7 @@ func TestEvalWorkerAdvancesRun(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = store.Close(db) })
 
-	deps, _ := testRouterDeps(t, db, &harness.FakeClient{Text: "eval-ack"}, "")
+	deps, _ := testRouterDeps(t, db, &harness.FakeClient{Text: "eval-ack"}, "", "")
 	handler := api.NewRouter(deps)
 	worker := &eval.Worker{
 		EvalRuns:  deps.EvalRuns,
@@ -144,7 +144,7 @@ func TestEvalWorkerRubricPass(t *testing.T) {
 	t.Cleanup(func() { _ = store.Close(db) })
 
 	harnessClient := &harness.FakeClient{Text: "clear helpful answer"}
-	deps, _ := testRouterDeps(t, db, harnessClient, "")
+	deps, _ := testRouterDeps(t, db, harnessClient, "", "")
 	handler := api.NewRouter(deps)
 	events := store.NewEventRepo(db)
 	worker := &eval.Worker{
@@ -198,7 +198,7 @@ func TestEvalWorkerRubricFail(t *testing.T) {
 	t.Cleanup(func() { _ = store.Close(db) })
 
 	harnessClient := &harness.FakeClient{Text: "this answer will fail rubric"}
-	deps, _ := testRouterDeps(t, db, harnessClient, "")
+	deps, _ := testRouterDeps(t, db, harnessClient, "", "")
 	handler := api.NewRouter(deps)
 	events := store.NewEventRepo(db)
 	worker := &eval.Worker{

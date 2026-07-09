@@ -28,6 +28,7 @@ func testRouterDeps(
 	db *sql.DB,
 	client harness.Client,
 	outputsDir string,
+	mcpProxyBase string,
 ) (api.Deps, *session.Registry) {
 	t.Helper()
 	agents := store.NewAgentRepo(db)
@@ -74,7 +75,7 @@ func testRouterDeps(
 		store.NewWakeupRepo(db),
 		store.NewTeamRepo(db),
 		nil,
-		"", "", gatewayOrigin, testInternalSecret, "", "", "",
+		mcpProxyBase, "", gatewayOrigin, testInternalSecret, "", "", "",
 	)
 	memoryStores := store.NewMemoryStoreRepo(db, nil)
 	dreams := store.NewDreamRepo(db)
@@ -136,7 +137,7 @@ func testRouterWithOutputs(t *testing.T, outputsDir string) http.Handler {
 	}
 	t.Cleanup(func() { _ = store.Close(db) })
 
-	deps, _ := testRouterDeps(t, db, &harness.FakeClient{}, outputsDir)
+	deps, _ := testRouterDeps(t, db, &harness.FakeClient{}, outputsDir, "")
 	return api.NewRouter(deps)
 }
 
@@ -151,7 +152,22 @@ func testRouterHarness(
 	}
 	t.Cleanup(func() { _ = store.Close(db) })
 
-	deps, reg := testRouterDeps(t, db, client, "")
+	deps, reg := testRouterDeps(t, db, client, "", "")
+	return api.NewRouter(deps), reg
+}
+
+func testOperateRouterHarness(
+	t *testing.T,
+	client harness.Client,
+) (http.Handler, *session.Registry) {
+	t.Helper()
+	db, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close(db) })
+
+	deps, reg := testRouterDeps(t, db, client, "", "http://test")
 	return api.NewRouter(deps), reg
 }
 

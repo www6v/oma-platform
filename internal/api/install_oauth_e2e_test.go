@@ -121,7 +121,7 @@ func testRouterWithOAuthMocks(
 	}
 	t.Cleanup(func() { _ = store.Close(db) })
 
-	deps, _ := testRouterDeps(t, db, &harness.FakeClient{}, "")
+	deps, _ := testRouterDeps(t, db, &harness.FakeClient{}, "", "")
 	deps.InstallBridgeHTTP = httpClient
 	return api.NewRouter(deps)
 }

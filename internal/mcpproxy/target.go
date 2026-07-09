@@ -70,11 +70,23 @@ func (r *Resolver) Resolve(
 	if r.Credentials == nil {
 		return nil, fmt.Errorf("no credential resolver for mcp server %q", serverName)
 	}
-	cred, err := r.Credentials.FindActiveByMcpURL(
-		ctx, tenantID, server.URL,
-	)
-	if err != nil {
-		return nil, err
+
+	var cred *store.Credential
+	if len(sess.VaultIDs) > 0 {
+		cred, err = r.Credentials.FindActiveByMcpURLInVaults(
+			ctx, tenantID, sess.VaultIDs, server.URL,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if cred == nil {
+		cred, err = r.Credentials.FindActiveByMcpURL(
+			ctx, tenantID, server.URL,
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if cred == nil {
 		return nil, fmt.Errorf("no credential for mcp server %q", serverName)

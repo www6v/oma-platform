@@ -105,7 +105,7 @@ func formatAPISession(s *store.Session) map[string]any {
 		"title":           title,
 		"status":          s.Status,
 		"created_at":      formatISO(s.CreatedAt),
-		"vault_ids":       []any{},
+		"vault_ids":       formatVaultIDs(s.VaultIDs),
 		"metadata":        metadata,
 		"pending_tool_calls": pendingToolCallsFromMetadata(metadata),
 		"resources":       resources,
@@ -118,6 +118,17 @@ func formatAPISession(s *store.Session) map[string]any {
 	}
 	if s.ArchivedAt != nil {
 		out["archived_at"] = formatISO(*s.ArchivedAt)
+	}
+	return out
+}
+
+func formatVaultIDs(ids []string) []any {
+	if len(ids) == 0 {
+		return []any{}
+	}
+	out := make([]any, len(ids))
+	for i, id := range ids {
+		out[i] = id
 	}
 	return out
 }

@@ -61,6 +61,7 @@ func handleInternalCreateSession(deps internalDeps) http.HandlerFunc {
 			TenantID:      tenantID,
 			AgentID:       body.AgentID,
 			EnvironmentID: body.EnvironmentID,
+			VaultIDs:      body.VaultIDs,
 		})
 		if err == store.ErrNotFound {
 			writeError(w, http.StatusNotFound, "agent or environment not found in tenant")

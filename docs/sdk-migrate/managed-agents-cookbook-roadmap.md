@@ -71,9 +71,9 @@ Fixture 地图：`example_data/OVERVIEW.md`（iterate / orchestrate / gate 等�
 | `CMA_remember_user_preferences` | ✅ | `example6/remember_preferences` + Go `TestRememberCookbook*` | defer | RP1–RP5 landed |
 | `CMA_explore_unfamiliar_codebase` | ✅ | `example7/explore_unfamiliar_codebase` + Go `TestExploreCookbook*` | defer | EX1–EX4 landed |
 | `CMA_orchestrate_issue_to_pr` | ✅ | `example8/orchestrate_issue_to_pr` + Go `TestOrchestrateCookbook*` | defer | OR1–OR4 landed |
-| `sre_incident_responder` | 🟡 | Skill harness ✅；仍缺 custom+webhook 复合流探针 | **P1** | 见 [skill-harness-injection-migration.md](./skill-harness-injection-migration.md) |
+| `sre_incident_responder` | ✅ | `example9/sre_incident_responder` + Go `TestSreCookbook*` | defer | SK1–SK4 + SRE probe landed |
 | `CMA_prompt_versioning_and_rollback` | 🟡 | agent versioning API ✅；无批量评估 / 回滚 workflow 探针 | **P2** | 偏 workflow/DX，平台 API 已齐 |
-| `CMA_operate_in_production` | 🟡 | **`beta.webhooks` 明确 out of scope**；vault MCP turn 注入未 E2E | **P2** | 生产模式文档价值 > 立即 parity |
+| `CMA_operate_in_production` | ✅ | `example10/operate_in_production` + Go `TestOperateCookbook*`；**`beta.webhooks` out of scope** | defer | 见 [operate-in-production-migration.md](./operate-in-production-migration.md) |
 | `slack_data_bot` | ❌ | 无 SDK example；Slack gateway 仅签名级测试 | **P2** | 集成层，依赖 analyst ✅ |
 
 ---
@@ -125,7 +125,7 @@ Layer C — 集成 / 生产模式（刻意 defer）
 |----------|----------|
 | `sre_incident_responder` | Skill mount + custom tools（gate ✅）+ webhook stub |
 | `slack_data_bot` | analyst ✅ + session 续聊 + 简易 webhook 模拟 |
-| `CMA_operate_in_production` | webhooks 产品决策 + vault MCP E2E |
+| `CMA_operate_in_production` | webhooks 产品决策 + vault MCP E2E | ✅ 见 [operate-in-production-migration.md](./operate-in-production-migration.md) |
 | `CMA_prompt_versioning_and_rollback` | agent version pin 已有，补 eval 脚本即可 |
 
 ---
@@ -141,7 +141,8 @@ sdk/example/
 ├── example5/  coordinate_team           ✅
 ├── example6/  remember_preferences      ✅
 ├── example7/  explore_codebase          ✅
-└── example8/  orchestrate_issue_pr      ✅
+├── example8/  orchestrate_issue_pr      ✅
+└── example10/ operate_in_production     ✅
 ```
 
 每条遵循同一模板：
@@ -177,7 +178,9 @@ sdk/example/
 
 ~~explore / orchestrate / remember / coordinate / sre~~ ✅ — 见各 migration doc。
 
-**下一步候选：** `CMA_operate_in_production.ipynb` 或 `slack_data_bot.ipynb`（需 webhooks / integrations）。
+**下一步候选：** `slack_data_bot.ipynb` 或 `CMA_prompt_versioning_and_rollback.ipynb`（需 webhooks / eval workflow）。
+
+**CMA_operate_in_production ✅** — [operate-in-production-migration.md](./operate-in-production-migration.md)
 
 ---
 
@@ -197,4 +200,5 @@ sdk/example/
 
 | 日期 | 说明 |
 |------|------|
+| 2026-07-09 | `CMA_operate_in_production` ✅：vault_ids + vault-scoped MCP + example10 + Go/pytest CI |
 | 2026-07-04 | 初版：全量 cookbook 调研、parity 矩阵、分层缺口、开新路线图；同步 example4 outcome grader ✅ |

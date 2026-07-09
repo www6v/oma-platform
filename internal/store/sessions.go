@@ -29,6 +29,7 @@ type Session struct {
 	EnvironmentID       string
 	EnvironmentSnapshot json.RawMessage
 	Resources           json.RawMessage
+	VaultIDs            []string
 	Title               string
 	Metadata            json.RawMessage
 	Status              SessionStatus
@@ -44,6 +45,7 @@ type CreateSessionInput struct {
 	AgentID       string
 	Title         string
 	EnvironmentID string
+	VaultIDs      []string
 }
 
 // SessionRepo persists sessions in SQLite.
@@ -109,14 +111,15 @@ func (r *SessionRepo) Create(
 	id := generateSessionID()
 	now := time.Now().UnixMilli()
 	title := input.Title
+	vaultIDsJSON := marshalVaultIDs(input.VaultIDs)
 	_, err = r.db.ExecContext(ctx, `
 		INSERT INTO sessions (
 			id, tenant_id, agent_id, agent_version, agent_snapshot,
-			environment_id, environment_snapshot, resources,
+			environment_id, environment_snapshot, resources, vault_ids,
 			title, status, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		id, tenantID, agent.ID, agent.Version, string(snapshot),
-		envID, string(envSnap), "[]",
+		envID, string(envSnap), "[]", vaultIDsJSON,
 		title, string(SessionStatusIdle), now, now,
 	)
 	if err != nil {
@@ -129,7 +132,7 @@ func (r *SessionRepo) Create(
 func (r *SessionRepo) GetByID(ctx context.Context, id string) (*Session, error) {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT id, tenant_id, agent_id, agent_version, agent_snapshot,
-			environment_id, environment_snapshot, resources,
+			environment_id, environment_snapshot, resources, vault_ids,
 			title, metadata, status, turn_id, created_at, updated_at, archived_at
 		FROM sessions
 		WHERE id = ?`,
@@ -301,7 +304,7 @@ func (r *SessionRepo) Get(
 ) (*Session, error) {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT id, tenant_id, agent_id, agent_version, agent_snapshot,
-			environment_id, environment_snapshot, resources,
+			environment_id, environment_snapshot, resources, vault_ids,
 			title, metadata, status, turn_id, created_at, updated_at, archived_at
 		FROM sessions
 		WHERE id = ? AND tenant_id = ?`,
@@ -317,7 +320,7 @@ func (r *SessionRepo) List(
 ) ([]*Session, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, tenant_id, agent_id, agent_version, agent_snapshot,
-			environment_id, environment_snapshot, resources,
+			environment_id, environment_snapshot, resources, vault_ids,
 			title, metadata, status, turn_id, created_at, updated_at, archived_at
 		FROM sessions
 		WHERE tenant_id = ?
@@ -414,6 +417,28 @@ func (r *SessionRepo) RecoverRunning(ctx context.Context) (int64, error) {
 	return res.RowsAffected()
 }
 
+func marshalVaultIDs(ids []string) any {
+	if len(ids) == 0 {
+		return nil
+	}
+	out, err := json.Marshal(ids)
+	if err != nil {
+		return nil
+	}
+	return string(out)
+}
+
+func parseVaultIDs(raw sql.NullString) []string {
+	if !raw.Valid || raw.String == "" {
+		return nil
+	}
+	var ids []string
+	if err := json.Unmarshal([]byte(raw.String), &ids); err != nil {
+		return nil
+	}
+	return ids
+}
+
 func scanSession(row interface {
 	Scan(dest ...any) error
 }) (*Session, error) {
@@ -422,6 +447,7 @@ func scanSession(row interface {
 		snapshot     string
 		envSnapshot  string
 		resources    string
+		vaultIDs     sql.NullString
 		metadata     sql.NullString
 		turnID       sql.NullString
 		updatedAt    sql.NullInt64
@@ -429,7 +455,7 @@ func scanSession(row interface {
 	)
 	if err := row.Scan(
 		&s.ID, &s.TenantID, &s.AgentID, &s.AgentVersion, &snapshot,
-		&s.EnvironmentID, &envSnapshot, &resources,
+		&s.EnvironmentID, &envSnapshot, &resources, &vaultIDs,
 		&s.Title, &metadata, &s.Status, &turnID, &s.CreatedAt, &updatedAt, &archivedAt,
 	); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -444,6 +470,7 @@ func scanSession(row interface {
 	} else {
 		s.Resources = json.RawMessage(resources)
 	}
+	s.VaultIDs = parseVaultIDs(vaultIDs)
 	if metadata.Valid && metadata.String != "" {
 		s.Metadata = json.RawMessage(metadata.String)
 	}
