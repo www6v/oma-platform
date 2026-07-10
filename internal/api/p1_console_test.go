@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/open-ma/oma-building/internal/api"
+	"github.com/open-ma/oma-building/internal/fileblob"
 	"github.com/open-ma/oma-building/internal/harness"
 	"github.com/open-ma/oma-building/internal/modelresolve"
 	"github.com/open-ma/oma-building/internal/session"
@@ -200,8 +201,10 @@ func testRouterWithApiKeys(t *testing.T) http.Handler {
 	pending := store.NewPendingRepo(db)
 	hub := stream.NewHub()
 	reg := session.NewRegistry()
-	workdirs := workdir.NewManager(t.TempDir(), "")
+	workdirs := workdir.NewManager(t.TempDir(), "", "")
 	outputs := sessionoutputs.NewStore(t.TempDir())
+	files := store.NewFileRepo(db)
+	fileBlobs := fileblob.NewStore(t.TempDir())
 	models := &modelresolve.Resolver{Cards: modelCards}
 
 	return api.NewRouter(api.Deps{
@@ -213,7 +216,7 @@ func testRouterWithApiKeys(t *testing.T) http.Handler {
 		SessionOutputs: outputs,
 		Sessions: api.NewSessionHandlers(
 			sessions, agents, events, pending, hub, reg, workdirs,
-			outputs, &harness.FakeClient{}, models,
+			outputs, files, fileBlobs, &harness.FakeClient{}, models,
 			&harness.ResourceResolver{},
 			store.NewWakeupRepo(db),
 			store.NewTeamRepo(db),

@@ -36,8 +36,8 @@ def test_normalize_mnt_memory_to_workdir_relative() -> None:
     assert normalize_sandbox_path(
         wd,
         "/mnt/memory/user-preferences/preferences/formatting.md",
-    ) == "mnt/memory/user-preferences/preferences/formatting.md"
-    assert normalize_sandbox_path(wd, "/mnt/memory") == "mnt/memory"
+    ) == ".mnt/memory/user-preferences/preferences/formatting.md"
+    assert normalize_sandbox_path(wd, "/mnt/memory") == ".mnt/memory"
 
 
 def test_rewrite_bash_user_data_paths() -> None:
@@ -89,7 +89,7 @@ def test_rewrite_bash_memory_paths() -> None:
     local = str(
         (
             Path(wd)
-            / "mnt/memory/user-preferences/preferences/formatting.md"
+            / ".mnt/memory/user-preferences/preferences/formatting.md"
         ).resolve(),
     )
     assert local in rewritten

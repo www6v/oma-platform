@@ -66,7 +66,9 @@ def mount_resources(
             if res_type == "file":
                 _mount_file(root, res)
             elif res_type == "memory_store":
-                _mount_memory_store(root, res)
+                logger.debug(
+                    "memory_store mount skipped — platform symlinked in workdir",
+                )
             elif res_type in ("env", "env_secret"):
                 name = res.get("name")
                 value = res.get("value")

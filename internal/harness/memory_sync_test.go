@@ -30,7 +30,7 @@ func TestSyncMemoryStoresFromWorkdir(t *testing.T) {
 
 	workdir := t.TempDir()
 	memFile := filepath.Join(
-		workdir, "mnt", "memory", "user-preferences",
+		workdir, ".mnt", "memory", "user-preferences",
 		"preferences", "formatting.md",
 	)
 	if err := os.MkdirAll(filepath.Dir(memFile), 0o755); err != nil {

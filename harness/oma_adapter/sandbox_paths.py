@@ -48,8 +48,8 @@ def normalize_sandbox_path(workdir: str, path: str) -> str:
         if root_mount_exists("/mnt/memory"):
             return normalised
         if normalised == "/mnt/memory":
-            return "mnt/memory"
-        return "mnt/memory/" + normalised[len("/mnt/memory/") :]
+            return ".mnt/memory"
+        return ".mnt/memory/" + normalised[len("/mnt/memory/") :]
     if normalised.startswith("/workspace/"):
         return normalised[len("/workspace/") :]
     if normalised == "/workspace":

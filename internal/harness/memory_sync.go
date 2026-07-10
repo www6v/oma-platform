@@ -66,7 +66,7 @@ func SyncMemoryStoresFromWorkdir(
 			continue
 		}
 		root := filepath.Join(
-			workdirPath, "mnt", "memory", binding.StoreName,
+			workdirPath, ".mnt", "memory", binding.StoreName,
 		)
 		if err := syncMemoryTree(
 			ctx, root, tenantID, sessionID, binding.StoreID, repo,

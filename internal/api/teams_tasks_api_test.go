@@ -39,7 +39,7 @@ func testTaskRouter(t *testing.T, db *sql.DB) (
 	pending := store.NewPendingRepo(db)
 	hub := stream.NewHub()
 	reg := session.NewRegistry()
-	workdirs := workdir.NewManager(t.TempDir(), "")
+	workdirs := workdir.NewManager(t.TempDir(), "", "")
 	outputs := sessionoutputs.NewStore(t.TempDir())
 	files := store.NewFileRepo(db)
 	fileBlobs := fileblob.NewStore(t.TempDir())
@@ -56,7 +56,7 @@ func testTaskRouter(t *testing.T, db *sql.DB) (
 		SessionOutputs: outputs,
 		Sessions: api.NewSessionHandlers(
 			sessions, agents, events, pending, hub, reg, workdirs,
-			outputs, &harness.FakeClient{}, models,
+			outputs, files, fileBlobs, &harness.FakeClient{}, models,
 			&harness.ResourceResolver{Files: files, FileBlobs: fileBlobs},
 			store.NewWakeupRepo(db),
 			teams,

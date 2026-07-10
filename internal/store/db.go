@@ -87,6 +87,14 @@ func migrate(db *sql.DB) error {
 		}
 		if _, err := tx.Exec(string(body)); err != nil {
 			_ = tx.Rollback()
+			// Another connection may have applied 001_core concurrently
+			// on the shared :memory: DSN; treat as bootstrapped.
+			if shouldBootstrapMigration(db, name) {
+				if err := recordMigration(db, name); err != nil {
+					return err
+				}
+				continue
+			}
 			return fmt.Errorf("apply migration %s: %w", name, err)
 		}
 		if _, err := tx.Exec(

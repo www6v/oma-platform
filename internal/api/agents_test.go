@@ -55,7 +55,7 @@ func testRouterDeps(
 	}
 	workdirBase := t.TempDir()
 	outputs := sessionoutputs.NewStore(outputsDir)
-	workdirs := workdir.NewManager(workdirBase, outputsDir)
+	workdirs := workdir.NewManager(workdirBase, outputsDir, "")
 
 	integrations := store.NewIntegrationRepo(db)
 	runtimes := store.NewRuntimeRepo(db)
@@ -64,7 +64,7 @@ func testRouterDeps(
 	gatewayOrigin := "http://test"
 	sessionHandlers := api.NewSessionHandlers(
 		sessions, agents, events, pending, hub, reg, workdirs,
-		outputs, client, models,
+		outputs, files, fileBlobs, client, models,
 		&harness.ResourceResolver{
 			Files:        files,
 			FileBlobs:    fileBlobs,
@@ -196,7 +196,7 @@ func testRouterSharedDB(
 	hub := stream.NewHub()
 	reg := session.NewRegistry()
 	t.Cleanup(func() { reg.Shutdown() })
-	workdirs := workdir.NewManager(t.TempDir(), "")
+	workdirs := workdir.NewManager(t.TempDir(), "", "")
 	outputs := sessionoutputs.NewStore(t.TempDir())
 	memoryStores := store.NewMemoryStoreRepo(db, nil)
 	dreams := store.NewDreamRepo(db)
@@ -227,7 +227,7 @@ func testRouterSharedDB(
 		Events:         events,
 		AuthDisabled:   true,
 		Sessions: api.NewSessionHandlers(
-			sessions, agents, events, pending, hub, reg, workdirs, outputs, client, models,
+			sessions, agents, events, pending, hub, reg, workdirs, outputs, files, fileBlobs, client, models,
 			&harness.ResourceResolver{
 				Files: files, FileBlobs: fileBlobs,
 				Skills: skills, SkillFiles: skillFiles,

@@ -55,13 +55,13 @@ func newCoordinateCookbookRouter(
 	hub := stream.NewHub()
 	reg := session.NewRegistry()
 	t.Cleanup(func() { reg.Shutdown() })
-	workdirs := workdir.NewManager(t.TempDir(), "")
+	workdirs := workdir.NewManager(t.TempDir(), "", "")
 	outputs := sessionoutputs.NewStore(t.TempDir())
 	models := &modelresolve.Resolver{Cards: modelCards}
 
 	sessionHandlers := api.NewSessionHandlers(
 		sessions, agents, events, pending, hub, reg, workdirs,
-		outputs, client, models,
+		outputs, files, fileBlobs, client, models,
 		&harness.ResourceResolver{
 			Files:        files,
 			FileBlobs:    fileBlobs,

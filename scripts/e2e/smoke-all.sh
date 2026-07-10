@@ -137,6 +137,9 @@ run_core_suite() {
   run_case "internal API" \
     run_shell smoke-internal-api-e2e.sh
 
+  run_case "sandbox promote file + workdir lifecycle" \
+    run_shell smoke-promote-sandbox-e2e.sh
+
   run_case "session wakeup schedules" \
     run_shell smoke-schedule-e2e.sh
 

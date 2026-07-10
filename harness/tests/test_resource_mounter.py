@@ -31,9 +31,7 @@ def test_mount_file_env_and_memory_store(tmp_path: Path) -> None:
         ],
     )
     assert (workdir / "mnt/session/uploads/demo.txt").read_text() == "demo"
-    assert (
-        workdir / "mnt/memory/team/notes/todo.md"
-    ).read_text() == "- ship T13"
+    assert not (workdir / "mnt/memory/team/notes/todo.md").exists()
     assert env["MOUNT_TEST"] == "yes"
     assert os.environ.get("MOUNT_TEST") == "yes"
     os.environ.pop("MOUNT_TEST", None)
@@ -60,7 +58,7 @@ def test_mount_bare_filename_under_session_uploads(tmp_path: Path) -> None:
     assert not (workdir / "repo.zip").exists()
 
 
-def test_mount_empty_memory_store_creates_base_dir(tmp_path: Path) -> None:
+def test_mount_empty_memory_store_is_noop(tmp_path: Path) -> None:
     workdir = tmp_path / "wd"
     workdir.mkdir()
     mount_resources(
@@ -73,4 +71,4 @@ def test_mount_empty_memory_store_creates_base_dir(tmp_path: Path) -> None:
             },
         ],
     )
-    assert (workdir / "mnt/memory/user-preferences").is_dir()
+    assert not (workdir / "mnt/memory/user-preferences").exists()

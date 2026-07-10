@@ -125,7 +125,7 @@ func main() {
 	pending := store.NewPendingRepo(db)
 	hub := stream.NewHub()
 	registry := session.NewRegistry()
-	workdirs := workdir.NewManager(workdirBase, outputsDir)
+	workdirs := workdir.NewManager(workdirBase, outputsDir, memoryDataDir)
 
 	harnessTimeout := 10 * time.Minute
 	if raw := os.Getenv("HARNESS_HTTP_TIMEOUT_SEC"); raw != "" {
@@ -172,7 +172,7 @@ func main() {
 	tasks := store.NewTeamTaskRepo(db)
 	sessionHandlers := api.NewSessionHandlers(
 		sessions, agents, events, pending, hub, registry, workdirs,
-		sessionOutputs, harnessClient, modelResolver, resourceResolver,
+		sessionOutputs, files, fileBlobs, harnessClient, modelResolver, resourceResolver,
 		wakeups, teams, tasks,
 		harnessPlatformBase, apiKey,
 		harnessPlatformBase, internalSecret,

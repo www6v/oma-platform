@@ -12,19 +12,26 @@ import (
 type Manager struct {
 	base        string
 	outputsRoot string
+	memoryRoot  string
 }
 
 // NewManager returns a workdir manager rooted at base. When outputsRoot is
 // non-empty, Ensure also mounts session outputs at .mnt/session/outputs.
-func NewManager(base, outputsRoot string) *Manager {
-	return &Manager{base: base, outputsRoot: outputsRoot}
+// When memoryRoot is non-empty, Ensure mounts memory stores at .mnt/memory.
+func NewManager(base, outputsRoot, memoryRoot string) *Manager {
+	return &Manager{
+		base:        base,
+		outputsRoot: outputsRoot,
+		memoryRoot:  memoryRoot,
+	}
 }
 
 // Ensure creates the session directory and mounts session outputs when
-// outputsRoot is configured.
+// outputsRoot is configured. Memory mounts symlink into memoryRoot/storeId.
 func (m *Manager) Ensure(
 	_ context.Context,
 	tenantID, sessionID string,
+	memoryMounts []MemoryMount,
 ) (string, error) {
 	if err := validateSessionID(sessionID); err != nil {
 		return "", err
@@ -38,7 +45,15 @@ func (m *Manager) Ensure(
 			return "", err
 		}
 	}
+	if err := mountMemoryStores(path, m.memoryRoot, memoryMounts); err != nil {
+		return "", err
+	}
 	return path, nil
+}
+
+// BaseDir returns the sandbox workdir root.
+func (m *Manager) BaseDir() string {
+	return m.base
 }
 
 // Remove deletes the session workdir.

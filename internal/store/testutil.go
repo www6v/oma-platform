@@ -2,6 +2,8 @@ package store
 
 import (
 	"database/sql"
+	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -11,9 +13,12 @@ type TestDB struct {
 }
 
 // OpenTestDB opens an in-memory SQLite database for tests.
+// Each test gets an isolated database to avoid parallel test races.
 func OpenTestDB(t *testing.T) *TestDB {
 	t.Helper()
-	db, err := Open(":memory:")
+	name := strings.ReplaceAll(t.Name(), "/", "_")
+	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", name)
+	db, err := Open(dsn)
 	if err != nil {
 		t.Fatalf("open test db: %v", err)
 	}

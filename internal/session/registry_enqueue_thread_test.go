@@ -57,7 +57,7 @@ func TestEnqueueEventsRunsTurnOnTeammateThread(t *testing.T) {
 	pending := store.NewPendingRepo(db)
 	teams := store.NewTeamRepo(db)
 	hub := stream.NewHub()
-	workdirs := workdir.NewManager(t.TempDir(), "")
+	workdirs := workdir.NewManager(t.TempDir(), "", "")
 	ctx := context.Background()
 
 	lead, err := agents.Create(ctx, store.CreateAgentInput{

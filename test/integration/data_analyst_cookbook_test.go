@@ -58,13 +58,13 @@ func newCookbookRouter(
 	reg := session.NewRegistry()
 	workdirBase := t.TempDir()
 	outputsDir := t.TempDir()
-	workdirs := workdir.NewManager(workdirBase, outputsDir)
+	workdirs := workdir.NewManager(workdirBase, outputsDir, "")
 	outputs := sessionoutputs.NewStore(outputsDir)
 	models := &modelresolve.Resolver{Cards: modelCards}
 
 	sessionHandlers := api.NewSessionHandlers(
 		sessions, agents, events, pending, hub, reg, workdirs,
-		outputs, client, models,
+		outputs, files, fileBlobs, client, models,
 		&harness.ResourceResolver{
 			Files:        files,
 			FileBlobs:    fileBlobs,

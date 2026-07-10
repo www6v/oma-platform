@@ -44,7 +44,7 @@ func testTeamRouterWithAPIKeys(
 	pending := store.NewPendingRepo(db)
 	hub := stream.NewHub()
 	reg := session.NewRegistry()
-	workdirs := workdir.NewManager(t.TempDir(), "")
+	workdirs := workdir.NewManager(t.TempDir(), "", "")
 	outputs := sessionoutputs.NewStore(t.TempDir())
 	models := &modelresolve.Resolver{Cards: modelCards}
 	teams := store.NewTeamRepo(db)
@@ -61,7 +61,7 @@ func testTeamRouterWithAPIKeys(
 		SessionOutputs: outputs,
 		Sessions: api.NewSessionHandlers(
 			sessions, agents, events, pending, hub, reg, workdirs,
-			outputs, &harness.FakeClient{}, models,
+			outputs, files, fileBlobs, &harness.FakeClient{}, models,
 			&harness.ResourceResolver{Files: files, FileBlobs: fileBlobs},
 			store.NewWakeupRepo(db),
 			teams,

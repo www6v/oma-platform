@@ -144,7 +144,45 @@ func (m *Machine) runSingleHarnessTurn(ctx context.Context, threadID string) err
 		return store.ErrNotFound
 	}
 
-	workdirPath, err := m.Workdirs.Ensure(ctx, m.TenantID, m.SessionID)
+	envSnap := sess.EnvironmentSnapshot
+	if len(envSnap) == 0 {
+		envSnap = json.RawMessage(`{}`)
+	}
+
+	var resources []json.RawMessage
+	if m.Resources != nil {
+		resolved, resErr := m.Resources.ResolveForTurn(
+			ctx, m.TenantID, envSnap, sess.Resources,
+		)
+		if resErr == nil {
+			resources = resolved
+		}
+	}
+
+	var memoryMounts []workdir.MemoryMount
+	if m.Workdirs != nil && m.Resources != nil && m.Resources.MemoryStores != nil {
+		for _, binding := range harness.MemoryStoreBindings(resources) {
+			target := m.Workdirs.MemoryStoreDir(binding.StoreID)
+			if target != "" {
+				_ = harness.MaterializeMemoryStore(
+					ctx,
+					m.TenantID,
+					binding.StoreID,
+					target,
+					m.Resources.MemoryStores,
+				)
+			}
+			memoryMounts = append(memoryMounts, workdir.MemoryMount{
+				StoreID:   binding.StoreID,
+				StoreName: binding.StoreName,
+				ReadOnly:  binding.ReadOnly,
+			})
+		}
+	}
+
+	workdirPath, err := m.Workdirs.Ensure(
+		ctx, m.TenantID, m.SessionID, memoryMounts,
+	)
 	if err != nil {
 		return err
 	}
@@ -173,21 +211,6 @@ func (m *Machine) runSingleHarnessTurn(ctx context.Context, threadID string) err
 		cfg, auxErr := m.resolveModel(ctx, agent.AuxModel)
 		if auxErr == nil {
 			auxCfg = &cfg
-		}
-	}
-
-	envSnap := sess.EnvironmentSnapshot
-	if len(envSnap) == 0 {
-		envSnap = json.RawMessage(`{}`)
-	}
-
-	var resources []json.RawMessage
-	if m.Resources != nil {
-		resolved, resErr := m.Resources.ResolveForTurn(
-			ctx, m.TenantID, envSnap, sess.Resources,
-		)
-		if resErr == nil {
-			resources = resolved
 		}
 	}
 

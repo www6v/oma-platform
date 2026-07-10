@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/open-ma/oma-building/internal/fileblob"
 	"github.com/open-ma/oma-building/internal/harness"
 	"github.com/open-ma/oma-building/internal/modelresolve"
 	"github.com/open-ma/oma-building/internal/ratelimit"
@@ -48,6 +49,8 @@ type sessionHandlers struct {
 	registry     *session.Registry
 	workdirs     *workdir.Manager
 	outputs      *sessionoutputs.Store
+	files        *store.FileRepo
+	fileBlobs    *fileblob.Store
 	harness      harness.Client
 	models       *modelresolve.Resolver
 	resources    *harness.ResourceResolver
@@ -338,6 +341,9 @@ func mountSessionRoutes(
 			return
 		}
 		h.registry.Remove(id)
+		if h.workdirs != nil {
+			_ = h.workdirs.Remove(req.Context(), id)
+		}
 		if err := h.sessions.Delete(req.Context(), tenantID(req), id); err != nil {
 			if err == store.ErrNotFound {
 				writeError(w, http.StatusNotFound, "not found")
@@ -405,6 +411,7 @@ func mountSessionRoutes(
 
 	h.mountSessionResourceRoutes(r)
 	h.mountSessionAuxRoutes(r)
+	r.Post("/{id}/files", h.handlePromoteSandboxFile)
 
 	r.Get("/{id}/events/stream", func(w http.ResponseWriter, req *http.Request) {
 		id := chi.URLParam(req, "id")

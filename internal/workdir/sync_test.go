@@ -13,8 +13,8 @@ import (
 func TestEnsureMountsMntSessionOutputsAlias(t *testing.T) {
 	base := t.TempDir()
 	outputsRoot := t.TempDir()
-	m := workdir.NewManager(base, outputsRoot)
-	p, err := m.Ensure(context.Background(), "default", "sess_mnt")
+	m := workdir.NewManager(base, outputsRoot, "")
+	p, err := m.Ensure(context.Background(), "default", "sess_mnt", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,8 +49,8 @@ func TestEnsureMountsMntSessionOutputsAlias(t *testing.T) {
 func TestSyncSessionOutputsFromOrphanDir(t *testing.T) {
 	base := t.TempDir()
 	outputsRoot := t.TempDir()
-	m := workdir.NewManager(base, outputsRoot)
-	p, err := m.Ensure(context.Background(), "default", "sess_sync")
+	m := workdir.NewManager(base, outputsRoot, "")
+	p, err := m.Ensure(context.Background(), "default", "sess_sync", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

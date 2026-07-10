@@ -12,8 +12,8 @@ import (
 
 func TestEnsureWorkdirCreatesSessionDir(t *testing.T) {
 	base := t.TempDir()
-	m := workdir.NewManager(base, "")
-	p, err := m.Ensure(context.Background(), "default", "sess_test")
+	m := workdir.NewManager(base, "", "")
+	p, err := m.Ensure(context.Background(), "default", "sess_test", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,8 +32,8 @@ func TestEnsureWorkdirCreatesSessionDir(t *testing.T) {
 func TestEnsureMountsSessionOutputs(t *testing.T) {
 	base := t.TempDir()
 	outputsRoot := t.TempDir()
-	m := workdir.NewManager(base, outputsRoot)
-	p, err := m.Ensure(context.Background(), "default", "sess_out")
+	m := workdir.NewManager(base, outputsRoot, "")
+	p, err := m.Ensure(context.Background(), "default", "sess_out", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -82,7 +82,7 @@ func TestRunTurnIdleRequiresActionWhenCustomToolsPending(t *testing.T) {
 	events := store.NewEventRepo(db)
 	pending := store.NewPendingRepo(db)
 	hub := stream.NewHub()
-	workdirs := workdir.NewManager(t.TempDir(), "")
+	workdirs := workdir.NewManager(t.TempDir(), "", "")
 
 	agent, err := agents.Create(ctx, store.CreateAgentInput{
 		Name:  "gate-agent",
@@ -195,7 +195,7 @@ func TestRunTurnIdleEndTurnWhenNoPendingCustomTools(t *testing.T) {
 	events := store.NewEventRepo(db)
 	pending := store.NewPendingRepo(db)
 	hub := stream.NewHub()
-	workdirs := workdir.NewManager(t.TempDir(), "")
+	workdirs := workdir.NewManager(t.TempDir(), "", "")
 
 	agent, err := agents.Create(ctx, store.CreateAgentInput{
 		Name:  "plain-agent",
