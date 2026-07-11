@@ -2,16 +2,23 @@
 
 **状态：** APPROVED（已批准，2026-07-11）
 **日期：** 2026-07-11
-**分支：**（当前 —— 待创建）
+**分支：** `harness`
 **范围：** `oma-platform` Go 服务端 + 参考 `open-managed-agents` 的 ACP 运行时实现
 
-## 实施状态（2026-07-11 更新）
+## 实施状态（2026-07-12 更新）
 
-**当前范围：**
+**已完成：**
 
-- 基础阶段 1：`harness.Registry` 仅包含 `default-loop` + `managed` 两种 kind。
-- 扩展阶段 3：`managed` kind stub + `system_runtimes` / `system_runtime_leases`
-  表 + Agent API 对 `managed.agent` 的校验。
+- 基础阶段 1 —— `harness.Registry` 派发器。已落到 `harness` 分支
+  （commit `9c5e8f3`，2026-07-12）。`Machine` 持有一个 `HarnessRegistry`，
+  根据 agent 的 `_oma.harness` 元数据解析出每轮使用的 `Client`。
+  `OMA_FAKE_HARNESS` 通过 `RegistryConfig.Force` 保留。
+
+**当前范围（下一步）：**
+
+- 扩展阶段 3：`ManagedClient` stub（在阶段 4 之前 `RunTurn` 返回 501）
+  + `system_runtimes` / `system_runtime_leases` 表 + Agent API 按
+  `KnownAgents` 校验 `managed.agent`。
 
 **延期（保留在方案中作为设计参考，从活动架构图 §3 和 §10.13 中移除）：**
 
@@ -635,14 +642,17 @@ func (r *Registry) ClientFor(agent store.AgentConfig) (Client, error) {
 
 ### 10.9 迁移阶段（扩展）
 
-> **范围说明（2026-07-11）：** 当前范围仅含**阶段 3**（引入 `managed` kind stub）。
-> 阶段 4（`SystemRuntimePool` 真实实现 + 冷启动）和阶段 5（预热切换 + 容量 +
-> Console UX 翻转）**已延期** —— 等基础阶段 1 + 扩展阶段 3 落地并验证端到端
+> **范围说明（2026-07-12）：** 基础阶段 1（registry 派发器）**已落到
+> `harness` 分支，commit `9c5e8f3`，2026-07-12**。下一步是当前范围的
+> **阶段 3**（引入 `ManagedClient` stub + DB 表 + Agent API 校验）。
+> 阶段 4（`SystemRuntimePool` 真实实现 + 冷启动）和阶段 5（预热切换 +
+> 容量 + Console UX 翻转）**仍延期** —— 等扩展阶段 3 落地并验证端到端
 > 正确性后再启动。
 
 #### 阶段 3 —— 引入 `managed` kind（不改行为）
 
-- 新增 `KindManaged` + `ManagedClient` stub（阶段 4 落地前返回 501）。
+- 在 registry 工厂里接上 `ManagedClient` stub（阶段 4 落地前 `RunTurn`
+  返回 501）。`KindManaged` + `ParseManagedBinding` 已经在阶段 1 落地。
 - 通过 migration 新增 `system_runtimes` / `system_runtime_leases` 表。
 - Agent API 校验 `managed.agent` 是否在 `KnownAgents` 里。
 - **行为校验：** 现有 agent（default-loop, acp-proxy）行为不变。

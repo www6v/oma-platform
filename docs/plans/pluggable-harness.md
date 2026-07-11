@@ -2,16 +2,23 @@
 
 **Status:** APPROVED (2026-07-11)
 **Date:** 2026-07-11
-**Branch:** (current — to be created)
+**Branch:** `harness`
 **Scope:** `oma-platform` Go server + reference to `open-managed-agents` ACP runtime
 
-## Implementation Status (2026-07-11 update)
+## Implementation Status (2026-07-12 update)
 
-**In scope (now):**
+**Done:**
 
-- Base Phase 1: `harness.Registry` with `default-loop` + `managed` kinds only.
-- Extension Phase 3: `managed` kind stub + `system_runtimes` / `system_runtime_leases`
-  tables + Agent API validation of `managed.agent`.
+- Base Phase 1 — `harness.Registry` dispatcher. Landed on `harness` branch
+  (commit `9c5e8f3`, 2026-07-12). `Machine` holds a `HarnessRegistry` and
+  resolves the per-turn `Client` from the agent's `_oma.harness` metadata.
+  `OMA_FAKE_HARNESS` is preserved via `RegistryConfig.Force`.
+
+**In scope (next):**
+
+- Extension Phase 3: `ManagedClient` stub (returns 501 on `RunTurn` until
+  Phase 4) + `system_runtimes` / `system_runtime_leases` tables + Agent API
+  validation of `managed.agent` against `KnownAgents`.
 
 **Deferred (remains in plan as design reference, removed from active diagrams §3 and §10.13):**
 
@@ -655,15 +662,19 @@ Default path becomes **Managed** (user picks agent kind only).
 
 ### 10.9 Migration phases (extension)
 
-> **Scope note (2026-07-11):** Only **Phase 3** (introduce `managed` kind,
-> stub) is in current scope. Phase 4 (`SystemRuntimePool` real implementation +
-> cold start) and Phase 5 (prewarm cutover + capacity + Console UX flip) are
-> **DEFERRED** until base Phase 1 + extension Phase 3 land and demonstrate
-> end-to-end correctness.
+> **Scope note (2026-07-12):** Base Phase 1 (registry dispatcher) **landed on
+> `harness` branch, commit `9c5e8f3`, 2026-07-12**. Next in scope is
+> **Phase 3** (introduce `ManagedClient` stub + DB tables + Agent API
+> validation). Phase 4 (`SystemRuntimePool` real implementation + cold start)
+> and Phase 5 (prewarm cutover + capacity + Console UX flip) remain
+> **DEFERRED** until extension Phase 3 lands and demonstrates end-to-end
+> correctness.
 
 #### Phase 3 — Introduce `managed` kind (no behavior change)
 
-- Add `KindManaged` + `ManagedClient` stub (returns 501 until Phase 4).
+- Wire `ManagedClient` stub in the registry factory (returns 501 on
+  `RunTurn` until Phase 4). `KindManaged` + `ParseManagedBinding` already
+  landed in Phase 1.
 - Add `system_runtimes` / `system_runtime_leases` tables via migration.
 - Agent API validates `managed.agent` against `KnownAgents`.
 - **Behavior check:** existing agents (default-loop, acp-proxy) unchanged.
