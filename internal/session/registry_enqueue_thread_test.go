@@ -118,7 +118,7 @@ func TestEnqueueEventsRunsTurnOnTeammateThread(t *testing.T) {
 		Pending:   pending,
 		Hub:       hub,
 		Workdirs:  workdirs,
-		Harness:   capture,
+		HarnessRegistry: harness.DefaultOnly(capture),
 	}
 	reg := session.NewRegistry()
 	reg.Register(sess.ID, machine)

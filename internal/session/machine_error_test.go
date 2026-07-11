@@ -57,7 +57,7 @@ func TestRunTurnHarnessFailureEmitsSessionError(t *testing.T) {
 		Events:    events,
 		Hub:       stream.NewHub(),
 		Workdirs:  workdir.NewManager(t.TempDir(), "", ""),
-		Harness:   failingHarness{},
+		HarnessRegistry: harness.DefaultOnly(failingHarness{}),
 	}
 
 	userEvent, _ := json.Marshal(map[string]any{

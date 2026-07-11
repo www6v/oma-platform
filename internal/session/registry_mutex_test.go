@@ -98,7 +98,7 @@ func TestRegistrySerializesConcurrentTurns(t *testing.T) {
 		Pending:   pending,
 		Hub:       hub,
 		Workdirs:  workdirs,
-		Harness:   gate,
+		HarnessRegistry: harness.DefaultOnly(gate),
 	}
 	reg := session.NewRegistry()
 	reg.Register(sess.ID, machine)
@@ -186,7 +186,7 @@ func TestRegistrySerializesConcurrentAppends(t *testing.T) {
 		Pending:   pending,
 		Hub:       hub,
 		Workdirs:  workdirs,
-		Harness:   &harness.FakeClient{},
+		HarnessRegistry: harness.DefaultOnly(&harness.FakeClient{}),
 	}
 	reg := session.NewRegistry()
 	reg.Register(sess.ID, machine)

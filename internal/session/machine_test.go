@@ -52,7 +52,7 @@ func TestTurnMarksSessionRunningThenIdle(t *testing.T) {
 		Pending:   pending,
 		Hub:       hub,
 		Workdirs:  workdirs,
-		Harness:   &harness.FakeClient{Text: "hello"},
+		HarnessRegistry: harness.DefaultOnly(&harness.FakeClient{Text: "hello"}),
 	}
 
 	userEvent, _ := json.Marshal(map[string]any{
@@ -134,7 +134,7 @@ func TestRegistryEnqueueRunsAsync(t *testing.T) {
 		Pending:   pending,
 		Hub:       hub,
 		Workdirs:  workdirs,
-		Harness:   &harness.FakeClient{},
+		HarnessRegistry: harness.DefaultOnly(&harness.FakeClient{}),
 	}
 	reg := session.NewRegistry()
 	reg.Register(sess.ID, machine)

@@ -77,7 +77,7 @@ func TestRunOutcomeSupervisorGradeRevise(t *testing.T) {
 		Agents:           agents,
 		Events:           events,
 		Hub:              stream.NewHub(),
-		Harness:          sim,
+		HarnessRegistry: harness.DefaultOnly(sim),
 		OutcomeEvaluator: sim,
 	}
 

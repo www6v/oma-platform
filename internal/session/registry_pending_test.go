@@ -82,7 +82,7 @@ func TestRegisterPreservesPendingWhileTurnActive(t *testing.T) {
 		Pending:   pending,
 		Hub:       hub,
 		Workdirs:  workdirs,
-		Harness:   stall,
+		HarnessRegistry: harness.DefaultOnly(stall),
 	}
 	reg := session.NewRegistry()
 	reg.Register(sess.ID, machine)
@@ -114,7 +114,7 @@ func TestRegisterPreservesPendingWhileTurnActive(t *testing.T) {
 		Pending:   pending,
 		Hub:       hub,
 		Workdirs:  workdirs,
-		Harness:   stall,
+		HarnessRegistry: harness.DefaultOnly(stall),
 	}
 	reg.Register(sess.ID, replacement)
 

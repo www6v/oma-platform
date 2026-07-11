@@ -52,7 +52,8 @@ type sessionHandlers struct {
 	outputs      *sessionoutputs.Store
 	files        *store.FileRepo
 	fileBlobs    *fileblob.Store
-	harness      harness.Client
+	harnessRegistry *harness.Registry
+	outcomeEvaluator harness.OutcomeEvaluator
 	models       *modelresolve.Resolver
 	resources    *harness.ResourceResolver
 	wakeups      *store.WakeupRepo
@@ -78,8 +79,8 @@ func (h *sessionHandlers) registerMachine(sess *store.Session) {
 		Pending:       h.pending,
 		Hub:           h.hub,
 		Workdirs:      h.workdirs,
-		Harness:           h.harness,
-		OutcomeEvaluator:  harness.AsOutcomeEvaluator(h.harness),
+		HarnessRegistry: h.harnessRegistry,
+		OutcomeEvaluator:  h.outcomeEvaluator,
 		Models:            h.models,
 		Resources:     h.resources,
 		McpProxyBase:  h.mcpProxyBase,

@@ -89,7 +89,7 @@ func TestInterruptCancelsActiveTurn(t *testing.T) {
 		Pending:   pending,
 		Hub:       hub,
 		Workdirs:  workdirs,
-		Harness:   slow,
+		HarnessRegistry: harness.DefaultOnly(slow),
 	}
 	reg := session.NewRegistry()
 	reg.Register(sess.ID, machine)
@@ -203,7 +203,7 @@ func TestInterruptDrainsQueuedTurns(t *testing.T) {
 		Pending:   pending,
 		Hub:       hub,
 		Workdirs:  workdirs,
-		Harness:   slow,
+		HarnessRegistry: harness.DefaultOnly(slow),
 	}
 	reg := session.NewRegistry()
 	reg.Register(sess.ID, machine)
@@ -283,7 +283,7 @@ func TestInterruptRecoversStuckRunningSession(t *testing.T) {
 		Events:    events,
 		Hub:       stream.NewHub(),
 		Workdirs:  workdir.NewManager(t.TempDir(), "", ""),
-		Harness:   &harness.FakeClient{},
+		HarnessRegistry: harness.DefaultOnly(&harness.FakeClient{}),
 	}
 	reg := session.NewRegistry()
 	reg.Register(sess.ID, machine)
@@ -366,7 +366,7 @@ func TestInterruptEmitsEndTurnClearsPendingCustomTools(t *testing.T) {
 		Events:    events,
 		Hub:       stream.NewHub(),
 		Workdirs:  workdir.NewManager(t.TempDir(), "", ""),
-		Harness:   &harness.FakeClient{},
+		HarnessRegistry: harness.DefaultOnly(&harness.FakeClient{}),
 	}
 	reg := session.NewRegistry()
 	reg.Register(sess.ID, machine)
@@ -451,7 +451,7 @@ func TestNoOpInterruptDoesNotEmitIdle(t *testing.T) {
 		Events:    events,
 		Hub:       stream.NewHub(),
 		Workdirs:  workdir.NewManager(t.TempDir(), "", ""),
-		Harness:   &harness.FakeClient{},
+		HarnessRegistry: harness.DefaultOnly(&harness.FakeClient{}),
 	}
 	reg := session.NewRegistry()
 	reg.Register(sess.ID, machine)

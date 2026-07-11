@@ -64,7 +64,7 @@ func testRouterDeps(
 	gatewayOrigin := "http://test"
 	sessionHandlers := api.NewSessionHandlers(
 		sessions, agents, events, pending, hub, reg, workdirs,
-		outputs, files, fileBlobs, client, models,
+		outputs, files, fileBlobs, harness.DefaultOnly(client), harness.AsOutcomeEvaluator(client), models,
 		&harness.ResourceResolver{
 			Files:        files,
 			FileBlobs:    fileBlobs,
@@ -227,7 +227,7 @@ func testRouterSharedDB(
 		Events:         events,
 		AuthDisabled:   true,
 		Sessions: api.NewSessionHandlers(
-			sessions, agents, events, pending, hub, reg, workdirs, outputs, files, fileBlobs, client, models,
+			sessions, agents, events, pending, hub, reg, workdirs, outputs, files, fileBlobs, harness.DefaultOnly(client), harness.AsOutcomeEvaluator(client), models,
 			&harness.ResourceResolver{
 				Files: files, FileBlobs: fileBlobs,
 				Skills: skills, SkillFiles: skillFiles,

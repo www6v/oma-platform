@@ -36,7 +36,7 @@ type Machine struct {
 	Pending     *store.PendingRepo
 	Hub         Broadcaster
 	Workdirs    *workdir.Manager
-	Harness          harness.Client
+	HarnessRegistry  *harness.Registry
 	OutcomeEvaluator harness.OutcomeEvaluator
 	Models           *modelresolve.Resolver
 	Resources    *harness.ResourceResolver
@@ -73,7 +73,7 @@ func (m *Machine) syncDeps(src *Machine) {
 	m.Pending = src.Pending
 	m.Hub = src.Hub
 	m.Workdirs = src.Workdirs
-	m.Harness = src.Harness
+	m.HarnessRegistry = src.HarnessRegistry
 	m.OutcomeEvaluator = src.OutcomeEvaluator
 	m.Models = src.Models
 	m.Resources = src.Resources
@@ -229,7 +229,11 @@ func (m *Machine) runSingleHarnessTurn(ctx context.Context, threadID string) err
 		eventPayloads = append(eventPayloads, ev.Payload)
 	}
 
-	agent, err := m.resolveAgentForThread(ctx, sess, threadID)
+	agent, agentCfg, err := m.resolveAgentForThread(ctx, sess, threadID)
+	if err != nil {
+		return m.failTurn(ctx, turnID, err)
+	}
+	harnessClient, err := m.HarnessRegistry.ClientFor(agentCfg)
 	if err != nil {
 		return m.failTurn(ctx, turnID, err)
 	}
@@ -296,7 +300,7 @@ func (m *Machine) runSingleHarnessTurn(ctx context.Context, threadID string) err
 
 	streamErr := harness.RunTurnStreaming(
 		ctx,
-		m.Harness,
+		harnessClient,
 		harness.TurnRequest{
 			SessionID:           m.SessionID,
 			SessionThreadID:   threadID,
@@ -551,12 +555,20 @@ func (m *Machine) resolveAgentForThread(
 	ctx context.Context,
 	sess *store.Session,
 	threadID string,
-) (harness.AgentSnapshot, error) {
+) (harness.AgentSnapshot, store.AgentConfig, error) {
 	if threadID == "" || threadID == defaultThreadID {
-		return harness.AgentSnapshotFromRaw(sess.AgentSnapshot)
+		snap, err := harness.AgentSnapshotFromRaw(sess.AgentSnapshot)
+		if err != nil {
+			return harness.AgentSnapshot{}, store.AgentConfig{}, err
+		}
+		var cfg store.AgentConfig
+		// Re-parse to recover the full AgentConfig (incl. Harness /
+		// RuntimeBinding) that was snapshotted into sess.AgentSnapshot.
+		_ = json.Unmarshal(sess.AgentSnapshot, &cfg)
+		return snap, cfg, nil
 	}
 	if m.Teams == nil || m.Agents == nil {
-		return harness.AgentSnapshot{}, fmt.Errorf(
+		return harness.AgentSnapshot{}, store.AgentConfig{}, fmt.Errorf(
 			"teammate thread %s: team lookup unavailable", threadID,
 		)
 	}
@@ -564,23 +576,23 @@ func (m *Machine) resolveAgentForThread(
 		ctx, m.SessionID, threadID,
 	)
 	if err != nil {
-		return harness.AgentSnapshot{}, err
+		return harness.AgentSnapshot{}, store.AgentConfig{}, err
 	}
 	if member == nil {
-		return harness.AgentSnapshot{}, fmt.Errorf(
+		return harness.AgentSnapshot{}, store.AgentConfig{}, fmt.Errorf(
 			"teammate thread %s: member not found", threadID,
 		)
 	}
 	agent, err := m.Agents.Get(ctx, m.TenantID, member.AgentID)
 	if err != nil {
-		return harness.AgentSnapshot{}, err
+		return harness.AgentSnapshot{}, store.AgentConfig{}, err
 	}
 	if agent == nil {
-		return harness.AgentSnapshot{}, fmt.Errorf(
+		return harness.AgentSnapshot{}, store.AgentConfig{}, fmt.Errorf(
 			"teammate agent %q not found", member.AgentID,
 		)
 	}
-	return harness.AgentSnapshotFromConfig(agent.AgentConfig), nil
+	return harness.AgentSnapshotFromConfig(agent.AgentConfig), agent.AgentConfig, nil
 }
 
 func (m *Machine) resolveModel(

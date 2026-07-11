@@ -146,14 +146,23 @@ func main() {
 		BaseURL: harnessURL,
 		HTTP:    &http.Client{Timeout: harnessTimeout},
 	}
+	var harnessForceOverride harness.Client
 	if fakeHarness := os.Getenv("OMA_FAKE_HARNESS"); fakeHarness == "1" ||
 		fakeHarness == "true" {
-		harnessClient = &harness.FakeClient{}
+		harnessForceOverride = &harness.FakeClient{}
 	} else if fakeHarness == "subagent" {
-		harnessClient = &harness.SubAgentSimulatingClient{
+		harnessForceOverride = &harness.SubAgentSimulatingClient{
 			WorkerReply:  "SUBAGENT-UI-WORKER-OK",
 			PrimaryReply: "SUBAGENT-UI-COORD-OK",
 		}
+	}
+	harnessRegistry := harness.NewRegistry(harness.RegistryConfig{
+		Default: harnessClient,
+		Force:   harnessForceOverride,
+	})
+	effectiveHarness := harnessClient
+	if harnessForceOverride != nil {
+		effectiveHarness = harnessForceOverride
 	}
 
 	publicURL := envOrDefault(
@@ -181,7 +190,7 @@ func main() {
 	tasks := store.NewTeamTaskRepo(db)
 	sessionHandlers := api.NewSessionHandlers(
 		sessions, agents, events, pending, hub, registry, workdirs,
-		sessionOutputs, files, fileBlobs, harnessClient, modelResolver, resourceResolver,
+		sessionOutputs, files, fileBlobs, harnessRegistry, harness.AsOutcomeEvaluator(effectiveHarness), modelResolver, resourceResolver,
 		wakeups, teams, tasks,
 		harnessPlatformBase, apiKey,
 		harnessPlatformBase, internalSecret,
@@ -216,7 +225,7 @@ func main() {
 		Events:    events,
 		Agents:    agents,
 		Models:    modelResolver,
-		Evaluator: harness.AsOutcomeEvaluator(harnessClient),
+		Evaluator: harness.AsOutcomeEvaluator(effectiveHarness),
 	}
 	if os.Getenv("OMA_EVAL_WORKER_DISABLED") != "1" {
 		interval := 30 * time.Second

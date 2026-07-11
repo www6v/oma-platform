@@ -52,7 +52,7 @@ func TestEnqueueEventsPromotesWhenIdle(t *testing.T) {
 		Pending:   pending,
 		Hub:       hub,
 		Workdirs:  workdirs,
-		Harness:   &harness.FakeClient{Text: "ok"},
+		HarnessRegistry: harness.DefaultOnly(&harness.FakeClient{Text: "ok"}),
 	}
 	reg := session.NewRegistry()
 	reg.Register(sess.ID, machine)

@@ -8,6 +8,7 @@ import (
 
 	"github.com/open-ma/oma-building/internal/eval"
 	"github.com/open-ma/oma-building/internal/harness"
+	"github.com/open-ma/oma-building/internal/store"
 )
 
 var terminalOutcomeResults = map[string]struct{}{
@@ -329,7 +330,13 @@ func (m *Machine) maybeRunOutcomeSupervisor(
 	}
 	evaluator := m.OutcomeEvaluator
 	if evaluator == nil {
-		evaluator = harness.AsOutcomeEvaluator(m.Harness)
+		// Fallback: resolve a client via the registry using an empty agent
+		// config (normalizes to default-loop). Outcome evaluation is a
+		// cross-cutting concern that doesn't need the per-turn agent.
+		fallback, err := m.HarnessRegistry.ClientFor(store.AgentConfig{})
+		if err == nil && fallback != nil {
+			evaluator = harness.AsOutcomeEvaluator(fallback)
+		}
 	}
 	if evaluator == nil {
 		return m.emitOutcomeVerdict(ctx, *state.Outcome, state.OutcomeIteration, outcomeVerdict{

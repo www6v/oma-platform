@@ -104,7 +104,7 @@ func TestRunTurnIdleRequiresActionWhenCustomToolsPending(t *testing.T) {
 		Pending:   pending,
 		Hub:       hub,
 		Workdirs:  workdirs,
-		Harness:   &gateHitlHarness{},
+		HarnessRegistry: harness.DefaultOnly(&gateHitlHarness{}),
 	}
 	reg := session.NewRegistry()
 	reg.Register(sess.ID, machine)
@@ -217,7 +217,7 @@ func TestRunTurnIdleEndTurnWhenNoPendingCustomTools(t *testing.T) {
 		Pending:   pending,
 		Hub:       hub,
 		Workdirs:  workdirs,
-		Harness:   &harness.FakeClient{Text: "done"},
+		HarnessRegistry: harness.DefaultOnly(&harness.FakeClient{Text: "done"}),
 	}
 	reg := session.NewRegistry()
 	reg.Register(sess.ID, machine)
