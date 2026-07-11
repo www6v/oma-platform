@@ -10,5 +10,6 @@ __pycache__/
 .go-build-cache/
 auth-sidecar/node_modules/
 scripts/node_modules/
+scripts/sandbox/node_modules/
 console/node_modules/
 console/dist/
