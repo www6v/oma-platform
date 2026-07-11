@@ -34,7 +34,12 @@ log() {
 log "Go workdir sandbox paths + memory mounts"
 GOPROXY="${GOPROXY:-https://goproxy.cn,direct}" \
   go test ./internal/workdir/... \
-  -run 'Normalize|Resolve|EnsureMounts|Remove' -count=1 -v
+  -run 'Normalize|Resolve|EnsureMounts|Remove|Backup' -count=1 -v
+
+log "Go workspace backup repo"
+GOPROXY="${GOPROXY:-https://goproxy.cn,direct}" \
+  go test ./internal/store/... \
+  -run 'WorkspaceBackup' -count=1 -v
 
 log "Go harness memory materialize"
 GOPROXY="${GOPROXY:-https://goproxy.cn,direct}" \
@@ -44,7 +49,7 @@ GOPROXY="${GOPROXY:-https://goproxy.cn,direct}" \
 log "Go API promoteSandboxFile + session DELETE workdir"
 GOPROXY="${GOPROXY:-https://goproxy.cn,direct}" \
   go test ./internal/api/... \
-  -run 'PromoteSandbox|SessionDelete' -count=1 -v
+  -run 'PromoteSandbox|SessionDelete|SessionDeleteSnapshots' -count=1 -v
 
 log "Python harness sandbox paths + resource mounter"
 (

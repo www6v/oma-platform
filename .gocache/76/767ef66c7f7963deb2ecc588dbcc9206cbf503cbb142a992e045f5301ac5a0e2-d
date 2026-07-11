@@ -1,0 +1,11 @@
+./coordinate_sim_client.go
+./data_analyst_sim_client.go
+./explore_sim_client.go
+./gate_sim_client.go
+./iterate_sim_client.go
+./operate_sim_client.go
+./orchestrate_sim_client.go
+./outcome_sim_client.go
+./remember_sim_client.go
+./skill_sim_client.go
+./sre_sim_client.go

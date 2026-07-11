@@ -43,19 +43,30 @@ func (h *sessionHandlers) handlePromoteSandboxFile(
 		h.workdirs.BaseDir(),
 		sess.ID,
 	)
-	absPath, err := workdir.ResolveSandboxPath(workdirPath, body.Path)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "Cannot read sandbox path")
-		return
-	}
-	data, err := os.ReadFile(absPath)
-	if err != nil {
-		if os.IsNotExist(err) {
+	var data []byte
+	var err error
+	if h.workdirs.Sandbox != nil && h.workdirs.Sandbox.Config().IsRemote() {
+		ex := h.workdirs.Sandbox.Get(sess.ID, workdirPath)
+		data, err = ex.ReadFile(req.Context(), body.Path)
+		if err != nil {
 			writeError(w, http.StatusBadRequest, "Cannot read sandbox path")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
+	} else {
+		absPath, pathErr := workdir.ResolveSandboxPath(workdirPath, body.Path)
+		if pathErr != nil {
+			writeError(w, http.StatusBadRequest, "Cannot read sandbox path")
+			return
+		}
+		data, err = os.ReadFile(absPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				writeError(w, http.StatusBadRequest, "Cannot read sandbox path")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 	}
 	filename := body.Filename
 	if filename == "" {

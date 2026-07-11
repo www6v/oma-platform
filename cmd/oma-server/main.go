@@ -21,6 +21,7 @@ import (
 	"github.com/open-ma/oma-building/internal/outbound"
 	"github.com/open-ma/oma-building/internal/ratelimit"
 	"github.com/open-ma/oma-building/internal/runtime"
+	"github.com/open-ma/oma-building/internal/sandbox"
 	"github.com/open-ma/oma-building/internal/session"
 	"github.com/open-ma/oma-building/internal/sessionoutputs"
 	"github.com/open-ma/oma-building/internal/store"
@@ -126,6 +127,14 @@ func main() {
 	hub := stream.NewHub()
 	registry := session.NewRegistry()
 	workdirs := workdir.NewManager(workdirBase, outputsDir, memoryDataDir)
+	sandboxCfg := sandbox.LoadConfigFromEnv()
+	if err := sandboxCfg.Validate(); err != nil {
+		log.Fatal(err)
+	}
+	workdirs.Sandbox = sandbox.NewRegistry(sandboxCfg)
+	log.Printf("sandbox provider=%s", workdirs.Sandbox.Provider())
+	workspaceBackupRepo := store.NewWorkspaceBackupRepo(db)
+	workdirs.Backup = workdir.NewBackupService(workspaceBackupRepo, fileBlobs)
 
 	harnessTimeout := 10 * time.Minute
 	if raw := os.Getenv("HARNESS_HTTP_TIMEOUT_SEC"); raw != "" {

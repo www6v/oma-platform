@@ -1,0 +1,9 @@
+./client_stream_test.go
+./helpers_test.go
+./memory_materialize_test.go
+./memory_sync_test.go
+./resources_test.go
+./session_resources_test.go
+./skills_resolver_test.go
+./subagent_sim_client_test.go
+./subagents_test.go

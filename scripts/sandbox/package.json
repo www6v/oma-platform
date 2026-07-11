@@ -1,0 +1,8 @@
+{
+  "name": "oma-sandbox-bridge",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@boxlite-ai/boxlite": "^0.9.3"
+  }
+}

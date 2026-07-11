@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -342,6 +343,19 @@ func mountSessionRoutes(
 		}
 		h.registry.Remove(id)
 		if h.workdirs != nil {
+			if h.workdirs.Sandbox != nil {
+				_ = h.workdirs.Sandbox.Release(req.Context(), id)
+			}
+			if h.workdirs.Backup != nil {
+				workdirPath := filepath.Join(h.workdirs.BaseDir(), id)
+				_ = h.workdirs.Backup.Snapshot(
+					req.Context(),
+					tenantID(req),
+					sess.EnvironmentID,
+					id,
+					workdirPath,
+				)
+			}
 			_ = h.workdirs.Remove(req.Context(), id)
 		}
 		if err := h.sessions.Delete(req.Context(), tenantID(req), id); err != nil {
@@ -412,6 +426,7 @@ func mountSessionRoutes(
 	h.mountSessionResourceRoutes(r)
 	h.mountSessionAuxRoutes(r)
 	r.Post("/{id}/files", h.handlePromoteSandboxFile)
+	r.Post("/{id}/exec", h.handleSessionExec)
 
 	r.Get("/{id}/events/stream", func(w http.ResponseWriter, req *http.Request) {
 		id := chi.URLParam(req, "id")

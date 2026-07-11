@@ -76,6 +76,7 @@ async def internal_turn(body: TurnRequest) -> TurnResponse:
                 platform_base=body.platform_base,
                 internal_secret=body.internal_secret,
                 database_path=body.database_path,
+                sandbox_provider=body.sandbox_provider,
             ),
             timeout=TURN_TIMEOUT_SEC,
         )
@@ -118,6 +119,7 @@ async def internal_turn_stream(body: TurnRequest) -> StreamingResponse:
                     platform_base=body.platform_base,
                     internal_secret=body.internal_secret,
                     database_path=body.database_path,
+                    sandbox_provider=body.sandbox_provider,
                     on_event=on_event,
                 ),
                 timeout=TURN_TIMEOUT_SEC,

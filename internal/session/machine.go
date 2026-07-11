@@ -7,10 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"path/filepath"
 	"sync"
 
 	"github.com/open-ma/oma-building/internal/harness"
 	"github.com/open-ma/oma-building/internal/modelresolve"
+	"github.com/open-ma/oma-building/internal/sandbox"
 	"github.com/open-ma/oma-building/internal/store"
 	"github.com/open-ma/oma-building/internal/stream"
 	"github.com/open-ma/oma-building/internal/workdir"
@@ -180,6 +182,37 @@ func (m *Machine) runSingleHarnessTurn(ctx context.Context, threadID string) err
 		}
 	}
 
+	if m.Workdirs != nil && m.Workdirs.Sandbox != nil && m.Workdirs.Sandbox.Config().IsRemote() {
+		sandboxMounts := make([]sandbox.MemoryMount, 0, len(memoryMounts))
+		for _, mm := range memoryMounts {
+			sandboxMounts = append(sandboxMounts, sandbox.MemoryMount{
+				StoreName: mm.StoreName,
+				StoreID:   mm.StoreID,
+				ReadOnly:  mm.ReadOnly,
+			})
+		}
+		if _, err := m.Workdirs.Sandbox.Acquire(ctx, sandbox.AcquireOpts{
+			SessionID:   m.SessionID,
+			WorkdirPath: filepath.Join(m.Workdirs.BaseDir(), m.SessionID),
+			TenantID:    m.TenantID,
+			MemoryRoot:  m.Workdirs.MemoryRoot(),
+			OutputsRoot: m.Workdirs.OutputsRoot(),
+			MemoryMounts: sandboxMounts,
+		}); err != nil {
+			return err
+		}
+	}
+
+	if m.Workdirs != nil && m.Workdirs.Backup != nil {
+		_ = m.Workdirs.Backup.TryRestore(
+			ctx,
+			m.TenantID,
+			sess.EnvironmentID,
+			m.SessionID,
+			filepath.Join(m.Workdirs.BaseDir(), m.SessionID),
+		)
+	}
+
 	workdirPath, err := m.Workdirs.Ensure(
 		ctx, m.TenantID, m.SessionID, memoryMounts,
 	)
@@ -256,6 +289,11 @@ func (m *Machine) runSingleHarnessTurn(ctx context.Context, threadID string) err
 		return m.publishEvents(ctx, []json.RawMessage{ev})
 	})
 
+	sandboxProvider := ""
+	if m.Workdirs != nil && m.Workdirs.Sandbox != nil {
+		sandboxProvider = m.Workdirs.Sandbox.Provider()
+	}
+
 	streamErr := harness.RunTurnStreaming(
 		ctx,
 		m.Harness,
@@ -272,6 +310,7 @@ func (m *Machine) runSingleHarnessTurn(ctx context.Context, threadID string) err
 			Skills:            skills,
 			Events:            eventPayloads,
 			Workdir:           workdirPath,
+			SandboxProvider:   sandboxProvider,
 			McpProxyBase:      m.McpProxyBase,
 			McpProxyAPIKey:    m.McpProxyAPIKey,
 			PlatformBase:      m.PlatformBase,

@@ -1,0 +1,11 @@
+./cookbook_flow.go
+./coordinate_flow.go
+./explore_flow.go
+./gate_flow.go
+./iterate_flow.go
+./operate_flow.go
+./orchestrate_flow.go
+./outcome_flow.go
+./remember_flow.go
+./skill_flow.go
+./sre_flow.go

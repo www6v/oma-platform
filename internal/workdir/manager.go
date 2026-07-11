@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/open-ma/oma-building/internal/sandbox"
 )
 
 // Manager provisions per-session working directories.
@@ -13,6 +15,8 @@ type Manager struct {
 	base        string
 	outputsRoot string
 	memoryRoot  string
+	Backup      *BackupService
+	Sandbox     *sandbox.Registry
 }
 
 // NewManager returns a workdir manager rooted at base. When outputsRoot is
@@ -54,6 +58,16 @@ func (m *Manager) Ensure(
 // BaseDir returns the sandbox workdir root.
 func (m *Manager) BaseDir() string {
 	return m.base
+}
+
+// MemoryRoot returns the host memory blob root.
+func (m *Manager) MemoryRoot() string {
+	return m.memoryRoot
+}
+
+// OutputsRoot returns the session outputs root.
+func (m *Manager) OutputsRoot() string {
+	return m.outputsRoot
 }
 
 // Remove deletes the session workdir.

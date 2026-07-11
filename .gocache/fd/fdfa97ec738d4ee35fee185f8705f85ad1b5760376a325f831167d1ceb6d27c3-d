@@ -1,0 +1,4 @@
+./manager.go
+./memory.go
+./paths.go
+./sync.go

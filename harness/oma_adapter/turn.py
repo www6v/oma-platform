@@ -47,8 +47,9 @@ from oma_adapter.project import (
     project_oma_events,
 )
 from oma_adapter.provider_env import provider_env
-from oma_adapter.sandbox_paths import patch_path_utils
+from oma_adapter.sandbox_paths import is_remote_sandbox_provider, patch_path_utils
 from oma_adapter.outbound.bash_ops import OutboundBashOperations
+from oma_adapter.outbound.platform_exec_bash import PlatformExecBashOperations
 from oma_adapter.outbound.setup import (
     clear_outbound_proxy_for_turn,
     normalize_outbound_proxy_addr,
@@ -199,6 +200,7 @@ def _resolve_turn_workdir(workdir: str) -> str:
     return str(resolved)
 
 
+
 async def _default_create_session(
     *,
     workdir: str,
@@ -209,6 +211,9 @@ async def _default_create_session(
     builtin_tools: list[str],
     extension_paths: list[str],
     outbound_curl_home: str | None = None,
+    session_id: str | None = None,
+    sandbox_provider: str | None = None,
+    platform_base: str | None = None,
 ) -> Any:
     from pi_coding_agent.sdk import CreateAgentSessionOptions, create_agent_session
 
@@ -223,17 +228,25 @@ async def _default_create_session(
         in_memory=True,
     )
     result = await create_agent_session(opts)
-    if outbound_curl_home:
-        _wire_outbound_bash_proxy(result.session, outbound_curl_home)
+    _wire_sandbox_bash_proxy(
+        result.session,
+        workdir=outbound_curl_home or workdir,
+        session_id=session_id or "",
+        sandbox_provider=sandbox_provider,
+        platform_base=platform_base,
+    )
     return result
 
 
-def _wire_outbound_bash_proxy(session: Any, workdir: str) -> None:
-    """Ensure bash subprocesses read sandbox .curlrc via CURL_HOME."""
-    curl_home = _resolve_turn_workdir(workdir)
-    curlrc = Path(curl_home) / ".curlrc"
-    if not curlrc.is_file():
-        return
+def _wire_sandbox_bash_proxy(
+    session: Any,
+    *,
+    workdir: str,
+    session_id: str,
+    sandbox_provider: str | None,
+    platform_base: str | None,
+) -> None:
+    """Route bash to platform exec API (remote) or local subprocess."""
     agent = getattr(session, "_agent", None)
     if agent is None and hasattr(session, "agent"):
         agent = session.agent
@@ -242,7 +255,18 @@ def _wire_outbound_bash_proxy(session: Any, workdir: str) -> None:
     tools = getattr(agent, "_tools", None)
     if not tools:
         return
-    ops = OutboundBashOperations(curl_home=curl_home)
+    if is_remote_sandbox_provider(sandbox_provider) and platform_base and session_id:
+        ops = PlatformExecBashOperations(
+            session_id=session_id,
+            platform_base=platform_base,
+            workdir="/workspace",
+        )
+    else:
+        curl_home = _resolve_turn_workdir(workdir)
+        curlrc = Path(curl_home) / ".curlrc"
+        if not curlrc.is_file():
+            return
+        ops = OutboundBashOperations(curl_home=curl_home)
     for tool in tools:
         if getattr(tool, "name", None) != "bash":
             continue
@@ -270,6 +294,7 @@ async def _run_turn_core(
     platform_base: str | None = None,
     internal_secret: str | None = None,
     database_path: str | None = None,
+    sandbox_provider: str | None = None,
     create_session: CreateSessionFn | None,
     on_event: EventCallback | None,
 ) -> TurnResponse:
@@ -504,6 +529,9 @@ async def _run_turn_core(
                     builtin_tools=tool_cfg.builtin_tools,
                     extension_paths=tool_cfg.extension_paths,
                     outbound_curl_home=outbound_curl_home,
+                    session_id=session_id,
+                    sandbox_provider=sandbox_provider,
+                    platform_base=platform_base,
                 )
             session = result.session
             _register_mcp_tools_on_session(session, mcp_runtime)
@@ -551,7 +579,13 @@ async def _run_turn_core(
             elif hasattr(session, "on"):
                 session.on("event", listener)
 
-            _wire_outbound_bash_proxy(session, workdir)
+            _wire_sandbox_bash_proxy(
+                session,
+                workdir=workdir,
+                session_id=session_id,
+                sandbox_provider=sandbox_provider,
+                platform_base=platform_base,
+            )
 
             _tl.warning("[turn_exec] calling session.prompt session_id=%s prompt_len=%d", session_id, len(prompt))
             await session.prompt(prompt)
@@ -698,6 +732,7 @@ async def run_turn(
     platform_base: str | None = None,
     internal_secret: str | None = None,
     database_path: str | None = None,
+    sandbox_provider: str | None = None,
     create_session: CreateSessionFn | None = None,
 ) -> TurnResponse:
     return await _run_turn_core(
@@ -720,6 +755,7 @@ async def run_turn(
         platform_base=platform_base,
         internal_secret=internal_secret,
         database_path=database_path,
+        sandbox_provider=sandbox_provider,
         create_session=create_session,
         on_event=None,
     )
@@ -746,6 +782,7 @@ async def run_turn_stream(
     platform_base: str | None = None,
     internal_secret: str | None = None,
     database_path: str | None = None,
+    sandbox_provider: str | None = None,
     create_session: CreateSessionFn | None = None,
     on_event: EventCallback,
 ) -> TurnResponse:
@@ -769,6 +806,7 @@ async def run_turn_stream(
         platform_base=platform_base,
         internal_secret=internal_secret,
         database_path=database_path,
+        sandbox_provider=sandbox_provider,
         create_session=create_session,
         on_event=on_event,
     )

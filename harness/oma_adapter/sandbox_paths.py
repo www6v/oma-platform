@@ -5,6 +5,15 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+_REMOTE_SANDBOX_PROVIDERS = frozenset(
+    {"e2b", "daytona", "litebox", "boxlite", "boxrun"},
+)
+
+
+def is_remote_sandbox_provider(provider: str | None) -> bool:
+    """True when bash should route through platform exec API."""
+    return (provider or "local").lower() in _REMOTE_SANDBOX_PROVIDERS
+
 
 def root_mount_exists(path: str) -> bool:
     """True when a host-level magic mount exists (symlink or directory)."""

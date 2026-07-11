@@ -96,12 +96,12 @@ Console 全量 wire 验收：`scripts/e2e/console-integration.sh`
 | API 入口 | `apps/main` (Hono Worker) | `cmd/oma-server` (Go) |
 | Session 状态 | SessionDO + DO 内 SQLite | SQLite event log + in-process Registry |
 | Brain | `apps/agent` DefaultHarness | `harness/oma_adapter` (piPy) |
-| 沙箱 | CF Container per environment | `SANDBOX_WORKDIR/<session_id>/` + symlink mounts | 🟡 Phase A | 源仓 self-host 亦用 `LocalSubprocessSandbox`（零进程隔离）；生产不可信 Agent 需 E2B/Daytona（**defer T27+**） |
+| 沙箱 | CF Container per environment | `SANDBOX_WORKDIR` + 可选 `SANDBOX_PROVIDER` | 🟡→✅ | 默认 `local`；不可信 Agent 可用 **litebox/boxrun/e2b/daytona**（T28–T29） |
 | 集成 | 独立 `apps/integrations` Worker | 同进程 gateway + `integrations.go` |
 | 对象存储 | R2 | 本地 `fileblob` / skill files |
 | 多租户 | D1 分片 + KV | 单库 `tenant_id` 列 |
 
-**Phase 3（defer）：** SessionDO、CF Container、R2 FUSE memory、Analytics Engine 计费、lane 部署、**browser 工具（T16）**、**WorkspaceBackup 快照（T27）**、**E2B/Daytona 沙箱适配器（T28）**。
+**Phase 3（defer）：** SessionDO、CF Container、R2 FUSE memory、Analytics Engine 计费、lane 部署、**browser 工具（T16）**。
 
 ---
 
@@ -120,7 +120,10 @@ Console 全量 wire 验收：`scripts/e2e/console-integration.sh`
 | promoteSandboxFile | `apps/main-node/src/lib/node-session-lifecycle.ts` | **T24** `internal/api/session_files.go`（新） |
 | destroy workdir | `destroy()` | **T25** session DELETE hook |
 | Orchestrator 顺序 | `packages/sandbox/src/orchestrator.ts` `provision()` | **T23** `workdir.Ensure` 统一 outputs → memory mounts |
-| Workspace backup | `WorkspaceBackupService` | ⏭ **T27 defer**（Phase B） |
+| Workspace backup | `WorkspaceBackupService` | ✅ **T27** `internal/workdir/backup.go` |
+| E2B / Daytona | `adapters/e2b.ts`, `daytona.ts` | ✅ **T28** `internal/sandbox/e2b.go`, `daytona.go` |
+| LiteBox / BoxLite | `adapters/litebox.ts` (`@boxlite-ai/boxlite`) | ✅ **T29** `litebox.go` + `scripts/sandbox/litebox-bridge.mjs` |
+| BoxRun | `adapters/boxrun.ts` (`boxlite serve` REST) | ✅ **T29** `internal/sandbox/boxrun.go` |
 
 ### Phase A 数据流（目标态）
 
@@ -164,8 +167,9 @@ POST /v1/sessions/:id/files { path } → read workdir → fileblob      [T24]
 | promoteSandboxFile API | ❌ → ✅ | T24 |
 | Session DELETE 清理 workdir | 🟡 → ✅ | T25 |
 | Go 单测 + promote e2e | ❌ → ✅ | T26 |
-| Workspace backup/restore | ⏭ | T27 |
-| E2B/Daytona/CF Container | ⏭ | T28 |
+| Workspace backup/restore | ✅ | T27 |
+| E2B/Daytona/CF Container | ✅ | T28 |
+| LiteBox / BoxRun（开源 micro-VM） | ✅ | T29 — `@boxlite-ai/boxlite` + `boxlite serve` REST |
 
 ---
 
@@ -195,7 +199,7 @@ POST /v1/sessions/:id/files { path } → read workdir → fileblob      [T24]
 | POST /v1/models/list | `routes/models.ts` | `internal/api/models_list.go` | ✅ | T4 已完成；真实 provider 拉取 |
 | GET /v1/models/list | 静态 catalog 探测 | `handleModelsListCatalogStub` | 🟡 | 探测用 stub；Console 模型探测与源仓略不一致 |
 | Environment | `environments-store` | `environments.go` | ✅ | 无 per-env 容器镜像 |
-| 沙箱隔离（进程） | CF Container / `LocalSubprocessSandbox` | `internal/workdir/` + harness `sandbox_paths.py` | 🟡 | 目录级 `SANDBOX_WORKDIR/<session_id>/`，**无容器隔离**（与源仓 self-host 模式相同限制）；**T23–T26 Phase A** 补齐行为 parity |
+| 沙箱隔离（可选 provider） | `LiteBox` / `BoxRun` / E2B / Daytona | `internal/sandbox/` + exec API | ✅ | T28–T29；`SANDBOX_PROVIDER=litebox|boxlite|boxrun|e2b|daytona` |
 | Sandbox path 解析 | `LocalSubprocessSandbox.resolvePath()` | `harness/oma_adapter/sandbox_paths.py` | ✅ | `/mnt/session/outputs|uploads`、`/mnt/user-data`、`/mnt/memory`、`/workspace` 重写；`test_sandbox_paths.py` |
 | Sandbox memory mount | `mountMemoryStore` → symlink `memoryRoot/<storeId>` | copy-in/copy-out + `memory_sync.go` WalkDir | 🟡 | **T23**：改为 Go `workdir` symlink → `MEMORY_DATA_DIR/<storeId>/`；废弃每轮全量 sync |
 | Sandbox session outputs | `mountSessionOutputs` | `workdir/manager.go` + `SyncSessionOutputs` | ✅ | `.mnt/session/outputs` + `outputs` + `mnt/session/outputs` 别名；`manager_test.go` |
@@ -284,7 +288,7 @@ POST /v1/sessions/:id/files { path } → read workdir → fileblob      [T24]
 | 1 | **`/v1/cap-cli/oauth` 未实现** | Console Vault「CLI」tab 调用 initiate/poll 会 404；无法 Device Auth Grant 写入 `cap_cli` credential | **P1'** |
 | 2 | **Integration install → vault 双写** | Console wizard 可完成 GitHub manifest + Slack OAuth 安装；installation token 尚未自动写入 vault | **P1' backlog** |
 | 3 | **Sandbox 行为 gap（memory copy、promote 404、workdir 泄漏）** | remember cookbook / 大 memory store 性能差；沙箱文件无法提升；磁盘泄漏 | **P0'' T23–T26** |
-| 4 | **目录级沙箱 vs CF Container** | 多租户 / 不可信 Agent 场景 blast radius（Phase A 不解决；需 T28） | 架构已知差异 |
+| 4 | **目录级沙箱 vs 硬件隔离** | 默认 `local` 无隔离；`litebox`/`boxrun`/`e2b`/`daytona` 已接入（T28–T29） | 选型文档见 `open-managed-agents/docs/self-host.md` |
 | 5 | **Legacy API key 无 user_id** | `/v1/integrations/*` 403；Console 集成页纯 API key 模式可能失败 | **P2'** |
 | 5 | ~~Skills 版本 DELETE 501~~ | ~~Console 删 skill 版本失败~~ | ✅ 2026-06-16 已修复 |
 | 6 | **生产硬化 GAP** | LLM rate limit 无 retry、model 错误 envelope 模糊、webhook 签名失败静默丢事件 | **P1'** |
@@ -357,8 +361,9 @@ POST /v1/sessions/:id/files { path } → read workdir → fileblob      [T24]
 | T21 | 通用 oauth + clawhub | `oauth.ts`, `clawhub.ts` | `oauth_v1.go`, `clawhub.go`, `oauthflow/` | ✅ |
 | T22a | Python SDK (`oma-sdk`) | `packages/sdk` Python subset | `sdk/oma_sdk/` + example1–9 | ✅ 2026-07 |
 | T22b | TS SDK / `oma` CLI 发布 | `packages/sdk`, `packages/cli` | 独立发布 | Phase 3 defer |
-| T27 | Workspace backup/restore | `WorkspaceBackupService` | Go tar snapshot service | Phase B defer |
-| T28 | E2B/Daytona 沙箱适配器 | `packages/sandbox/adapters/*` | 可选 provider 插件 | 不可信 Agent 生产路径 defer |
+| T27 | Workspace backup/restore | `WorkspaceBackupService` | `internal/workdir/backup.go` + `022_workspace_backups.sql` | ✅ Phase B |
+| T28 | E2B/Daytona 沙箱适配器 | `adapters/e2b.ts`, `daytona.ts` | `internal/sandbox/e2b.go`, `daytona.go` + exec API | ✅ |
+| T29 | LiteBox / BoxRun 开源沙箱 | `adapters/litebox.ts`, `boxrun.ts` | `litebox.go` + `scripts/sandbox/litebox-bridge.mjs`, `boxrun.go` | ✅ memory/outputs host bind（litebox）；boxrun 无 mount |
 | CK1 | Cookbook parity 主线 | managed_agents/*.ipynb | example1–9 + Go `Test*Cookbook*` | ✅ 2026-07 |
 | CK2 | prompt_versioning / operate / slack bot | 剩余 cookbook | workflow 探针 | P2 defer（webhooks 前置） |
 
@@ -441,7 +446,7 @@ Client / Console / Python SDK (oma-sdk)
 - **`beta.webhooks` / `session.status_idled`** — SDK-PLAN 与 operate/slack Part B cookbook 刻意 out of scope  
 - **browser 工具（T16 明确 defer）** — 源仓亦为 opt-in；`web_fetch` 覆盖只读场景  
 - **Workspace backup/restore（T27）** — 源仓 `WorkspaceBackupService`；Phase B  
-- **E2B/Daytona/BoxRun 沙箱适配器（T28）** — 不可信 Agent 生产隔离；Phase A 保持 LocalSubprocess 语义  
+- **CF Container 沙箱** — Cloudflare 托管容器路径（源仓 CF 部署专用）
 - **TypeScript `@openma/sdk` / 独立 `oma` CLI 发布（T22b）** — Python SDK 已覆盖主要 API  
 - 整仓 TypeScript `main-node` 复制（已 supersede 为 Go 实现）
 
@@ -477,12 +482,13 @@ Client / Console / Python SDK (oma-sdk)
 - [x] **T21 (P3)** — 通用 `/v1/oauth` + clawhub — Verify: `go test ./internal/oauthflow/... ./internal/api/ -run 'OAuth|Clawhub'`
 - [x] **T22a (P3)** — Python SDK `oma-sdk` v0.1.0 — `sdk/oma_sdk/` + example1–9 — Verify: `sdk/tests/test.sh`, CI `Test*Cookbook*`
 - [ ] **T22b (P3)** — TypeScript SDK / `oma` CLI 独立发布
-- [ ] **T23 (P0'')** — Sandbox memory symlink + `.mnt/memory` + read-only — `internal/workdir/` + `sandbox_paths.py` — Verify: `go test ./internal/workdir/...`, `harness/tests/test_sandbox_paths.py`
-- [ ] **T24 (P0'')** — `POST /v1/sessions/:id/files` promoteSandboxFile — `internal/api/session_files.go` — Verify: `go test ./internal/api/ -run PromoteSandbox`, `scripts/e2e/smoke-promote-sandbox-e2e.sh`
-- [ ] **T25 (P0'')** — Session DELETE workdir cleanup — `sessions.go` → `workdirs.Remove` — Verify: `go test ./internal/api/ -run SessionDelete`
+- [x] **T23 (P0'')** — Sandbox memory symlink + `.mnt/memory` + read-only — `internal/workdir/` + `sandbox_paths.py` — Verify: `go test ./internal/workdir/...`, `harness/tests/test_sandbox_paths.py`
+- [x] **T24 (P0'')** — `POST /v1/sessions/:id/files` promoteSandboxFile — `internal/api/session_files.go` — Verify: `go test ./internal/api/ -run PromoteSandbox`, `scripts/e2e/smoke-promote-sandbox-e2e.sh`
+- [x] **T25 (P0'')** — Session DELETE workdir cleanup — `sessions.go` → `workdirs.Remove` — Verify: `go test ./internal/api/ -run SessionDelete`
 - [x] **T26 (P0'')** — Sandbox Phase A e2e 聚合 — `scripts/e2e/smoke-promote-sandbox-e2e.sh` 纳入 `smoke-all.sh` — Verify: `./scripts/e2e/smoke-promote-sandbox-e2e.sh`
-- [⏭] **T27 (P3)** — Workspace backup/restore — defer Phase B
-- [⏭] **T28 (P3)** — E2B/Daytona sandbox adapters — defer
+- [x] **T27 (P3)** — Workspace backup/restore — `internal/workdir/backup.go` + migration `022` — Verify: `go test ./internal/workdir/... -run Backup`, `go test ./internal/api/ -run SessionDeleteSnapshots`
+- [x] **T28 (P3)** — E2B/Daytona sandbox adapters — `internal/sandbox/e2b.go`, `daytona.go` + `POST /v1/sessions/:id/exec` — Verify: `go test ./internal/sandbox/...`, `go test ./internal/api/ -run SessionExec`; env: `SANDBOX_PROVIDER=e2b|daytona`, `E2B_API_KEY`, `DAYTONA_API_KEY`
+- [x] **T29 (P3)** — LiteBox / BoxRun 开源沙箱 — `internal/sandbox/litebox.go`, `boxrun.go`, `scripts/sandbox/litebox-bridge.mjs` — Verify: `./scripts/e2e/smoke-litebox-sandbox-e2e.sh`, `go test ./internal/sandbox/ -run BoxRun`; start: `./start-litebox-sandbox.sh`; env: `SANDBOX_PROVIDER=litebox|boxlite|boxrun`, `LITEBOX_MEMORY_MIB`, `LITEBOX_CPUS`, `BOXRUN_URL`, `BOXRUN_TOKEN`; litebox 需 `cd scripts/sandbox && npm install`（仅 Apple Silicon macOS 或 Linux KVM）
 - [x] **CK1** — Managed Agents Cookbook 主线（example1–9）— Verify: `.github/workflows/ci.yml` cookbook test job
 - [ ] **P1'** — `/v1/cap-cli/oauth` — Console Vault CLI tab 依赖
 - [ ] **P1'** — Integration install → vault 双写
@@ -490,19 +496,19 @@ Client / Console / Python SDK (oma-sdk)
 
 ### Sandbox Phase A — 审查合成任务（2026-07-10）
 
-- [ ] **T23 (P1, human: ~4h / CC: ~25min)** — workdir memory symlink provision
+- [x] **T23 (P1, human: ~4h / CC: ~25min)** — workdir memory symlink provision
   - Surfaced by: Architecture #1 + Code Quality #1 — copy-in/copy-out vs `mountMemoryStore`
   - Files: `internal/workdir/manager.go`, `internal/session/machine.go`, `harness/oma_adapter/resource_mounter.py`, `harness/oma_adapter/sandbox_paths.py`, `internal/harness/memory_sync.go`
   - Verify: `go test ./internal/workdir/...`, `harness/tests/test_sandbox_paths.py`
-- [ ] **T24 (P1, human: ~3h / CC: ~20min)** — implement `POST /v1/sessions/:id/files`
+- [x] **T24 (P1, human: ~3h / CC: ~20min)** — implement `POST /v1/sessions/:id/files`
   - Surfaced by: Architecture #2 — promoteSandboxFile 404
   - Files: `internal/api/session_files.go`, `internal/api/router.go`, `internal/api/sessions.go`
   - Verify: `go test ./internal/api/ -run PromoteSandbox`, `scripts/e2e/smoke-promote-sandbox-e2e.sh`
-- [ ] **T25 (P2, human: ~1h / CC: ~10min)** — wire `workdirs.Remove` on session DELETE
+- [x] **T25 (P2, human: ~1h / CC: ~10min)** — wire `workdirs.Remove` on session DELETE
   - Surfaced by: Architecture #3 — workdir 泄漏
   - Files: `internal/api/sessions.go`
   - Verify: `go test ./internal/api/ -run 'Session.*Delete'`
-- [ ] **T26 (P1, human: ~2h / CC: ~15min)** — Sandbox Phase A e2e + regression tests
+- [x] **T26 (P1, human: ~2h / CC: ~15min)** — Sandbox Phase A e2e + regression tests
   - Surfaced by: Test #1 — 12% coverage → 100% Phase A paths
   - Files: `scripts/e2e/smoke-promote-sandbox-e2e.sh`, `internal/workdir/manager_test.go`, `harness/tests/test_sandbox_paths.py`
   - Verify: `scripts/e2e/smoke-all.sh`

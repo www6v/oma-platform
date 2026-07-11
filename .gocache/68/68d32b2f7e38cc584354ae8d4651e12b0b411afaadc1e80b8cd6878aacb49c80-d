@@ -1,0 +1,3 @@
+./manager_test.go
+./paths_test.go
+./sync_test.go

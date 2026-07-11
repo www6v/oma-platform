@@ -76,6 +76,7 @@ class TurnRequest(BaseModel):
     platform_base: str | None = None
     internal_secret: str | None = None
     database_path: str | None = None
+    sandbox_provider: str | None = None
 
 
 class TurnResponse(BaseModel):

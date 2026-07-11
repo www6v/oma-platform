@@ -53,6 +53,7 @@ type TurnRequest struct {
 	Skills                []json.RawMessage          `json:"skills,omitempty"`
 	Events                []json.RawMessage          `json:"events"`
 	Workdir               string                     `json:"workdir"`
+	SandboxProvider       string                     `json:"sandbox_provider,omitempty"`
 	McpProxyBase          string                     `json:"mcp_proxy_base,omitempty"`
 	McpProxyAPIKey        string                     `json:"mcp_proxy_api_key,omitempty"`
 	PlatformBase          string                     `json:"platform_base,omitempty"`
