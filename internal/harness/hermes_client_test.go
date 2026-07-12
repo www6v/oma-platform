@@ -78,6 +78,13 @@ func newHermesStub(responseContent string) (*hermesStub, *httptest.Server) {
 		resp.Choices[0].Message.Role = "assistant"
 		resp.Choices[0].Message.Content = responseContent
 		resp.Choices[0].FinishReason = "stop"
+		// Stub usage so tests can assert TurnResponse.Usage is
+		// populated. Real Hermes always returns this.
+		resp.Usage = &openClawUsage{
+			PromptTokens:     42,
+			CompletionTokens: 7,
+			TotalTokens:      49,
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(resp)
 	}))
@@ -102,18 +109,23 @@ func TestHermesClient_RunTurn_Basic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunTurn: %v", err)
 	}
-	if len(resp.Events) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(resp.Events))
-	}
-	var ev map[string]any
-	_ = json.Unmarshal(resp.Events[0], &ev)
-	if ev["type"] != "agent.message" {
-		t.Errorf("type=%v want agent.message", ev["type"])
-	}
-	content := ev["content"].([]any)
+	agentEv := mustFindAgentMessage(t, resp.Events)
+	content := agentEv["content"].([]any)
 	first := content[0].(map[string]any)
 	if first["text"] != "hello from hermes" {
 		t.Errorf("text=%q", first["text"])
+	}
+	// Usage span should also be present.
+	mustFindUsageSpan(t, resp.Events, "hermes", "hermes-agent")
+	// TurnResponse.Usage should be populated from upstream usage.
+	if resp.Usage == nil {
+		t.Fatal("expected resp.Usage to be populated")
+	}
+	if resp.Usage.InputTokens != 42 {
+		t.Errorf("InputTokens=%d want 42", resp.Usage.InputTokens)
+	}
+	if resp.Usage.OutputTokens != 7 {
+		t.Errorf("OutputTokens=%d want 7", resp.Usage.OutputTokens)
 	}
 
 	stub.mu.Lock()
@@ -249,13 +261,42 @@ func TestHermesClient_RunTurnStream(t *testing.T) {
 	if len(events) == 0 {
 		t.Fatal("no events emitted")
 	}
-	// Last event should have the full text.
-	var last map[string]any
-	_ = json.Unmarshal(events[len(events)-1], &last)
-	content := last["content"].([]any)
+	// Find the last agent.message event — a span.model_request_end is
+	// now appended after the content events.
+	var lastAgent map[string]any
+	for i := len(events) - 1; i >= 0; i-- {
+		var ev map[string]any
+		_ = json.Unmarshal(events[i], &ev)
+		if ev["type"] == "agent.message" {
+			lastAgent = ev
+			break
+		}
+	}
+	if lastAgent == nil {
+		t.Fatal("no agent.message event in stream")
+	}
+	content := lastAgent["content"].([]any)
 	first := content[0].(map[string]any)
 	if first["text"] != "hello world" {
 		t.Errorf("final text=%q", first["text"])
+	}
+	// Also verify the usage span was emitted.
+	var sawSpan bool
+	for _, ev := range events {
+		var m map[string]any
+		_ = json.Unmarshal(ev, &m)
+		if m["type"] == "span.model_request_end" {
+			sawSpan = true
+			if m["provider"] != "hermes" {
+				t.Errorf("span provider=%v want hermes", m["provider"])
+			}
+			if m["model"] != "hermes-agent" {
+				t.Errorf("span model=%v want hermes-agent", m["model"])
+			}
+		}
+	}
+	if !sawSpan {
+		t.Error("expected span.model_request_end event in stream")
 	}
 }
 
@@ -295,4 +336,46 @@ func TestHasRole(t *testing.T) {
 	if hasRole(msgs, "assistant") {
 		t.Error("expected assistant absent")
 	}
+}
+
+// mustFindAgentMessage returns the first agent.message event parsed as
+// a map. Fails the test if none found.
+func mustFindAgentMessage(t *testing.T, events []json.RawMessage) map[string]any {
+	t.Helper()
+	for _, raw := range events {
+		var ev map[string]any
+		_ = json.Unmarshal(raw, &ev)
+		if ev["type"] == "agent.message" {
+			return ev
+		}
+	}
+	t.Fatalf("no agent.message event found in %d events", len(events))
+	return nil
+}
+
+// mustFindUsageSpan asserts that a span.model_request_end event is
+// present with the expected provider and model fields.
+func mustFindUsageSpan(t *testing.T, events []json.RawMessage, provider, model string) {
+	t.Helper()
+	for _, raw := range events {
+		var ev map[string]any
+		_ = json.Unmarshal(raw, &ev)
+		if ev["type"] != "span.model_request_end" {
+			continue
+		}
+		if ev["provider"] != provider {
+			t.Errorf("span provider=%v want %v", ev["provider"], provider)
+		}
+		if ev["model"] != model {
+			t.Errorf("span model=%v want %v", ev["model"], model)
+		}
+		if _, ok := ev["model_usage"]; !ok {
+			t.Error("span missing model_usage")
+		}
+		if _, ok := ev["duration_ms"]; !ok {
+			t.Error("span missing duration_ms")
+		}
+		return
+	}
+	t.Fatalf("no span.model_request_end found in %d events", len(events))
 }

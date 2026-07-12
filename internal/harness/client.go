@@ -67,6 +67,21 @@ type TurnRequest struct {
 type TurnResponse struct {
 	Events                  []json.RawMessage `json:"events"`
 	PendingCustomToolIDs    []string          `json:"pending_custom_tool_ids,omitempty"`
+	// Usage is the optional token accounting for this turn. Populated by
+	// managed clients (OpenClaw, Hermes) from their upstream response.
+	// When nil the turn's token usage is unknown (e.g. the pipy sidecar
+	// emits its own span.model_request_end events internally).
+	Usage *TurnUsage `json:"usage,omitempty"`
+}
+
+// TurnUsage is the token accounting returned by an upstream
+// OpenAI-compatible chat completion endpoint. Maps to the
+// span.model_request_end event schema the usage aggregator consumes.
+type TurnUsage struct {
+	InputTokens              int `json:"input_tokens"`
+	OutputTokens             int `json:"output_tokens"`
+	CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
+	CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
 }
 
 // OutcomeRubric describes eval criteria for LLM-as-judge.

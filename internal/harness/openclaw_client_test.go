@@ -74,7 +74,8 @@ func newStubServer(reply string) *stubServer {
 
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{
-			"choices":[{"message":{"role":"assistant","content":%q},"finish_reason":"stop"}]
+			"choices":[{"message":{"role":"assistant","content":%q},"finish_reason":"stop"}],
+			"usage":{"prompt_tokens":17,"completion_tokens":3,"total_tokens":20}
 		}`, s.reply)
 	}))
 	return s
@@ -112,8 +113,8 @@ func TestOpenClawClient_RunTurn_Basic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunTurn: %v", err)
 	}
-	if len(resp.Events) != 1 {
-		t.Fatalf("events=%d want 1", len(resp.Events))
+	if len(resp.Events) < 1 {
+		t.Fatalf("events=%d want at least 1", len(resp.Events))
 	}
 
 	var ev map[string]any
@@ -141,6 +142,27 @@ func TestOpenClawClient_RunTurn_Basic(t *testing.T) {
 	if got.AuthHeader != "Bearer test-token" {
 		t.Errorf("auth=%q want Bearer test-token", got.AuthHeader)
 	}
+	// Usage span should be in the events and TurnResponse.Usage populated.
+	if resp.Usage == nil {
+		t.Fatal("expected resp.Usage to be populated")
+	}
+	if resp.Usage.InputTokens != 17 || resp.Usage.OutputTokens != 3 {
+		t.Errorf("usage=%+v want {17, 3}", resp.Usage)
+	}
+	foundSpan := false
+	for _, raw := range resp.Events {
+		var e map[string]any
+		_ = json.Unmarshal(raw, &e)
+		if e["type"] == "span.model_request_end" {
+			foundSpan = true
+			if e["provider"] != "openclaw" {
+				t.Errorf("span provider=%v want openclaw", e["provider"])
+			}
+		}
+	}
+	if !foundSpan {
+		t.Error("expected span.model_request_end in events")
+	}
 	if got.SessionKey != "oma-sess-1" {
 		t.Errorf("sessionKey=%q want oma-sess-1", got.SessionKey)
 	}
@@ -161,8 +183,8 @@ func TestOpenClawClient_RunTurn_DefaultModel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(resp.Events) != 1 {
-		t.Fatalf("events=%d want 1", len(resp.Events))
+	if len(resp.Events) < 1 {
+		t.Fatalf("events=%d want at least 1", len(resp.Events))
 	}
 	if got := stub.lastRequest().Model; got != "openclaw/default" {
 		t.Errorf("model=%q want openclaw/default", got)
@@ -183,8 +205,8 @@ func TestOpenClawClient_RunTurn_NoUserMessage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(resp.Events) != 1 {
-		t.Fatalf("events=%d want 1", len(resp.Events))
+	if len(resp.Events) < 1 {
+		t.Fatalf("events=%d want at least 1", len(resp.Events))
 	}
 	// Should fall back to "(continue)" when no user.message found.
 	got := stub.lastRequest()
@@ -252,8 +274,10 @@ func TestOpenClawClient_RunTurnStream(t *testing.T) {
 		if err := json.Unmarshal(event, &ev); err != nil {
 			return err
 		}
+		// The stream now also emits a span.model_request_end at the
+		// end — skip it for the content assertions.
 		if ev["type"] != "agent.message" {
-			t.Errorf("stream event type=%v want agent.message", ev["type"])
+			return nil
 		}
 		content, _ := ev["content"].([]any)
 		if len(content) > 0 {

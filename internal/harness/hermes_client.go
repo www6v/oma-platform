@@ -34,10 +34,11 @@ type HermesClient struct {
 
 // hermesChatRequest is the OpenAI ChatCompletion request body.
 type hermesChatRequest struct {
-	Model     string            `json:"model"`
-	Messages  []hermesMessage   `json:"messages"`
-	Stream    bool              `json:"stream,omitempty"`
-	MaxTokens int               `json:"max_tokens,omitempty"`
+	Model       string            `json:"model"`
+	Messages    []hermesMessage   `json:"messages"`
+	Stream      bool              `json:"stream,omitempty"`
+	StreamOptions *streamOptions  `json:"stream_options,omitempty"`
+	MaxTokens   int               `json:"max_tokens,omitempty"`
 }
 
 type hermesMessage struct {
@@ -54,6 +55,7 @@ type hermesChatResponse struct {
 		} `json:"message"`
 		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
+	Usage *openClawUsage `json:"usage,omitempty"`
 	Error *struct {
 		Type    string `json:"type"`
 		Message string `json:"message"`
@@ -61,6 +63,8 @@ type hermesChatResponse struct {
 }
 
 // hermesSSEChunk is one SSE data line from a streaming response.
+// When stream_options.include_usage=true the final chunk carries usage
+// at the top level with empty choices.
 type hermesSSEChunk struct {
 	Choices []struct {
 		Delta struct {
@@ -68,6 +72,7 @@ type hermesSSEChunk struct {
 		} `json:"delta"`
 		FinishReason *string `json:"finish_reason"`
 	} `json:"choices"`
+	Usage *openClawUsage `json:"usage,omitempty"`
 }
 
 // RunTurn implements Client. Converts the full event history to OpenAI
@@ -77,6 +82,7 @@ func (c *HermesClient) RunTurn(
 	ctx context.Context,
 	req TurnRequest,
 ) (TurnResponse, error) {
+	start := time.Now()
 	messages := c.buildMessages(req)
 	model := c.Model
 	if model == "" {
@@ -104,12 +110,21 @@ func (c *HermesClient) RunTurn(
 	client := c.httpClient()
 	resp, err := client.Do(httpReq)
 	if err != nil {
+		logTurn("backend", "hermes", "session", req.SessionID,
+			"model", model, "stream", false,
+			"duration_ms", time.Since(start).Milliseconds(),
+			"error", err)
 		return TurnResponse{}, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 300 {
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		logTurn("backend", "hermes", "session", req.SessionID,
+			"model", model, "stream", false,
+			"duration_ms", time.Since(start).Milliseconds(),
+			"status", resp.StatusCode,
+			"error", strings.TrimSpace(string(raw)))
 		return TurnResponse{}, fmt.Errorf(
 			"hermes status=%d: %s",
 			resp.StatusCode,
@@ -137,7 +152,20 @@ func (c *HermesClient) RunTurn(
 	if err != nil {
 		return TurnResponse{}, err
 	}
-	return TurnResponse{Events: []json.RawMessage{ev}}, nil
+
+	duration := time.Since(start)
+	usage := chatResp.Usage.toTurnUsage()
+	events := []json.RawMessage{ev}
+	if usageEv, err := usageEvent(model, "hermes", duration, usage); err == nil {
+		events = append(events, usageEv)
+	}
+	logTurn("backend", "hermes", "session", req.SessionID,
+		"model", model, "stream", false,
+		"duration_ms", duration.Milliseconds(),
+		"input_tokens", valueOrZero(usage, func(u *TurnUsage) int { return u.InputTokens }),
+		"output_tokens", valueOrZero(usage, func(u *TurnUsage) int { return u.OutputTokens }))
+
+	return TurnResponse{Events: events, Usage: usage}, nil
 }
 
 // RunTurnStream implements StreamingClient. Same as RunTurn but with
@@ -148,6 +176,7 @@ func (c *HermesClient) RunTurnStream(
 	req TurnRequest,
 	onEvent EventHandler,
 ) error {
+	start := time.Now()
 	messages := c.buildMessages(req)
 	model := c.Model
 	if model == "" {
@@ -158,6 +187,7 @@ func (c *HermesClient) RunTurnStream(
 		Model:    model,
 		Messages: messages,
 		Stream:   true,
+		StreamOptions: &streamOptions{IncludeUsage: true},
 	})
 	if err != nil {
 		return err
@@ -176,12 +206,21 @@ func (c *HermesClient) RunTurnStream(
 	client := c.streamingHTTPClient()
 	resp, err := client.Do(httpReq)
 	if err != nil {
+		logTurn("backend", "hermes", "session", req.SessionID,
+			"model", model, "stream", true,
+			"duration_ms", time.Since(start).Milliseconds(),
+			"error", err)
 		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 300 {
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		logTurn("backend", "hermes", "session", req.SessionID,
+			"model", model, "stream", true,
+			"duration_ms", time.Since(start).Milliseconds(),
+			"status", resp.StatusCode,
+			"error", strings.TrimSpace(string(raw)))
 		return fmt.Errorf(
 			"hermes stream status=%d: %s",
 			resp.StatusCode,
@@ -195,6 +234,7 @@ func (c *HermesClient) RunTurnStream(
 	var accumulated strings.Builder
 	chunkID := randomOCID()
 	emitChunk := false
+	var streamUsage *openClawUsage // captured from final chunk if present
 
 	for scanner.Scan() {
 		line := bytes.TrimSpace(scanner.Bytes())
@@ -212,6 +252,11 @@ func (c *HermesClient) RunTurnStream(
 		var chunk hermesSSEChunk
 		if err := json.Unmarshal(data, &chunk); err != nil {
 			continue
+		}
+		// Stream may include a final chunk with usage but empty
+		// choices — capture it without emitting an agent.message.
+		if chunk.Usage != nil {
+			streamUsage = chunk.Usage
 		}
 		if len(chunk.Choices) == 0 {
 			continue
@@ -235,6 +280,18 @@ func (c *HermesClient) RunTurnStream(
 	if err := scanner.Err(); err != nil {
 		return fmt.Errorf("hermes stream read: %w", err)
 	}
+
+	duration := time.Since(start)
+	usage := streamUsage.toTurnUsage()
+	if usageEv, err := usageEvent(model, "hermes", duration, usage); err == nil {
+		_ = onEvent(usageEv)
+	}
+	logTurn("backend", "hermes", "session", req.SessionID,
+		"model", model, "stream", true,
+		"duration_ms", duration.Milliseconds(),
+		"input_tokens", valueOrZero(usage, func(u *TurnUsage) int { return u.InputTokens }),
+		"output_tokens", valueOrZero(usage, func(u *TurnUsage) int { return u.OutputTokens }),
+		"chars", accumulated.Len())
 
 	if !emitChunk {
 		ev, err := agentMessageEvent(chunkID, "")
