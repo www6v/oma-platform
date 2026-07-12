@@ -3,6 +3,7 @@ package harness
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -11,88 +12,119 @@ import (
 	"testing"
 )
 
-// hermesStub records the last request and serves canned responses.
-type hermesStub struct {
-	mu        sync.Mutex
-	lastBody  []byte
-	lastAuth  string
-	lastModel string
+// hermesRunStub is a minimal Runs-API test server. It accepts
+// POST /v1/runs and returns a fixed run_id, then serves the supplied
+// SSE lines at GET /v1/runs/{id}/events. Also records the create-run
+// request body for assertions.
+type hermesRunStub struct {
+	mu       sync.Mutex
+	lastBody []byte
+	lastAuth string
+	runID    string
+	// events is the list of raw JSON objects served as SSE data lines.
+	events []string
+	// createStatus overrides the POST /v1/runs status code.
+	createStatus int
+	// createBody overrides the POST /v1/runs response body.
+	createBody string
 }
 
-func newHermesStub(responseContent string) (*hermesStub, *httptest.Server) {
-	stub := &hermesStub{}
+func newHermesRunStub(runID string, events []string) (*hermesRunStub, *httptest.Server) {
+	stub := &hermesRunStub{runID: runID, events: events}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		stub.mu.Lock()
-		stub.lastAuth = r.Header.Get("Authorization")
-		body, _ := io.ReadAll(r.Body)
-		stub.lastBody = body
-		var req hermesChatRequest
-		_ = json.Unmarshal(body, &req)
-		stub.lastModel = req.Model
-		stub.mu.Unlock()
-
-		if r.URL.Path != "/v1/chat/completions" {
-			http.NotFound(w, r)
-			return
-		}
-
-		if req.Stream {
-			w.Header().Set("Content-Type", "text/event-stream")
-			// Split response into two chunks.
-			half := len(responseContent) / 2
-			if half == 0 {
-				half = len(responseContent)
-			}
-			chunks := []string{responseContent[:half], responseContent[half:]}
-			for _, c := range chunks {
-				chunk := hermesSSEChunk{}
-				if len(chunk.Choices) == 0 {
-					chunk.Choices = make([]struct {
-						Delta struct {
-							Content string `json:"content"`
-						} `json:"delta"`
-						FinishReason *string `json:"finish_reason"`
-					}, 1)
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/runs":
+			body, _ := io.ReadAll(r.Body)
+			stub.mu.Lock()
+			stub.lastAuth = r.Header.Get("Authorization")
+			stub.lastBody = body
+			if stub.createStatus != 0 {
+				w.WriteHeader(stub.createStatus)
+				if stub.createBody != "" {
+					_, _ = w.Write([]byte(stub.createBody))
+				} else {
+					resp, _ := json.Marshal(map[string]string{"run_id": stub.runID})
+					_, _ = w.Write(resp)
 				}
-				chunk.Choices[0].Delta.Content = c
-				data, _ := json.Marshal(chunk)
-				_, _ = w.Write([]byte("data: "))
-				_, _ = w.Write(data)
-				_, _ = w.Write([]byte("\n\n"))
+			} else {
+				resp, _ := json.Marshal(map[string]string{"run_id": stub.runID})
+				_, _ = w.Write(resp)
+			}
+			stub.mu.Unlock()
+
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/v1/runs/"):
+			if r.Header.Get("Accept") != "text/event-stream" {
+				t := "expected Accept: text/event-stream"
+				http.Error(w, t, http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "text/event-stream")
+			for _, ev := range stub.events {
+				_, _ = fmt.Fprintf(w, "data: %s\n\n", ev)
 				if f, ok := w.(http.Flusher); ok {
 					f.Flush()
 				}
 			}
-			_, _ = w.Write([]byte("data: [DONE]\n\n"))
-			return
-		}
 
-		resp := hermesChatResponse{}
-		resp.Choices = make([]struct {
-			Message struct {
-				Role    string `json:"role"`
-				Content string `json:"content"`
-			} `json:"message"`
-			FinishReason string `json:"finish_reason"`
-		}, 1)
-		resp.Choices[0].Message.Role = "assistant"
-		resp.Choices[0].Message.Content = responseContent
-		resp.Choices[0].FinishReason = "stop"
-		// Stub usage so tests can assert TurnResponse.Usage is
-		// populated. Real Hermes always returns this.
-		resp.Usage = &openClawUsage{
-			PromptTokens:     42,
-			CompletionTokens: 7,
-			TotalTokens:      49,
+		default:
+			http.NotFound(w, r)
 		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	return stub, ts
 }
 
+// sse helpers — build a JSON string for one SSE data line.
+func sseToolStarted(tool, preview string) string {
+	b, _ := json.Marshal(map[string]any{
+		"event": "tool.started", "run_id": "run_1",
+		"tool": tool, "preview": preview,
+	})
+	return string(b)
+}
+
+func sseToolCompleted(tool string, duration float64, errored bool) string {
+	b, _ := json.Marshal(map[string]any{
+		"event": "tool.completed", "run_id": "run_1",
+		"tool": tool, "duration": duration, "error": errored,
+	})
+	return string(b)
+}
+
+func sseDelta(text string) string {
+	b, _ := json.Marshal(map[string]any{
+		"event": "message.delta", "run_id": "run_1", "delta": text,
+	})
+	return string(b)
+}
+
+func sseRunCompleted(output string, usage *openClawUsage) string {
+	payload := map[string]any{
+		"event": "run.completed", "run_id": "run_1", "output": output,
+	}
+	if usage != nil {
+		payload["usage"] = usage
+	}
+	b, _ := json.Marshal(payload)
+	return string(b)
+}
+
+func sseRunFailed(reason string) string {
+	b, _ := json.Marshal(map[string]any{
+		"event": "run.failed", "run_id": "run_1", "reason": reason,
+	})
+	return string(b)
+}
+
 func TestHermesClient_RunTurn_Basic(t *testing.T) {
-	stub, ts := newHermesStub("hello from hermes")
+	stub, ts := newHermesRunStub("run_abc", []string{
+		sseToolStarted("terminal", "echo hello"),
+		sseToolCompleted("terminal", 0.317, false),
+		sseDelta("The output is:"),
+		sseDelta(" hello"),
+		sseRunCompleted("The output is: hello", &openClawUsage{
+			PromptTokens: 100, CompletionTokens: 5, TotalTokens: 105,
+		}),
+	})
 	defer ts.Close()
 
 	c := &HermesClient{
@@ -102,30 +134,32 @@ func TestHermesClient_RunTurn_Basic(t *testing.T) {
 	}
 	resp, err := c.RunTurn(context.Background(), TurnRequest{
 		SessionID: "sess-1",
+		Agent:     AgentSnapshot{SystemPrompt: "Be helpful."},
 		Events: []json.RawMessage{
-			json.RawMessage(`{"type":"user.message","content":[{"type":"text","text":"hi"}]}`),
+			json.RawMessage(`{"type":"user.message","content":[{"type":"text","text":"run echo hello"}]}`),
 		},
 	})
 	if err != nil {
 		t.Fatalf("RunTurn: %v", err)
 	}
-	agentEv := mustFindAgentMessage(t, resp.Events)
-	content := agentEv["content"].([]any)
-	first := content[0].(map[string]any)
-	if first["text"] != "hello from hermes" {
-		t.Errorf("text=%q", first["text"])
+
+	mustFindToolUse(t, resp.Events, "terminal")
+	mustFindToolResult(t, resp.Events, "terminal", "(completed in 0.317s)")
+	msg := mustFindAgentMessage(t, resp.Events)
+	text := firstAgentText(t, msg)
+	if text != "The output is: hello" {
+		t.Errorf("final text=%q", text)
 	}
-	// Usage span should also be present.
 	mustFindUsageSpan(t, resp.Events, "hermes", "hermes-agent")
-	// TurnResponse.Usage should be populated from upstream usage.
+
 	if resp.Usage == nil {
 		t.Fatal("expected resp.Usage to be populated")
 	}
-	if resp.Usage.InputTokens != 42 {
-		t.Errorf("InputTokens=%d want 42", resp.Usage.InputTokens)
+	if resp.Usage.InputTokens != 100 {
+		t.Errorf("InputTokens=%d want 100", resp.Usage.InputTokens)
 	}
-	if resp.Usage.OutputTokens != 7 {
-		t.Errorf("OutputTokens=%d want 7", resp.Usage.OutputTokens)
+	if resp.Usage.OutputTokens != 5 {
+		t.Errorf("OutputTokens=%d want 5", resp.Usage.OutputTokens)
 	}
 
 	stub.mu.Lock()
@@ -133,13 +167,28 @@ func TestHermesClient_RunTurn_Basic(t *testing.T) {
 	if stub.lastAuth != "Bearer hermes-test-key" {
 		t.Errorf("auth=%q", stub.lastAuth)
 	}
-	if stub.lastModel != "hermes-agent" {
-		t.Errorf("model=%q", stub.lastModel)
+	var body map[string]any
+	if err := json.Unmarshal(stub.lastBody, &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["session_id"] != "sess-1" {
+		t.Errorf("session_id=%v", body["session_id"])
+	}
+	if body["instructions"] != "Be helpful." {
+		t.Errorf("instructions=%v", body["instructions"])
+	}
+	if body["input"] != "run echo hello" {
+		t.Errorf("input=%v", body["input"])
+	}
+	if body["model"] != "hermes-agent" {
+		t.Errorf("model=%v", body["model"])
 	}
 }
 
 func TestHermesClient_RunTurn_DefaultModel(t *testing.T) {
-	stub, ts := newHermesStub("ok")
+	stub, ts := newHermesRunStub("run_x", []string{
+		sseRunCompleted("ok", nil),
+	})
 	defer ts.Close()
 
 	c := &HermesClient{GatewayURL: ts.URL, Token: "k"}
@@ -153,54 +202,17 @@ func TestHermesClient_RunTurn_DefaultModel(t *testing.T) {
 	}
 	stub.mu.Lock()
 	defer stub.mu.Unlock()
-	if stub.lastModel != "hermes-agent" {
-		t.Errorf("default model=%q want hermes-agent", stub.lastModel)
+	var body map[string]any
+	_ = json.Unmarshal(stub.lastBody, &body)
+	if body["model"] != "hermes-agent" {
+		t.Errorf("default model=%v want hermes-agent", body["model"])
 	}
 }
 
-func TestHermesClient_RunTurn_SendsFullHistory(t *testing.T) {
-	stub, ts := newHermesStub("ok")
-	defer ts.Close()
-
-	c := &HermesClient{GatewayURL: ts.URL, Token: "k"}
-	_, err := c.RunTurn(context.Background(), TurnRequest{
-		Agent: AgentSnapshot{SystemPrompt: "Be brief."},
-		Events: []json.RawMessage{
-			json.RawMessage(`{"type":"user.message","content":[{"type":"text","text":"first"}]}`),
-			json.RawMessage(`{"type":"agent.message","id":"a1","content":[{"type":"text","text":"response1"}]}`),
-			json.RawMessage(`{"type":"user.message","content":[{"type":"text","text":"second"}]}`),
-		},
+func TestHermesClient_RunTurn_NoUserMessage_FallsBackToContinue(t *testing.T) {
+	stub, ts := newHermesRunStub("run_y", []string{
+		sseRunCompleted("ok", nil),
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	stub.mu.Lock()
-	defer stub.mu.Unlock()
-	var req hermesChatRequest
-	if err := json.Unmarshal(stub.lastBody, &req); err != nil {
-		t.Fatal(err)
-	}
-	// Expected: system + user:first + assistant:response1 + user:second = 4
-	if len(req.Messages) != 4 {
-		t.Fatalf("messages=%d want 4: %+v", len(req.Messages), req.Messages)
-	}
-	if req.Messages[0].Role != "system" || req.Messages[0].Content != "Be brief." {
-		t.Errorf("msg[0]=%+v", req.Messages[0])
-	}
-	if req.Messages[1].Role != "user" || req.Messages[1].Content != "first" {
-		t.Errorf("msg[1]=%+v", req.Messages[1])
-	}
-	if req.Messages[2].Role != "assistant" || req.Messages[2].Content != "response1" {
-		t.Errorf("msg[2]=%+v", req.Messages[2])
-	}
-	if req.Messages[3].Role != "user" || req.Messages[3].Content != "second" {
-		t.Errorf("msg[3]=%+v", req.Messages[3])
-	}
-}
-
-func TestHermesClient_RunTurn_NoUserMessage_AppendsContinue(t *testing.T) {
-	stub, ts := newHermesStub("ok")
 	defer ts.Close()
 
 	c := &HermesClient{GatewayURL: ts.URL, Token: "k"}
@@ -214,14 +226,35 @@ func TestHermesClient_RunTurn_NoUserMessage_AppendsContinue(t *testing.T) {
 	}
 	stub.mu.Lock()
 	defer stub.mu.Unlock()
-	var req hermesChatRequest
-	_ = json.Unmarshal(stub.lastBody, &req)
-	if len(req.Messages) != 1 || req.Messages[0].Role != "user" || req.Messages[0].Content != "(continue)" {
-		t.Errorf("expected fallback (continue) message, got %+v", req.Messages)
+	var body map[string]any
+	_ = json.Unmarshal(stub.lastBody, &body)
+	if body["input"] != "(continue)" {
+		t.Errorf("input=%v want (continue)", body["input"])
 	}
 }
 
-func TestHermesClient_RunTurn_HTTPError(t *testing.T) {
+func TestHermesClient_RunTurn_Failed(t *testing.T) {
+	_, ts := newHermesRunStub("run_fail", []string{
+		sseToolStarted("terminal", "rm -rf /"),
+		sseRunFailed("tool rejected"),
+	})
+	defer ts.Close()
+
+	c := &HermesClient{GatewayURL: ts.URL, Token: "k"}
+	_, err := c.RunTurn(context.Background(), TurnRequest{
+		Events: []json.RawMessage{
+			json.RawMessage(`{"type":"user.message","content":[{"type":"text","text":"go"}]}`),
+		},
+	})
+	if err == nil {
+		t.Fatal("expected error for run.failed")
+	}
+	if !strings.Contains(err.Error(), "tool rejected") {
+		t.Errorf("err=%v", err)
+	}
+}
+
+func TestHermesClient_RunTurn_CreateHTTPError(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"boom"}`, http.StatusInternalServerError)
 	}))
@@ -241,15 +274,23 @@ func TestHermesClient_RunTurn_HTTPError(t *testing.T) {
 	}
 }
 
-func TestHermesClient_RunTurnStream(t *testing.T) {
-	_, ts := newHermesStub("hello world")
+func TestHermesClient_RunTurnStream_EmitsProgressively(t *testing.T) {
+	_, ts := newHermesRunStub("run_s", []string{
+		sseToolStarted("terminal", "ls"),
+		sseToolCompleted("terminal", 0.1, false),
+		sseDelta("first "),
+		sseDelta("second"),
+		sseRunCompleted("first second", &openClawUsage{
+			PromptTokens: 10, CompletionTokens: 2, TotalTokens: 12,
+		}),
+	})
 	defer ts.Close()
 
 	c := &HermesClient{GatewayURL: ts.URL, Token: "k"}
 	var events []json.RawMessage
 	err := c.RunTurnStream(context.Background(), TurnRequest{
 		Events: []json.RawMessage{
-			json.RawMessage(`{"type":"user.message","content":[{"type":"text","text":"hi"}]}`),
+			json.RawMessage(`{"type":"user.message","content":[{"type":"text","text":"go"}]}`),
 		},
 	}, func(ev json.RawMessage) error {
 		events = append(events, ev)
@@ -258,11 +299,31 @@ func TestHermesClient_RunTurnStream(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunTurnStream: %v", err)
 	}
-	if len(events) == 0 {
-		t.Fatal("no events emitted")
+
+	// Order: tool_use → tool_result → agent.message → agent.message → span.model_request_end
+	types := make([]string, 0, len(events))
+	for _, raw := range events {
+		var m map[string]any
+		_ = json.Unmarshal(raw, &m)
+		types = append(types, m["type"].(string))
 	}
-	// Find the last agent.message event — a span.model_request_end is
-	// now appended after the content events.
+	want := []string{
+		"agent.tool_use",
+		"agent.tool_result",
+		"agent.message",
+		"agent.message",
+		"span.model_request_end",
+	}
+	if len(types) != len(want) {
+		t.Fatalf("events=%v want %v", types, want)
+	}
+	for i, w := range want {
+		if types[i] != w {
+			t.Errorf("event[%d]=%q want %q", i, types[i], w)
+		}
+	}
+
+	// Final agent.message should carry the accumulated text.
 	var lastAgent map[string]any
 	for i := len(events) - 1; i >= 0; i-- {
 		var ev map[string]any
@@ -272,89 +333,128 @@ func TestHermesClient_RunTurnStream(t *testing.T) {
 			break
 		}
 	}
-	if lastAgent == nil {
-		t.Fatal("no agent.message event in stream")
-	}
-	content := lastAgent["content"].([]any)
-	first := content[0].(map[string]any)
-	if first["text"] != "hello world" {
-		t.Errorf("final text=%q", first["text"])
-	}
-	// Also verify the usage span was emitted.
-	var sawSpan bool
-	for _, ev := range events {
-		var m map[string]any
-		_ = json.Unmarshal(ev, &m)
-		if m["type"] == "span.model_request_end" {
-			sawSpan = true
-			if m["provider"] != "hermes" {
-				t.Errorf("span provider=%v want hermes", m["provider"])
-			}
-			if m["model"] != "hermes-agent" {
-				t.Errorf("span model=%v want hermes-agent", m["model"])
-			}
-		}
-	}
-	if !sawSpan {
-		t.Error("expected span.model_request_end event in stream")
+	if firstAgentText(t, lastAgent) != "first second" {
+		t.Errorf("final text=%q", firstAgentText(t, lastAgent))
 	}
 }
 
-func TestEventsToHermesMessages(t *testing.T) {
-	events := []json.RawMessage{
-		json.RawMessage(`{"type":"user.message","content":[{"type":"text","text":"hello"}]}`),
-		json.RawMessage(`{"type":"session.lifecycle","phase":"turn_start"}`), // skipped
-		json.RawMessage(`{"type":"agent.message","id":"a1","content":[{"type":"text","text":"hi back"}]}`),
-		json.RawMessage(`{"type":"user.message","content":[{"type":"text","text":"how"},{"type":"text","text":" are you"}]}`),
+func TestHermesClient_RunTurnStream_ToolFailed_MarksResultFailed(t *testing.T) {
+	_, ts := newHermesRunStub("run_e", []string{
+		sseToolStarted("terminal", "fail"),
+		sseToolCompleted("terminal", 0.05, true),
+		sseRunCompleted("error happened", nil),
+	})
+	defer ts.Close()
+
+	c := &HermesClient{GatewayURL: ts.URL, Token: "k"}
+	var events []json.RawMessage
+	err := c.RunTurnStream(context.Background(), TurnRequest{
+		Events: []json.RawMessage{
+			json.RawMessage(`{"type":"user.message","content":[{"type":"text","text":"go"}]}`),
+		},
+	}, func(ev json.RawMessage) error {
+		events = append(events, ev)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("RunTurnStream: %v", err)
 	}
-	got := eventsToHermesMessages(events)
-	if len(got) != 3 {
-		t.Fatalf("len=%d want 3: %+v", len(got), got)
+	mustFindToolResult(t, events, "terminal", "(failed)")
+}
+
+func TestHermesClient_RunTurnStream_NoDeltasEmitsOutput(t *testing.T) {
+	// Some runs may complete with a final output but no deltas
+	// (e.g. a tool-only turn that produced no assistant text until
+	// the final answer). We should still see one agent.message.
+	_, ts := newHermesRunStub("run_nod", []string{
+		sseRunCompleted("final answer", nil),
+	})
+	defer ts.Close()
+
+	c := &HermesClient{GatewayURL: ts.URL, Token: "k"}
+	var events []json.RawMessage
+	err := c.RunTurnStream(context.Background(), TurnRequest{
+		Events: []json.RawMessage{
+			json.RawMessage(`{"type":"user.message","content":[{"type":"text","text":"go"}]}`),
+		},
+	}, func(ev json.RawMessage) error {
+		events = append(events, ev)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("RunTurnStream: %v", err)
 	}
-	if got[0].Role != "user" || got[0].Content != "hello" {
-		t.Errorf("msg[0]=%+v", got[0])
-	}
-	if got[1].Role != "assistant" || got[1].Content != "hi back" {
-		t.Errorf("msg[1]=%+v", got[1])
-	}
-	if got[2].Role != "user" || got[2].Content != "how are you" {
-		t.Errorf("msg[2]=%+v", got[2])
+	msg := mustFindAgentMessage(t, events)
+	if firstAgentText(t, msg) != "final answer" {
+		t.Errorf("text=%q", firstAgentText(t, msg))
 	}
 }
 
-func TestHasRole(t *testing.T) {
-	msgs := []hermesMessage{
-		{Role: "system", Content: "sys"},
-		{Role: "user", Content: "u"},
-	}
-	if !hasRole(msgs, "user") {
-		t.Error("expected user present")
-	}
-	if !hasRole(msgs, "system") {
-		t.Error("expected system present")
-	}
-	if hasRole(msgs, "assistant") {
-		t.Error("expected assistant absent")
-	}
-}
+// --- helpers ---------------------------------------------------------------
 
-// mustFindAgentMessage returns the first agent.message event parsed as
-// a map. Fails the test if none found.
 func mustFindAgentMessage(t *testing.T, events []json.RawMessage) map[string]any {
 	t.Helper()
+	// Return the LAST agent.message — the Runs API emits an
+	// agent.message per delta, each carrying the full accumulated
+	// text, so the last one is the final answer.
+	var found map[string]any
 	for _, raw := range events {
 		var ev map[string]any
 		_ = json.Unmarshal(raw, &ev)
 		if ev["type"] == "agent.message" {
+			found = ev
+		}
+	}
+	if found == nil {
+		t.Fatalf("no agent.message event in %d events", len(events))
+	}
+	return found
+}
+
+func firstAgentText(t *testing.T, ev map[string]any) string {
+	t.Helper()
+	content, ok := ev["content"].([]any)
+	if !ok || len(content) == 0 {
+		t.Fatalf("no content in event: %+v", ev)
+	}
+	first, ok := content[0].(map[string]any)
+	if !ok {
+		t.Fatalf("content[0] not a map: %+v", content[0])
+	}
+	text, _ := first["text"].(string)
+	return text
+}
+
+func mustFindToolUse(t *testing.T, events []json.RawMessage, name string) map[string]any {
+	t.Helper()
+	for _, raw := range events {
+		var ev map[string]any
+		_ = json.Unmarshal(raw, &ev)
+		if ev["type"] == "agent.tool_use" && ev["name"] == name {
 			return ev
 		}
 	}
-	t.Fatalf("no agent.message event found in %d events", len(events))
+	t.Fatalf("no agent.tool_use{name=%q} in %d events", name, len(events))
 	return nil
 }
 
-// mustFindUsageSpan asserts that a span.model_request_end event is
-// present with the expected provider and model fields.
+func mustFindToolResult(t *testing.T, events []json.RawMessage, name, content string) map[string]any {
+	t.Helper()
+	for _, raw := range events {
+		var ev map[string]any
+		_ = json.Unmarshal(raw, &ev)
+		if ev["type"] != "agent.tool_result" || ev["name"] != name {
+			continue
+		}
+		if got, _ := ev["content"].(string); got != content {
+			t.Errorf("tool_result content=%q want %q", got, content)
+		}
+		return ev
+	}
+	t.Fatalf("no agent.tool_result{name=%q, content=%q} in %d events", name, content, len(events))
+	return nil
+}
+
 func mustFindUsageSpan(t *testing.T, events []json.RawMessage, provider, model string) {
 	t.Helper()
 	for _, raw := range events {
