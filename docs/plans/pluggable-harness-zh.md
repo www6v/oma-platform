@@ -20,14 +20,37 @@
   （仅 schema；行由阶段 4 的池管理器写入）。Agent API 在创建时、以及在
   patch 把 `harness` 翻到 `"managed"` 的更新路径上，按
   `harness.KnownAgents` 校验 `runtime_binding.agent`。
+- 扩展阶段 4（中间版本）—— `managed` 真实客户端，直连现有共享网关。
+  已落到 `harness` 分支（commit `f33afc2`，2026-07-12）。
+  `OpenClawClient` 通过 OpenAI 兼容 `/v1/chat/completions` 调用 OpenClaw
+  Gateway，使用 `x-openclaw-session-key` 维持服务端会话；`HermesClient`
+  同样调 OpenAI 兼容接口，但因为 Hermes 无服务端状态，每轮重放完整历史。
+  `NewManagedFactory(oc, hc)` 按 `binding.Agent` 派发（`"hermes"` → Hermes，
+  其它 → OpenClaw）。Gateway 地址/token 通过 `OMA_OPENCLAW_*` 与
+  `OMA_HERMES_*` 环境变量注入；任一为空时回退到原 stub（向后兼容）。
+  该版本绕过了 per-tenant daemon 池，直接路由到 `124.221.28.203` 上
+  已经部署好的 OpenClaw（17772）和 Hermes（8642）。端到端已验证：
+  用户消息 → agent 回复 → 多轮对话（OpenClaw 通过 header 维持记忆；
+  Hermes 通过全历史重放）。
+- 可观测性（方案 §10.13 选项 1）—— 每轮埋点。已落到 `harness` 分支
+  （commit `c22deea`，2026-07-12）。两个 managed 客户端的流式/非流式
+  路径都会：捕获上游 token 用量（`TurnResponse.Usage`）、追加
+  `span.model_request_end` 事件（喂给既有 `usage.AggregateEvents` 管道
+  → `/v1/cost_report`）、写一行结构化日志
+  `managed.turn backend=… session=… model=… stream=… duration_ms=… input_tokens=… output_tokens=…`。
+  流式请求通过 `stream_options.include_usage=true` 在最后一个 SSE chunk
+  拿 token 数（上游遵循 OpenAI 扩展时生效）。
 
 **延期（保留在方案中作为设计参考，从活动架构图 §3 和 §10.13 中移除）：**
 
 - 基础阶段 2：`acp-proxy` harness kind —— `RuntimeClient`、用户自托管 daemon、
   `RuntimeRoom`、`acp-proxy-wire.md` 设计文档。
-- 扩展阶段 4：`SystemRuntimePool` 真实实现 + 冷启动 spawn 路径。
+- 扩展阶段 4（完整版）：`SystemRuntimePool` 真实实现 + 冷启动 spawn 路径、
+  per-tenant daemon 隔离。当前中间版本用共享网关替代，
+  直到真正需要租户隔离 / 规模扩展时再启动。
 - 扩展阶段 5：预热切到分级 + per-tenant 容量 + Console UX 翻转。
 - Console 集成（原阶段 3）—— 等 managed 路径可用再做。
+- 可观测性选项 2：`claude-acp` / `codex-acp` 客户端。
 
 ---
 
@@ -643,11 +666,14 @@ func (r *Registry) ClientFor(agent store.AgentConfig) (Client, error) {
 
 ### 10.9 迁移阶段（扩展）
 
-> **范围说明（2026-07-12）：** 基础阶段 1（registry 派发器）和扩展阶段 3
-> （managed stub + schema + API 校验）**已落到 `harness` 分支
-> （2026-07-12）**。剩余的扩展工作 —— 阶段 4（`SystemRuntimePool` 真实
-> 实现 + 冷启动）和阶段 5（预热切换 + 容量 + Console UX 翻转）——
-> **延期**到有租户真正需要 managed 路径的端到端能力时再启动。
+> **范围说明（2026-07-12）：** 基础阶段 1（registry 派发器）、扩展阶段 3
+> （managed stub + schema + API 校验）和扩展阶段 4 的**中间版本**已落到
+> `harness` 分支（2026-07-12）。中间版本的 `managed` 客户端（OpenClaw +
+> Hermes）直连平台侧的共享网关（`124.221.28.203`），绕过了 per-tenant
+> daemon 池 —— 详见顶部"实施状态"。剩余扩展工作 —— 阶段 4 完整版
+> （`SystemRuntimePool` + 冷启动 + per-tenant 隔离）和阶段 5（预热切换 +
+> 容量 + Console UX 翻转）—— **延期**到有租户真正需要 managed 路径的端到端
+> 能力时再启动。
 
 #### 阶段 3 —— 引入 `managed` kind（不改行为）
 

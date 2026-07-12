@@ -20,14 +20,43 @@
   023 (schema only; rows written by the Phase 4 pool manager). Agent API
   validates `runtime_binding.agent` against `harness.KnownAgents` on
   create and on update when the patch flips `harness` to `"managed"`.
+- Extension Phase 4 (interim) — real `managed` clients wired to existing
+  shared gateways. Landed on `harness` branch (commit `f33afc2`,
+  2026-07-12). `OpenClawClient` calls an OpenClaw Gateway over the
+  OpenAI-compatible `/v1/chat/completions`, using
+  `x-openclaw-session-key` for server-side session state; `HermesClient`
+  calls the same shape of API but replays the full conversation each turn
+  because Hermes is stateless. `NewManagedFactory(oc, hc)` dispatches on
+  `binding.Agent` (`"hermes"` → Hermes, anything else → OpenClaw).
+  Gateway URLs/tokens are injected via `OMA_OPENCLAW_*` and `OMA_HERMES_*`
+  environment variables; either missing falls back to the original stub
+  (backward-compatible). This version bypasses the per-tenant daemon pool
+  and routes directly to the OpenClaw (port 17772) and Hermes (port 8642)
+  deployments already running at `124.221.28.203`. End-to-end verified:
+  user message → agent reply → multi-turn conversation (OpenClaw keeps
+  memory via the header; Hermes via full-history replay).
+- Observability (option 1 from §10.13) — per-turn telemetry. Landed on
+  `harness` branch (commit `c22deea`, 2026-07-12). Both managed clients'
+  streaming and non-streaming paths now: capture upstream token usage
+  (`TurnResponse.Usage`), append a `span.model_request_end` event (feeds
+  the existing `usage.AggregateEvents` pipeline → `/v1/cost_report`), and
+  emit a one-line structured log
+  `managed.turn backend=… session=… model=… stream=… duration_ms=… input_tokens=… output_tokens=…`.
+  Streaming requests set `stream_options.include_usage=true` to pull token
+  counts from the final SSE chunk when the upstream honors the OpenAI
+  extension.
 
 **Deferred (remains in plan as design reference, removed from active diagrams §3 and §10.13):**
 
 - Base Phase 2: `acp-proxy` harness kind — `RuntimeClient`, user-hosted daemon via
   `RuntimeRoom`, `acp-proxy-wire.md` design doc.
-- Extension Phase 4: `SystemRuntimePool` real implementation + cold-start spawn path.
+- Extension Phase 4 (full): `SystemRuntimePool` real implementation + cold-start
+  spawn path + per-tenant daemon isolation. The interim version above
+  substitutes shared gateways; the full pool is deferred until tenant
+  isolation or scale actually requires it.
 - Extension Phase 5: Prewarm-to-tiered cutover + per-tenant capacity + Console UX flip.
 - Console integration (original Phase 3) until managed path is functional.
+- Observability option 2: `claude-acp` / `codex-acp` clients.
 
 ---
 
@@ -663,12 +692,16 @@ Default path becomes **Managed** (user picks agent kind only).
 
 ### 10.9 Migration phases (extension)
 
-> **Scope note (2026-07-12):** Base Phase 1 (registry dispatcher) and
-> Extension Phase 3 (managed stub + schema + API validation) have **landed
-> on the `harness` branch (2026-07-12)**. Remaining extension work — Phase 4
-> (`SystemRuntimePool` real implementation + cold start) and Phase 5
-> (prewarm cutover + capacity + Console UX flip) — is **DEFERRED** until a
-> tenant actually needs the managed path end-to-end.
+> **Scope note (2026-07-12):** Base Phase 1 (registry dispatcher), Extension
+> Phase 3 (managed stub + schema + API validation), and an **interim
+> Extension Phase 4** have landed on the `harness` branch (2026-07-12).
+> The interim `managed` clients (OpenClaw + Hermes) route to the shared
+> platform-side gateways at `124.221.28.203`, bypassing the per-tenant
+> daemon pool — see the Implementation Status section at the top for
+> details. Remaining extension work — full Phase 4 (`SystemRuntimePool` +
+> cold start + per-tenant isolation) and Phase 5 (prewarm cutover +
+> capacity + Console UX flip) — is **DEFERRED** until a tenant actually
+> needs the managed path end-to-end.
 
 #### Phase 3 — Introduce `managed` kind (no behavior change)
 
