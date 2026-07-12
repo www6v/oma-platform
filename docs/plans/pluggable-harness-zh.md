@@ -24,14 +24,13 @@
   已落到 `harness` 分支（commit `f33afc2`，2026-07-12）。
   `OpenClawClient` 通过 OpenAI 兼容 `/v1/chat/completions` 调用 OpenClaw
   Gateway，使用 `x-openclaw-session-key` 维持服务端会话；`HermesClient`
-  同样调 OpenAI 兼容接口，但因为 Hermes 无服务端状态，每轮重放完整历史。
+  最初也调同形状接口（chat completions 无服务端状态，每轮重放完整历史），
+  随后被下面的 Runs API 集成取代（commit `ee7adcd`）。
   `NewManagedFactory(oc, hc)` 按 `binding.Agent` 派发（`"hermes"` → Hermes，
   其它 → OpenClaw）。Gateway 地址/token 通过 `OMA_OPENCLAW_*` 与
   `OMA_HERMES_*` 环境变量注入；任一为空时回退到原 stub（向后兼容）。
   该版本绕过了 per-tenant daemon 池，直接路由到 `124.221.28.203` 上
-  已经部署好的 OpenClaw（17772）和 Hermes（8642）。端到端已验证：
-  用户消息 → agent 回复 → 多轮对话（OpenClaw 通过 header 维持记忆；
-  Hermes 通过全历史重放）。
+  已经部署好的 OpenClaw（17772）和 Hermes（8642）。端到端已验证。
 - 可观测性（方案 §10.13 选项 1）—— 每轮埋点。已落到 `harness` 分支
   （commit `c22deea`，2026-07-12）。两个 managed 客户端的流式/非流式
   路径都会：捕获上游 token 用量（`TurnResponse.Usage`）、追加
@@ -40,6 +39,26 @@
   `managed.turn backend=… session=… model=… stream=… duration_ms=… input_tokens=… output_tokens=…`。
   流式请求通过 `stream_options.include_usage=true` 在最后一个 SSE chunk
   拿 token 数（上游遵循 OpenAI 扩展时生效）。
+- Hermes Runs API —— 完整 session event 词汇。已落到 `harness` 分支
+  （commit `ee7adcd`，2026-07-12）。把基于 chat-completions 的
+  `HermesClient` 换成驱动 Hermes Runs API
+  （`POST /v1/runs` + `GET /v1/runs/{id}/events` SSE 流）的版本。Hermes
+  现在发射和 pipy 一致的 session event 词汇 —— `agent.tool_use`、
+  `agent.tool_result`、增量 `agent.message`、`span.model_request_end` ——
+  session 详情页可以看到工具活动，而不只是一块文字。通过 `session_id`
+  使用 Hermes 服务端会话状态，取代客户端历史重放：每轮只发送最新的
+  用户消息作为 `input`，系统提示作为 `instructions`。事件映射：
+  `tool.started{tool, preview}` → `agent.tool_use{name, input:{preview}}`；
+  `tool.completed{duration, error}` →
+  `agent.tool_result{content:"(completed in Xs)"|"(failed)"}`（Hermes 不
+  暴露原始工具输出，真实文本在随后的 `message.delta` 里浮现）；
+  `message.delta{delta}` → 累积的 `agent.message`；
+  `run.completed{output, usage}` → 最终的 `agent.message`（若无 deltas）
+  + `span.model_request_end`。`reasoning.available` 被跳过（oma 暂时没
+  有 reasoning content block）。类型名 `HermesClient` 保留，registry/
+  factory 接线不变。已对 `124.221.28.203:8642` 做 E2E 验证：一次工具
+  调用产生 `tool_use{name:terminal}` → `tool_result` → 5 条递增
+  `agent.message` → `span.model_request_end`。
 
 **延期（保留在方案中作为设计参考，从活动架构图 §3 和 §10.13 中移除）：**
 

@@ -24,17 +24,17 @@
   shared gateways. Landed on `harness` branch (commit `f33afc2`,
   2026-07-12). `OpenClawClient` calls an OpenClaw Gateway over the
   OpenAI-compatible `/v1/chat/completions`, using
-  `x-openclaw-session-key` for server-side session state; `HermesClient`
-  calls the same shape of API but replays the full conversation each turn
-  because Hermes is stateless. `NewManagedFactory(oc, hc)` dispatches on
-  `binding.Agent` (`"hermes"` → Hermes, anything else → OpenClaw).
-  Gateway URLs/tokens are injected via `OMA_OPENCLAW_*` and `OMA_HERMES_*`
-  environment variables; either missing falls back to the original stub
-  (backward-compatible). This version bypasses the per-tenant daemon pool
-  and routes directly to the OpenClaw (port 17772) and Hermes (port 8642)
-  deployments already running at `124.221.28.203`. End-to-end verified:
-  user message → agent reply → multi-turn conversation (OpenClaw keeps
-  memory via the header; Hermes via full-history replay).
+  `x-openclaw-session-key` for server-side session state. `HermesClient`
+  initially called the same shape of API (replaying full history per
+  turn because the chat-completions endpoint is stateless); this was
+  superseded by the Runs API integration below (commit `ee7adcd`).
+  `NewManagedFactory(oc, hc)` dispatches on `binding.Agent` (`"hermes"`
+  → Hermes, anything else → OpenClaw). Gateway URLs/tokens are injected
+  via `OMA_OPENCLAW_*` and `OMA_HERMES_*` environment variables; either
+  missing falls back to the original stub (backward-compatible). This
+  version bypasses the per-tenant daemon pool and routes directly to the
+  OpenClaw (port 17772) and Hermes (port 8642) deployments already
+  running at `124.221.28.203`. End-to-end verified.
 - Observability (option 1 from §10.13) — per-turn telemetry. Landed on
   `harness` branch (commit `c22deea`, 2026-07-12). Both managed clients'
   streaming and non-streaming paths now: capture upstream token usage
@@ -45,6 +45,28 @@
   Streaming requests set `stream_options.include_usage=true` to pull token
   counts from the final SSE chunk when the upstream honors the OpenAI
   extension.
+- Hermes Runs API — full session event vocabulary. Landed on `harness`
+  branch (commit `ee7adcd`, 2026-07-12). Replaced the chat-completions
+  `HermesClient` with one that drives Hermes's Runs API
+  (`POST /v1/runs` + `GET /v1/runs/{id}/events` SSE stream). Hermes now
+  emits the same session event vocabulary pipy does —
+  `agent.tool_use`, `agent.tool_result`, incremental `agent.message`, and
+  `span.model_request_end` — so the session detail UI shows tool
+  activity instead of opaque text blocks. Server-side session state via
+  `session_id` replaces client-side history replay: only the latest user
+  message travels as `input` alongside the system prompt as
+  `instructions`. Mapping: `tool.started{tool, preview}` →
+  `agent.tool_use{name, input:{preview}}`; `tool.completed{duration, error}`
+  → `agent.tool_result{content:"(completed in Xs)"|"(failed)"}` (raw tool
+  output isn't exposed by Hermes; actual text surfaces in the next
+  `message.delta`); `message.delta{delta}` → accumulated
+  `agent.message`; `run.completed{output, usage}` → final
+  `agent.message` (if no deltas arrived) + `span.model_request_end`.
+  `reasoning.available` is skipped (oma has no reasoning content block
+  yet). Type name `HermesClient` preserved so registry/factory wiring is
+  unchanged. E2E verified against live `124.221.28.203:8642`: tool call
+  round-trip produced `tool_use{name:terminal}` → `tool_result` → 5
+  progressive `agent.message` events → `span.model_request_end`.
 
 **Deferred (remains in plan as design reference, removed from active diagrams §3 and §10.13):**
 
