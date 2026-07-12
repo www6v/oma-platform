@@ -13,12 +13,13 @@
   （commit `9c5e8f3`，2026-07-12）。`Machine` 持有一个 `HarnessRegistry`，
   根据 agent 的 `_oma.harness` 元数据解析出每轮使用的 `Client`。
   `OMA_FAKE_HARNESS` 通过 `RegistryConfig.Force` 保留。
-
-**当前范围（下一步）：**
-
-- 扩展阶段 3：`ManagedClient` stub（在阶段 4 之前 `RunTurn` 返回 501）
-  + `system_runtimes` / `system_runtime_leases` 表 + Agent API 按
-  `KnownAgents` 校验 `managed.agent`。
+- 扩展阶段 3 —— `managed` kind stub + schema + API 校验。已落到
+  `harness` 分支（2026-07-12）。`ManagedClient` stub 的 `RunTurn` 返回
+  "managed harness not implemented (Phase 4 pending)"。
+  `system_runtimes` + `system_runtime_leases` 表通过 migration 023 添加
+  （仅 schema；行由阶段 4 的池管理器写入）。Agent API 在创建时、以及在
+  patch 把 `harness` 翻到 `"managed"` 的更新路径上，按
+  `harness.KnownAgents` 校验 `runtime_binding.agent`。
 
 **延期（保留在方案中作为设计参考，从活动架构图 §3 和 §10.13 中移除）：**
 
@@ -642,12 +643,11 @@ func (r *Registry) ClientFor(agent store.AgentConfig) (Client, error) {
 
 ### 10.9 迁移阶段（扩展）
 
-> **范围说明（2026-07-12）：** 基础阶段 1（registry 派发器）**已落到
-> `harness` 分支，commit `9c5e8f3`，2026-07-12**。下一步是当前范围的
-> **阶段 3**（引入 `ManagedClient` stub + DB 表 + Agent API 校验）。
-> 阶段 4（`SystemRuntimePool` 真实实现 + 冷启动）和阶段 5（预热切换 +
-> 容量 + Console UX 翻转）**仍延期** —— 等扩展阶段 3 落地并验证端到端
-> 正确性后再启动。
+> **范围说明（2026-07-12）：** 基础阶段 1（registry 派发器）和扩展阶段 3
+> （managed stub + schema + API 校验）**已落到 `harness` 分支
+> （2026-07-12）**。剩余的扩展工作 —— 阶段 4（`SystemRuntimePool` 真实
+> 实现 + 冷启动）和阶段 5（预热切换 + 容量 + Console UX 翻转）——
+> **延期**到有租户真正需要 managed 路径的端到端能力时再启动。
 
 #### 阶段 3 —— 引入 `managed` kind（不改行为）
 

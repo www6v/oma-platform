@@ -1,6 +1,7 @@
 package harness
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
@@ -26,6 +27,40 @@ type ManagedBinding struct {
 	// Agent is the ACP agent id the platform should spawn
 	// (hermes | openclaw | claude-acp | codex-acp).
 	Agent string `json:"agent"`
+}
+
+// KnownAgents lists the managed-agent ids the platform may spawn. Used by
+// the Agent API to reject unknown runtime_binding.agent values at create
+// time (Phase 3), and by the Phase 4 pool to map ids to daemon images.
+var KnownAgents = []string{
+	"hermes",
+	"openclaw",
+	"claude-acp",
+	"codex-acp",
+}
+
+// IsKnownAgent reports whether agent is in KnownAgents.
+func IsKnownAgent(agent string) bool {
+	for _, k := range KnownAgents {
+		if k == agent {
+			return true
+		}
+	}
+	return false
+}
+
+// ManagedClient is the Phase 3 stub for harness=managed. RunTurn returns an
+// error indicating the managed pool is not yet implemented (Phase 4 will
+// replace this with a real pool-backed client).
+type ManagedClient struct{}
+
+// managedErr is the sentinel error returned by ManagedClient.RunTurn and
+// surfaced as an HTTP 501-equivalent through failTurn.
+const managedNotImplemented = "managed harness not implemented (Phase 4 pending)"
+
+// RunTurn implements Client. Always returns managedNotImplemented.
+func (ManagedClient) RunTurn(context.Context, TurnRequest) (TurnResponse, error) {
+	return TurnResponse{}, fmt.Errorf("%s", managedNotImplemented)
 }
 
 // Registry resolves a harness.Client per agent based on the agent's
@@ -54,15 +89,23 @@ type RegistryConfig struct {
 	Force Client
 }
 
-// NewRegistry builds a Registry from cfg.
+// NewRegistry builds a Registry from cfg. When ManagedFactory is nil, the
+// registry falls back to a ManagedClient stub whose RunTurn returns 501 —
+// Phase 3 behavior. Phase 4 wires a real pool-backed factory.
 func NewRegistry(cfg RegistryConfig) *Registry {
 	fake := cfg.Fake
 	if fake == nil {
 		fake = &FakeClient{}
 	}
+	managedFactory := cfg.ManagedFactory
+	if managedFactory == nil {
+		managedFactory = func(ManagedBinding) (Client, error) {
+			return ManagedClient{}, nil
+		}
+	}
 	return &Registry{
 		defaultClient:  cfg.Default,
-		managedFactory: cfg.ManagedFactory,
+		managedFactory: managedFactory,
 		fakeClient:     fake,
 		forceClient:    cfg.Force,
 	}
@@ -71,8 +114,15 @@ func NewRegistry(cfg RegistryConfig) *Registry {
 // DefaultOnly builds a Registry that returns defaultClient for every agent
 // regardless of _oma.harness. Use this to migrate existing tests with a
 // 1-line change: `Harness: c` → `HarnessRegistry: DefaultOnly(c)`.
+// Managed kind falls back to the ManagedClient stub.
 func DefaultOnly(defaultClient Client) *Registry {
-	return &Registry{defaultClient: defaultClient, fakeClient: &FakeClient{}}
+	return &Registry{
+		defaultClient: defaultClient,
+		managedFactory: func(ManagedBinding) (Client, error) {
+			return ManagedClient{}, nil
+		},
+		fakeClient: &FakeClient{},
+	}
 }
 
 // ClientFor resolves the harness.Client for the given agent config.
@@ -94,9 +144,6 @@ func (r *Registry) ClientFor(agent store.AgentConfig) (Client, error) {
 		}
 		return r.defaultClient, nil
 	case KindManaged:
-		if r.managedFactory == nil {
-			return nil, fmt.Errorf("harness registry: managed kind not configured (Phase 4 pending)")
-		}
 		b, err := ParseManagedBinding(agent.RuntimeBinding)
 		if err != nil {
 			return nil, err

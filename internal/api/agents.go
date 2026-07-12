@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/open-ma/oma-building/internal/harness"
 	"github.com/open-ma/oma-building/internal/store"
 )
 
@@ -108,6 +109,9 @@ func buildCreateAgentInput(
 			input.AuxModelSpeed = auxSpeed
 		}
 	}
+	if msg := validateManagedBinding(input.Harness, input.RuntimeBinding); msg != "" {
+		return store.CreateAgentInput{}, msg
+	}
 	return input, ""
 }
 
@@ -195,7 +199,45 @@ func buildUpdateAgentInput(body agentPatchBody) (store.UpdateAgentInput, string)
 			}
 		}
 	}
+	if patch.Harness != nil && *patch.Harness == "managed" {
+		if msg := validateManagedBinding(*patch.Harness, patch.RuntimeBinding); msg != "" {
+			return store.UpdateAgentInput{}, msg
+		}
+	}
 	return patch, ""
+}
+
+// validateManagedBinding returns a non-empty error string if harness is
+// "managed" (or the legacy "pipy"-aliased default-loop is not the kind)
+// and runtime_binding fails harness.ParseManagedBinding or names an agent
+// outside harness.KnownAgents. Empty string means OK.
+//
+// Phase 3 of pluggable-harness: catch misconfigured managed agents at
+// write time instead of at first-turn dispatch.
+func validateManagedBinding(harnessKind string, runtimeBinding json.RawMessage) string {
+	if harnessKind != "managed" {
+		return ""
+	}
+	b, err := harness.ParseManagedBinding(runtimeBinding)
+	if err != nil {
+		return err.Error()
+	}
+	if !harness.IsKnownAgent(b.Agent) {
+		return "managed runtime_binding.agent must be one of " +
+			joinKnownAgents() + ", got " + b.Agent
+	}
+	return ""
+}
+
+func joinKnownAgents() string {
+	out := ""
+	for i, a := range harness.KnownAgents {
+		if i > 0 {
+			out += ", "
+		}
+		out += a
+	}
+	return out
 }
 
 func mountAgentRoutes(r chi.Router, agents *store.AgentRepo) {

@@ -13,12 +13,13 @@
   (commit `9c5e8f3`, 2026-07-12). `Machine` holds a `HarnessRegistry` and
   resolves the per-turn `Client` from the agent's `_oma.harness` metadata.
   `OMA_FAKE_HARNESS` is preserved via `RegistryConfig.Force`.
-
-**In scope (next):**
-
-- Extension Phase 3: `ManagedClient` stub (returns 501 on `RunTurn` until
-  Phase 4) + `system_runtimes` / `system_runtime_leases` tables + Agent API
-  validation of `managed.agent` against `KnownAgents`.
+- Extension Phase 3 — `managed` kind stub + schema + API validation. Landed
+  on `harness` branch (2026-07-12). `ManagedClient` stub returns
+  "managed harness not implemented (Phase 4 pending)" from `RunTurn`.
+  `system_runtimes` + `system_runtime_leases` tables added via migration
+  023 (schema only; rows written by the Phase 4 pool manager). Agent API
+  validates `runtime_binding.agent` against `harness.KnownAgents` on
+  create and on update when the patch flips `harness` to `"managed"`.
 
 **Deferred (remains in plan as design reference, removed from active diagrams §3 and §10.13):**
 
@@ -662,13 +663,12 @@ Default path becomes **Managed** (user picks agent kind only).
 
 ### 10.9 Migration phases (extension)
 
-> **Scope note (2026-07-12):** Base Phase 1 (registry dispatcher) **landed on
-> `harness` branch, commit `9c5e8f3`, 2026-07-12**. Next in scope is
-> **Phase 3** (introduce `ManagedClient` stub + DB tables + Agent API
-> validation). Phase 4 (`SystemRuntimePool` real implementation + cold start)
-> and Phase 5 (prewarm cutover + capacity + Console UX flip) remain
-> **DEFERRED** until extension Phase 3 lands and demonstrates end-to-end
-> correctness.
+> **Scope note (2026-07-12):** Base Phase 1 (registry dispatcher) and
+> Extension Phase 3 (managed stub + schema + API validation) have **landed
+> on the `harness` branch (2026-07-12)**. Remaining extension work — Phase 4
+> (`SystemRuntimePool` real implementation + cold start) and Phase 5
+> (prewarm cutover + capacity + Console UX flip) — is **DEFERRED** until a
+> tenant actually needs the managed path end-to-end.
 
 #### Phase 3 — Introduce `managed` kind (no behavior change)
 

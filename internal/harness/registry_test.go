@@ -93,14 +93,41 @@ func TestClientFor_Managed_MissingAgentField(t *testing.T) {
 	}
 }
 
-func TestClientFor_Managed_FactoryNotConfigured(t *testing.T) {
+func TestClientFor_Managed_FactoryNotConfigured_ReturnsStub(t *testing.T) {
 	r := NewRegistry(RegistryConfig{})
-	_, err := r.ClientFor(store.AgentConfig{
+	got, err := r.ClientFor(store.AgentConfig{
 		Harness:        "managed",
 		RuntimeBinding: json.RawMessage(`{"agent":"hermes"}`),
 	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := got.(ManagedClient); !ok {
+		t.Fatalf("expected ManagedClient stub, got %T", got)
+	}
+}
+
+func TestManagedClient_RunTurn_ReturnsNotImplemented(t *testing.T) {
+	c := ManagedClient{}
+	_, err := c.RunTurn(context.Background(), TurnRequest{})
 	if err == nil {
-		t.Fatalf("expected error when managed factory not configured")
+		t.Fatalf("expected error from ManagedClient.RunTurn")
+	}
+	if got := err.Error(); got != managedNotImplemented {
+		t.Fatalf("unexpected error: %q", got)
+	}
+}
+
+func TestIsKnownAgent(t *testing.T) {
+	for _, a := range KnownAgents {
+		if !IsKnownAgent(a) {
+			t.Errorf("expected %q to be known", a)
+		}
+	}
+	for _, a := range []string{"", "unknown", "HERMES", "hermes "} {
+		if IsKnownAgent(a) {
+			t.Errorf("expected %q to be unknown", a)
+		}
 	}
 }
 
@@ -158,7 +185,6 @@ func TestDefaultOnly_AlwaysReturnsDefault(t *testing.T) {
 	r := DefaultOnly(def)
 	// DefaultOnly covers the existing-test case where agents have no
 	// _oma.harness set. It accepts "" / "default-loop" / "pipy" / "fake".
-	// It does NOT silently swallow "managed" — that would mask test bugs.
 	for _, kind := range []string{"", "default-loop", "pipy", "fake"} {
 		got, err := r.ClientFor(store.AgentConfig{Harness: kind})
 		if err != nil {
@@ -168,13 +194,17 @@ func TestDefaultOnly_AlwaysReturnsDefault(t *testing.T) {
 			t.Fatalf("kind=%q: DefaultOnly should return default for harness kinds used by existing tests", kind)
 		}
 	}
-	// "managed" without a factory must still fail loudly.
-	_, err := r.ClientFor(store.AgentConfig{
+	// Phase 3: managed kind falls back to the ManagedClient stub so tests
+	// that happen to touch managed agents don't crash the registry.
+	got, err := r.ClientFor(store.AgentConfig{
 		Harness:        "managed",
 		RuntimeBinding: json.RawMessage(`{"agent":"hermes"}`),
 	})
-	if err == nil {
-		t.Fatalf("DefaultOnly should not silently serve managed kind")
+	if err != nil {
+		t.Fatalf("managed kind should resolve to stub: %v", err)
+	}
+	if _, ok := got.(ManagedClient); !ok {
+		t.Fatalf("expected ManagedClient stub, got %T", got)
 	}
 }
 
