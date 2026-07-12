@@ -185,6 +185,59 @@ func TestHermesClient_RunTurn_Basic(t *testing.T) {
 	}
 }
 
+func TestHermesClient_RunTurn_HermesUsageNaming(t *testing.T) {
+	// Hermes's run.completed event uses input_tokens / output_tokens
+	// (NOT the OpenAI prompt_tokens / completion_tokens). Verify we
+	// decode the Hermes naming correctly and surface it in both
+	// resp.Usage and the span event.
+	runCompleted := `{"event":"run.completed","run_id":"run_h","output":"ok",` +
+		`"usage":{"input_tokens":42,"output_tokens":7,"total_tokens":49}}`
+	_, ts := newHermesRunStub("run_h", []string{runCompleted})
+	defer ts.Close()
+
+	c := &HermesClient{GatewayURL: ts.URL, Token: "k"}
+	resp, err := c.RunTurn(context.Background(), TurnRequest{
+		Events: []json.RawMessage{
+			json.RawMessage(`{"type":"user.message","content":[{"type":"text","text":"hi"}]}`),
+		},
+	})
+	if err != nil {
+		t.Fatalf("RunTurn: %v", err)
+	}
+	if resp.Usage == nil {
+		t.Fatal("expected resp.Usage to be populated")
+	}
+	if resp.Usage.InputTokens != 42 {
+		t.Errorf("InputTokens=%d want 42", resp.Usage.InputTokens)
+	}
+	if resp.Usage.OutputTokens != 7 {
+		t.Errorf("OutputTokens=%d want 7", resp.Usage.OutputTokens)
+	}
+	// Span should carry the Hermes usage through to the aggregate pipeline.
+	var span map[string]any
+	for _, raw := range resp.Events {
+		var ev map[string]any
+		_ = json.Unmarshal(raw, &ev)
+		if ev["type"] == "span.model_request_end" {
+			span = ev
+			break
+		}
+	}
+	if span == nil {
+		t.Fatal("no span.model_request_end event")
+	}
+	usage, ok := span["model_usage"].(map[string]any)
+	if !ok {
+		t.Fatalf("span.model_usage not a map: %v", span["model_usage"])
+	}
+	if got, _ := usage["input_tokens"].(float64); got != 42 {
+		t.Errorf("span input_tokens=%v want 42", got)
+	}
+	if got, _ := usage["output_tokens"].(float64); got != 7 {
+		t.Errorf("span output_tokens=%v want 7", got)
+	}
+}
+
 func TestHermesClient_RunTurn_DefaultModel(t *testing.T) {
 	stub, ts := newHermesRunStub("run_x", []string{
 		sseRunCompleted("ok", nil),
