@@ -5,7 +5,7 @@ Agent Examples - High-level helper functions for agent operations.
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import httpx
 
@@ -15,23 +15,63 @@ if TYPE_CHECKING:
 _KEEP = os.getenv("OMA_KEEP_RESOURCES", "0") == "1"
 MODEL = {"id": "qwen3.7-plus"}
 
+# Supported harness types
+HarnessType = Literal["pipy", "hermes", "openclaw", "default-loop", "managed"]
+
+
+def _build_metadata(harness: HarnessType | None = None) -> dict[str, str] | None:
+    """
+    Build metadata dict with optional harness specification.
+
+    Args:
+        harness: Harness type to use. If None, uses default (pipy).
+
+    Returns:
+        Metadata dict or None if no harness specified
+    """
+    if harness is None:
+        return None
+
+    # Map friendly names to internal harness identifiers
+    harness_map = {
+        "pipy": "default-loop",
+        "hermes": "hermes",
+        "openclaw": "openclaw",
+        "default-loop": "default-loop",
+        "managed": "managed",
+    }
+
+    harness_value = harness_map.get(harness, harness)
+    return {"_oma.harness": harness_value}
+
 
 class AgentExamples:
     """Example operations for agents."""
 
     @staticmethod
-    def create_and_retrieve(client: anthropic.Anthropic, name: str = "sdk-e2e-create") -> dict:
+    def create_and_retrieve(
+        client: anthropic.Anthropic,
+        name: str = "sdk-e2e-create",
+        harness: HarnessType | None = None,
+    ) -> dict:
         """
         Create an agent and retrieve it to verify.
-        
+
         Args:
             client: Anthropic client instance
             name: Name for the agent
-            
+            harness: Harness type to use ("pipy", "hermes", "openclaw", "default-loop", "managed").
+                    Defaults to pipy if not specified.
+
         Returns:
             Dictionary with agent details
         """
-        agent = client.beta.agents.create(name=name, model=MODEL)
+        metadata = _build_metadata(harness)
+        create_kwargs = {"name": name, "model": MODEL}
+        if metadata:
+            create_kwargs["metadata"] = metadata
+
+        agent = client.beta.agents.create(**create_kwargs)
         try:
             assert agent.id
             assert agent.name == name
@@ -39,7 +79,7 @@ class AgentExamples:
             got = client.beta.agents.retrieve(agent.id)
             assert got.id == agent.id
             assert got.name == agent.name
-            
+
             return {"agent": agent, "retrieved": got}
         finally:
             if not _KEEP:
@@ -85,20 +125,28 @@ class AgentExamples:
     def update_agent(
         client: anthropic.Anthropic,
         name_before: str = "sdk-e2e-update-before",
-        name_after: str = "sdk-e2e-update-after"
+        name_after: str = "sdk-e2e-update-after",
+        harness: HarnessType | None = None,
     ) -> dict:
         """
         Create an agent, update it, and verify.
-        
+
         Args:
             client: Anthropic client instance
             name_before: Initial name for the agent
             name_after: Updated name for the agent
-            
+            harness: Harness type to use ("pipy", "hermes", "openclaw", "default-loop", "managed").
+                    Defaults to pipy if not specified.
+
         Returns:
             Dictionary with agent details
         """
-        agent = client.beta.agents.create(name=name_before, model=MODEL)
+        metadata = _build_metadata(harness)
+        create_kwargs = {"name": name_before, "model": MODEL}
+        if metadata:
+            create_kwargs["metadata"] = metadata
+
+        agent = client.beta.agents.create(**create_kwargs)
         try:
             updated = client.beta.agents.update(agent.id, version=1, name=name_after)
             assert updated.name == name_after
@@ -110,18 +158,29 @@ class AgentExamples:
                 print(f"\n[KEEP] agent {agent.id} ({name_after}) — archive manually when done")
 
     @staticmethod
-    def list_agent_versions(client: anthropic.Anthropic, name: str = "sdk-e2e-versions") -> dict:
+    def list_agent_versions(
+        client: anthropic.Anthropic,
+        name: str = "sdk-e2e-versions",
+        harness: HarnessType | None = None,
+    ) -> dict:
         """
         Create an agent and list its versions.
-        
+
         Args:
             client: Anthropic client instance
             name: Name for the agent
-            
+            harness: Harness type to use ("pipy", "hermes", "openclaw", "default-loop", "managed").
+                    Defaults to pipy if not specified.
+
         Returns:
             Dictionary with agent details and versions
         """
-        agent = client.beta.agents.create(name=name, model=MODEL)
+        metadata = _build_metadata(harness)
+        create_kwargs = {"name": name, "model": MODEL}
+        if metadata:
+            create_kwargs["metadata"] = metadata
+
+        agent = client.beta.agents.create(**create_kwargs)
         try:
             page = client.beta.agents.versions.list(agent.id)
             versions = list(page)
@@ -134,18 +193,29 @@ class AgentExamples:
                 print(f"\n[KEEP] agent {agent.id} ({name}) — archive manually when done")
 
     @staticmethod
-    def archive_agent(client: anthropic.Anthropic, name: str = "sdk-e2e-archive") -> dict:
+    def archive_agent(
+        client: anthropic.Anthropic,
+        name: str = "sdk-e2e-archive",
+        harness: HarnessType | None = None,
+    ) -> dict:
         """
         Create an agent and archive it.
-        
+
         Args:
             client: Anthropic client instance
             name: Name for the agent
-            
+            harness: Harness type to use ("pipy", "hermes", "openclaw", "default-loop", "managed").
+                    Defaults to pipy if not specified.
+
         Returns:
             Dictionary with agent details
         """
-        agent = client.beta.agents.create(name=name, model=MODEL)
+        metadata = _build_metadata(harness)
+        create_kwargs = {"name": name, "model": MODEL}
+        if metadata:
+            create_kwargs["metadata"] = metadata
+
+        agent = client.beta.agents.create(**create_kwargs)
         archived = client.beta.agents.archive(agent.id)
         assert archived.id == agent.id
         return {"agent": agent, "archived": archived}
@@ -190,17 +260,28 @@ class AgentExamples:
         resp.raise_for_status()
 
     @staticmethod
-    def delete_agent(client: anthropic.Anthropic, name: str = "sdk-e2e-delete") -> dict:
+    def delete_agent(
+        client: anthropic.Anthropic,
+        name: str = "sdk-e2e-delete",
+        harness: HarnessType | None = None,
+    ) -> dict:
         """
         Create an agent, archive it, and permanently delete it.
 
         Args:
             client: Anthropic client instance
             name: Name for the agent
+            harness: Harness type to use ("pipy", "hermes", "openclaw", "default-loop", "managed").
+                    Defaults to pipy if not specified.
 
         Returns:
             Dictionary with agent, archived, and deleted details
         """
-        agent = client.beta.agents.create(name=name, model=MODEL)
+        metadata = _build_metadata(harness)
+        create_kwargs = {"name": name, "model": MODEL}
+        if metadata:
+            create_kwargs["metadata"] = metadata
+
+        agent = client.beta.agents.create(**create_kwargs)
         result = AgentExamples.archive_and_delete_by_id(client, agent.id)
         return {"agent": agent, **result}
