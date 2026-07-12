@@ -78,6 +78,11 @@ const INITIAL_FORM = {
   /** Local skill ids to HIDE from this agent's ACP child. Empty = all
    *  detected local skills are visible (the daemon's default). */
   localSkillBlocklist: [] as string[],
+  // When set, agent uses harness:"managed" — its loop runs on the
+  // platform's shared OpenClaw/Hermes gateway instead of either the cloud
+  // SessionDO loop or a user-registered runtime. Mutually exclusive with
+  // runtimeId; the harness dropdown enforces this.
+  managedAgent: "" as "" | "hermes" | "openclaw",
   // Built-in tool policy. `agent_toolset_20260401` toolset's
   // `default_config` controls fallback enabled/permission for any
   // tool without a specific override. `toolOverrides` is a per-tool
@@ -288,9 +293,11 @@ export function AgentFormDialog({
       if (form.enableTeamTools) {
         payload.metadata = { enable_team_tools: true };
       }
-      // Local-runtime agent: opt into acp-proxy harness when both runtimeId
-      // and acpAgentId are set. Partial config silently falls back to the
-      // default cloud loop — same semantics as the CLI flag pair.
+      // Harness binding — exactly one of three shapes reaches the wire:
+      //   1. runtimeId + acpAgentId → acp-proxy (user's own daemon)
+      //   2. managedAgent           → managed (platform-hosted gateway)
+      //   3. neither                → default cloud loop (no _oma block)
+      // The harness dropdown enforces mutual exclusion between (1) and (2).
       if (form.runtimeId && form.acpAgentId) {
         payload._oma = {
           harness: "acp-proxy",
@@ -301,6 +308,11 @@ export function AgentFormDialog({
               ? { local_skill_blocklist: form.localSkillBlocklist }
               : {}),
           },
+        };
+      } else if (form.managedAgent) {
+        payload._oma = {
+          harness: "managed",
+          runtime_binding: { agent: form.managedAgent },
         };
       }
 
@@ -396,6 +408,26 @@ export function AgentFormDialog({
     if (form.enableTeamTools) {
       config.metadata = { enable_team_tools: true };
     }
+    // Mirror create() harness binding so switching form → YAML/JSON and back
+    // round-trips the harness configuration. (Previously _oma was silently
+    // dropped in this direction.)
+    if (form.runtimeId && form.acpAgentId) {
+      config._oma = {
+        harness: "acp-proxy",
+        runtime_binding: {
+          runtime_id: form.runtimeId,
+          acp_agent_id: form.acpAgentId,
+          ...(form.localSkillBlocklist.length > 0
+            ? { local_skill_blocklist: form.localSkillBlocklist }
+            : {}),
+        },
+      };
+    } else if (form.managedAgent) {
+      config._oma = {
+        harness: "managed",
+        runtime_binding: { agent: form.managedAgent },
+      };
+    }
     return config;
   };
 
@@ -415,9 +447,25 @@ export function AgentFormDialog({
           createMode === "yaml"
             ? (yaml.load(codeValue) as Record<string, unknown>)
             : JSON.parse(codeValue);
-        const rb = parsed.runtime_binding as
-          | { runtime_id?: string; acp_agent_id?: string; local_skill_blocklist?: string[] }
+        // runtime_binding has two shapes depending on harness:
+        //   - acp-proxy → { runtime_id, acp_agent_id, local_skill_blocklist? }
+        //   - managed   → { agent }
+        // Pull harness from _oma.harness (canonical) or top-level harness
+        // (legacy). runtime_binding lives inside _oma on the wire format.
+        const oma = (parsed._oma ?? parsed) as Record<string, unknown>;
+        const harness = typeof oma.harness === "string" ? oma.harness : "";
+        const rb = oma.runtime_binding as
+          | {
+              runtime_id?: string;
+              acp_agent_id?: string;
+              local_skill_blocklist?: string[];
+              agent?: string;
+            }
           | undefined;
+        const managedAgent =
+          harness === "managed" && (rb?.agent === "hermes" || rb?.agent === "openclaw")
+            ? rb.agent
+            : "";
         // Tool policy round-trip: extract default + per-tool overrides
         // from the first agent_toolset_20260401 entry. Custom tools and
         // MCP toolsets pass through untouched in YAML/JSON view but
@@ -460,11 +508,12 @@ export function AgentFormDialog({
           callableAgents: Array.isArray(parsed.multiagent?.agents)
             ? (parsed.multiagent.agents as CallableEntry[])
             : [],
-          runtimeId: rb?.runtime_id ?? "",
+          runtimeId: harness === "acp-proxy" ? (rb?.runtime_id ?? "") : "",
           acpAgentId: rb?.acp_agent_id ?? "claude-agent-acp",
           localSkillBlocklist: Array.isArray(rb?.local_skill_blocklist)
             ? rb.local_skill_blocklist
             : [],
+          managedAgent: managedAgent as "" | "hermes" | "openclaw",
           toolDefaultEnabled: dc.enabled ?? true,
           toolDefaultPermission:
             dc.permission_policy?.type === "always_ask" ? "always_ask" : "always_allow",
@@ -880,8 +929,10 @@ function BasicTab({
           placeholder="Coding Assistant"
         />
       </div>
-      {/* Model picker — see comments at the original call site. */}
-      {!form.runtimeId &&
+      {/* Model picker — see comments at the original call site. Only relevant
+          for cloud agents. Managed (OpenClaw/Hermes) and acp-proxy agents
+          use their own LLM credentials on the gateway/runtime side. */}
+      {!form.runtimeId && !form.managedAgent &&
         (modelCards.length === 0 ? (
           <p className="text-xs text-fg-subtle bg-bg-surface px-3 py-2 rounded-lg">
             No model cards configured. Cloud agents need at least one card to provide LLM
@@ -929,6 +980,13 @@ function BasicTab({
           uses its own LLM credentials.
         </p>
       )}
+      {form.managedAgent && (
+        <p className="text-xs text-fg-subtle bg-bg-surface px-3 py-2 rounded-lg">
+          Model is determined by the platform's{" "}
+          {form.managedAgent === "hermes" ? "Hermes" : "OpenClaw"} gateway — it uses its own
+          LLM credentials.
+        </p>
+      )}
       <div>
         <label htmlFor="agent-description" className="text-sm text-fg-muted block mb-1">
           Description
@@ -954,40 +1012,69 @@ function BasicTab({
           placeholder="You are a helpful assistant..."
         />
       </div>
-      {/* Local Runtime — bind agent's loop to a user-registered machine
-          instead of OMA's cloud SessionDO. The "no runtime" option is the
-          default cloud agent. */}
+      {/* Harness — where the agent's loop runs. Three shapes:
+          - Cloud: default OMA SessionDO loop (no _oma block on the wire)
+          - Managed: platform-hosted OpenClaw/Hermes gateway
+            (_oma.harness = "managed", runtime_binding.agent)
+          - Registered runtime: user's own daemon via acp-proxy
+            (_oma.harness = "acp-proxy", runtime_binding.runtime_id + acp_agent_id)
+          The mutual exclusion between managed ↔ runtime is enforced here —
+          picking one clears the other. */}
       <div>
         <label className="text-sm text-fg-muted block mb-1">
-          Local Runtime
-          <span className="ml-1 text-xs text-fg-subtle">(optional)</span>
+          Harness
+          <span className="ml-1 text-xs text-fg-subtle">(where the agent runs)</span>
         </label>
-        {runtimes.length === 0 ? (
-          <p className="text-xs text-fg-subtle bg-bg-surface px-3 py-2 rounded-lg">
-            No runtimes registered.{" "}
-            <a href="/runtimes" className="underline hover:text-fg-muted">
-              Connect a machine
-            </a>{" "}
-            to delegate this agent's loop to your own Claude Code (or other ACP) child.
-          </p>
-        ) : (
-          <>
-            <Select
-              value={form.runtimeId || "__cloud__"}
-              onValueChange={(v) => {
-                const rid = v === "__cloud__" ? "" : v;
-                // Auto-pick the first detected ACP agent on the chosen runtime —
-                // user doesn't have to know what strings the daemon emits.
-                const first = runtimes.find((r) => r.id === rid)?.agents?.[0]?.id;
-                setForm({
-                  ...form,
-                  runtimeId: rid,
-                  acpAgentId: rid && first ? first : form.acpAgentId,
-                });
-              }}
-              placeholder="— Cloud (run on OMA) —"
-            >
-              <SelectOption value="__cloud__">— Cloud (run on OMA) —</SelectOption>
+        <Select
+          value={
+            form.managedAgent
+              ? `__managed_${form.managedAgent}__`
+              : form.runtimeId || "__cloud__"
+          }
+          onValueChange={(v) => {
+            if (v === "__cloud__") {
+              setForm({
+                ...form,
+                runtimeId: "",
+                acpAgentId: "claude-agent-acp",
+                managedAgent: "",
+              });
+              return;
+            }
+            if (v.startsWith("__managed_")) {
+              const agent = v.slice("__managed_".length, -2) as "hermes" | "openclaw";
+              setForm({
+                ...form,
+                runtimeId: "",
+                acpAgentId: "claude-agent-acp",
+                managedAgent: agent,
+              });
+              return;
+            }
+            // Registered runtime — auto-pick first detected ACP agent so the
+            // user doesn't have to know what strings the daemon emits.
+            const rid = v;
+            const first = runtimes.find((r) => r.id === rid)?.agents?.[0]?.id;
+            setForm({
+              ...form,
+              runtimeId: rid,
+              acpAgentId: rid && first ? first : form.acpAgentId,
+              managedAgent: "",
+            });
+          }}
+          placeholder="— Cloud (run on OMA) —"
+        >
+          <SelectOption value="__cloud__">— Cloud (run on OMA) —</SelectOption>
+          <SelectGroup>
+            <SelectGroupLabel>Managed (platform-hosted)</SelectGroupLabel>
+            <SelectOption value="__managed_hermes__">
+              Hermes (Nous Research)
+            </SelectOption>
+            <SelectOption value="__managed_openclaw__">OpenClaw</SelectOption>
+          </SelectGroup>
+          {runtimes.length > 0 && (
+            <SelectGroup>
+              <SelectGroupLabel>Bring your own daemon</SelectGroupLabel>
               {runtimes.map((r) => (
                 <SelectOption key={r.id} value={r.id} disabled={r.status !== "online"}>
                   {r.hostname} ({r.status}
@@ -997,11 +1084,27 @@ function BasicTab({
                   )
                 </SelectOption>
               ))}
-            </Select>
-            {form.runtimeId && (
-              <AcpAgentPicker form={form} setForm={setForm} runtimes={runtimes} />
-            )}
-          </>
+            </SelectGroup>
+          )}
+        </Select>
+        {form.managedAgent && (
+          <p className="text-xs text-fg-subtle mt-2">
+            Sessions run on the platform's shared{" "}
+            {form.managedAgent === "hermes" ? "Hermes" : "OpenClaw"} gateway — no daemon to
+            install. The full conversation history is replayed each turn (stateless).
+          </p>
+        )}
+        {!form.managedAgent && form.runtimeId && (
+          <AcpAgentPicker form={form} setForm={setForm} runtimes={runtimes} />
+        )}
+        {!form.managedAgent && !form.runtimeId && runtimes.length === 0 && (
+          <p className="text-xs text-fg-subtle mt-2">
+            Want to run on your own machine?{" "}
+            <a href="/runtimes" className="underline hover:text-fg-muted">
+              Connect a runtime
+            </a>{" "}
+            to delegate this agent's loop to your own Claude Code (or other ACP) child.
+          </p>
         )}
       </div>
     </div>

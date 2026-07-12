@@ -27,11 +27,19 @@ export interface AgentRecord {
   archived_at?: string;
   /** Console-only enrichment from the OMA control plane: scratch/aux model
    *  selection, harness binding, appendable prompt presets. Not on the
-   *  wire-format AgentConfig (those fields live in OMA-private storage). */
+   *  wire-format AgentConfig (those fields live in OMA-private storage).
+   *
+   *  `runtime_binding` has two shapes depending on `harness`:
+   *    - "acp-proxy" → `{ runtime_id, acp_agent_id, local_skill_blocklist? }`
+   *      (user-registered daemon on their own machine)
+   *    - "managed"   → `{ agent }` (platform-hosted hermes/openclaw gateway)
+   */
   _oma?: {
     aux_model?: { id: string; speed?: string };
-    harness?: string;
-    runtime_binding?: { runtime_id: string; acp_agent_id: string };
+    harness?: "acp-proxy" | "managed" | (string & {});
+    runtime_binding?:
+      | { runtime_id: string; acp_agent_id: string; local_skill_blocklist?: string[] }
+      | { agent: string };
     appendable_prompts?: string[];
   };
 }

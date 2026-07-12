@@ -115,15 +115,23 @@ export function AgentDetail() {
         <div className="grid grid-cols-[140px_1fr] gap-x-4 gap-y-2 max-w-2xl text-sm">
           <span className="text-fg-muted">ID</span><span className="font-mono text-xs">{agent.id}</span>
           <span className="text-fg-muted">Model</span><span>{modelStr(agent.model)}</span>
-          <span className="text-fg-muted">Harness</span><span>{agent._oma?.harness || "default"}</span>
-          {agent._oma?.runtime_binding && (
+          <span className="text-fg-muted">Harness</span>
+          <span>{agent._oma?.harness || "default"}</span>
+          {agent._oma?.runtime_binding &&
+            "runtime_id" in agent._oma.runtime_binding && (
+              <>
+                <span className="text-fg-muted">Local Runtime</span>
+                <span className="text-xs">
+                  <span className="font-mono">{agent._oma.runtime_binding.runtime_id.slice(0, 8)}…</span>
+                  <span className="text-fg-subtle"> · ACP agent: </span>
+                  <span className="font-mono">{agent._oma.runtime_binding.acp_agent_id}</span>
+                </span>
+              </>
+            )}
+          {agent._oma?.runtime_binding && "agent" in agent._oma.runtime_binding && (
             <>
-              <span className="text-fg-muted">Local Runtime</span>
-              <span className="text-xs">
-                <span className="font-mono">{agent._oma.runtime_binding.runtime_id.slice(0, 8)}…</span>
-                <span className="text-fg-subtle"> · ACP agent: </span>
-                <span className="font-mono">{agent._oma.runtime_binding.acp_agent_id}</span>
-              </span>
+              <span className="text-fg-muted">Managed agent</span>
+              <span className="font-mono text-xs">{agent._oma.runtime_binding.agent}</span>
             </>
           )}
           <span className="text-fg-muted">Version</span><span>v{agent.version}</span>
