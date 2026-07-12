@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"net/url"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -18,6 +19,16 @@ type listPageResponse struct {
 }
 
 func writeListPage(w http.ResponseWriter, data any, nextCursor string) {
+	// Go's encoding/json marshals nil slices as `null`, but API consumers
+	// (and the console frontend) expect `[]` for empty lists. Coerce a nil
+	// slice of any element type to an empty slice of the same type so the
+	// encoder emits `[]`. Non-slice / non-nil values pass through.
+	if data != nil {
+		rv := reflect.ValueOf(data)
+		if rv.Kind() == reflect.Slice && rv.IsNil() {
+			data = reflect.MakeSlice(rv.Type(), 0, 0).Interface()
+		}
+	}
 	writeJSON(w, http.StatusOK, listPageResponse{
 		Data:       data,
 		NextCursor: nextCursor,

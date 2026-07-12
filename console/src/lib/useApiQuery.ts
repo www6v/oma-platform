@@ -180,11 +180,15 @@ export function useInfiniteApiQuery<T>(
   // Flatten pages into a single items array so the consumer doesn't have
   // to know about TQ's page-of-pages shape. Stable across renders if the
   // underlying pages array is unchanged.
+  //
+  // Defensive null-check: the Go backend historically serialized empty
+  // list responses as `data: null` (nil slice → JSON null). Treat null /
+  // undefined page data as an empty array so DataTable-style consumers
+  // never see a null `items` prop.
   const items = useMemo<T[]>(() => {
     const pages = query.data?.pages ?? [];
     if (pages.length === 0) return [];
-    if (pages.length === 1) return pages[0].data;
-    return pages.flatMap((p) => p.data);
+    return pages.flatMap((p) => (p.data as T[] | null | undefined) ?? []);
   }, [query.data]);
 
   const loadMore = useCallback(() => {
