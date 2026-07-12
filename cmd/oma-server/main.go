@@ -156,9 +156,18 @@ func main() {
 			PrimaryReply: "SUBAGENT-UI-COORD-OK",
 		}
 	}
+	openclawCfg := harness.OpenClawConfig{
+		GatewayURL: os.Getenv("OMA_OPENCLAW_GATEWAY_URL"),
+		Token:      os.Getenv("OMA_OPENCLAW_TOKEN"),
+	}
+	hermesCfg := harness.HermesConfig{
+		GatewayURL: os.Getenv("OMA_HERMES_GATEWAY_URL"),
+		Token:      os.Getenv("OMA_HERMES_API_KEY"),
+	}
 	harnessRegistry := harness.NewRegistry(harness.RegistryConfig{
-		Default: harnessClient,
-		Force:   harnessForceOverride,
+		Default:        harnessClient,
+		Force:          harnessForceOverride,
+		ManagedFactory: harness.NewManagedFactory(openclawCfg, hermesCfg),
 	})
 	effectiveHarness := harnessClient
 	if harnessForceOverride != nil {

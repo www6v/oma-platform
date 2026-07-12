@@ -63,6 +63,91 @@ func (ManagedClient) RunTurn(context.Context, TurnRequest) (TurnResponse, error)
 	return TurnResponse{}, fmt.Errorf("%s", managedNotImplemented)
 }
 
+// OpenClawConfig holds the configuration for the OpenClaw Gateway
+// integration. When GatewayURL is empty the managed factory falls back to
+// the ManagedClient stub so existing tests and deployments without
+// OpenClaw continue to work unchanged.
+type OpenClawConfig struct {
+	// GatewayURL is the OpenClaw Gateway base URL, e.g.
+	// "http://124.221.28.203:17772". No trailing slash.
+	GatewayURL string
+	// Token is the Bearer token for Gateway authentication.
+	Token string
+}
+
+// HermesConfig holds the configuration for the Hermes Agent API server
+// integration. Hermes uses an OpenAI-compatible HTTP endpoint
+// (POST /v1/chat/completions) and is stateless — the full conversation
+// history is sent with every request.
+type HermesConfig struct {
+	// GatewayURL is the Hermes API server base URL, e.g.
+	// "http://124.221.28.203:8642". No trailing slash.
+	GatewayURL string
+	// Token is the Bearer token (API_SERVER_KEY) for auth.
+	Token string
+}
+
+// NewOpenClawFactory returns a ManagedFactory that creates OpenClawClient
+// instances per binding. The binding.Agent field maps to the OpenClaw
+// model id:
+//
+//	"openclaw" → "openclaw/default"
+//	"<other>"  → "openclaw/<other>"
+//
+// When cfg.GatewayURL is empty the factory returns the ManagedClient stub
+// instead, preserving backward compatibility for tests and deployments
+// that haven't configured an OpenClaw Gateway yet.
+func NewOpenClawFactory(cfg OpenClawConfig) func(ManagedBinding) (Client, error) {
+	return func(b ManagedBinding) (Client, error) {
+		if cfg.GatewayURL == "" {
+			return ManagedClient{}, nil
+		}
+		model := "openclaw/" + b.Agent
+		if b.Agent == "openclaw" {
+			model = "openclaw/default"
+		}
+		return &OpenClawClient{
+			GatewayURL: cfg.GatewayURL,
+			Token:      cfg.Token,
+			Agent:      model,
+		}, nil
+	}
+}
+
+// NewHermesFactory returns a ManagedFactory that creates HermesClient
+// instances per binding. The binding.Agent field maps to the Hermes model
+// id — by default "hermes-agent" for all agents, but the binding may
+// override via runtime_binding.model if needed in the future.
+//
+// When cfg.GatewayURL is empty the factory returns the ManagedClient stub.
+func NewHermesFactory(cfg HermesConfig) func(ManagedBinding) (Client, error) {
+	return func(b ManagedBinding) (Client, error) {
+		if cfg.GatewayURL == "" {
+			return ManagedClient{}, nil
+		}
+		return &HermesClient{
+			GatewayURL: cfg.GatewayURL,
+			Token:      cfg.Token,
+			Model:      "hermes-agent",
+		}, nil
+	}
+}
+
+// NewManagedFactory returns a ManagedFactory that dispatches by
+// binding.Agent — "hermes" routes to HermesConfig, everything else routes
+// to OpenClawConfig. When both configs have empty GatewayURL the factory
+// falls back to the ManagedClient stub.
+func NewManagedFactory(oc OpenClawConfig, hc HermesConfig) func(ManagedBinding) (Client, error) {
+	ocFactory := NewOpenClawFactory(oc)
+	hFactory := NewHermesFactory(hc)
+	return func(b ManagedBinding) (Client, error) {
+		if b.Agent == "hermes" {
+			return hFactory(b)
+		}
+		return ocFactory(b)
+	}
+}
+
 // Registry resolves a harness.Client per agent based on the agent's
 // `_oma.harness` metadata. One Registry is constructed at process start
 // and threaded through every session.Machine.
