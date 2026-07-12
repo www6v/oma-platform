@@ -12,6 +12,18 @@ const secret =
   process.env.BETTER_AUTH_SECRET ??
   randomBytes(32).toString("hex");
 const baseURL = process.env.PUBLIC_BASE_URL ?? "http://127.0.0.1:8787";
+// Browser Origin may use either 127.0.0.1 or localhost interchangeably,
+// but Better Auth matches origins as exact strings. Trust both variants
+// (and any explicit PUBLIC_BASE_URL) so login works regardless of which
+// hostname the user typed in the address bar.
+const trustedOrigins = Array.from(
+  new Set([
+    baseURL,
+    "http://127.0.0.1:8787",
+    "http://localhost:8787",
+    ...(process.env.TRUSTED_ORIGINS ? process.env.TRUSTED_ORIGINS.split(",").map(s => s.trim()).filter(Boolean) : []),
+  ]),
+);
 const googleClientId = process.env.GOOGLE_CLIENT_ID ?? "";
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET ?? "";
 
@@ -39,7 +51,7 @@ const auth = betterAuth({
   database: authDb,
   emailAndPassword: { enabled: true },
   socialProviders,
-  trustedOrigins: [baseURL],
+  trustedOrigins,
   user: {
     additionalFields: {
       tenantId: { type: "string", required: false },
