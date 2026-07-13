@@ -66,6 +66,10 @@ type Deps struct {
 	RateLimit           *ratelimit.Gates
 	OAuthState          *oauthflow.StateStore
 	PublicURL           string
+	// ManagedHarness describes which platform-hosted harnesses (OpenClaw,
+	// Hermes) are enabled. Surfaced to the console UI so the Harness
+	// dropdown can grey out disabled backends.
+	ManagedHarness harness.ManagedHarnessState
 	// InstallBridgeHTTP overrides outbound HTTP for install/OAuth (tests).
 	InstallBridgeHTTP *http.Client
 }
@@ -90,6 +94,12 @@ func NewRouter(deps Deps) http.Handler {
 	}
 
 	r.Get("/health", handleHealth)
+
+	// Managed harness availability — always mounted; the state reflects
+	// the process-wide OpenClaw/Hermes configs (env toggles).
+	r.Route("/v1/config", func(r chi.Router) {
+		mountHarnessConfigRoutes(r, deps.ManagedHarness)
+	})
 
 	routeDeps := auth.RouteDepsFromEnv(deps.AuthDisabled)
 	routeDeps.AuthUpstream = deps.AuthUpstream

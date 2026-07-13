@@ -73,6 +73,11 @@ type OpenClawConfig struct {
 	GatewayURL string
 	// Token is the Bearer token for Gateway authentication.
 	Token string
+	// Disabled toggles the OpenClaw harness off. When true the factory
+	// always returns the ManagedClient stub and the platform advertises
+	// the harness as unavailable to the console UI. Defaults to false
+	// (enabled) for backward compatibility with existing deployments.
+	Disabled bool
 }
 
 // HermesConfig holds the configuration for the Hermes Agent API server
@@ -85,6 +90,11 @@ type HermesConfig struct {
 	GatewayURL string
 	// Token is the Bearer token (API_SERVER_KEY) for auth.
 	Token string
+	// Disabled toggles the Hermes harness off. When true the factory
+	// always returns the ManagedClient stub and the platform advertises
+	// the harness as unavailable to the console UI. Defaults to false
+	// (enabled) for backward compatibility with existing deployments.
+	Disabled bool
 }
 
 // NewOpenClawFactory returns a ManagedFactory that creates OpenClawClient
@@ -99,7 +109,7 @@ type HermesConfig struct {
 // that haven't configured an OpenClaw Gateway yet.
 func NewOpenClawFactory(cfg OpenClawConfig) func(ManagedBinding) (Client, error) {
 	return func(b ManagedBinding) (Client, error) {
-		if cfg.GatewayURL == "" {
+		if cfg.Disabled || cfg.GatewayURL == "" {
 			return ManagedClient{}, nil
 		}
 		model := "openclaw/" + b.Agent
@@ -122,7 +132,7 @@ func NewOpenClawFactory(cfg OpenClawConfig) func(ManagedBinding) (Client, error)
 // When cfg.GatewayURL is empty the factory returns the ManagedClient stub.
 func NewHermesFactory(cfg HermesConfig) func(ManagedBinding) (Client, error) {
 	return func(b ManagedBinding) (Client, error) {
-		if cfg.GatewayURL == "" {
+		if cfg.Disabled || cfg.GatewayURL == "" {
 			return ManagedClient{}, nil
 		}
 		return &HermesClient{
@@ -254,4 +264,24 @@ func ParseManagedBinding(raw json.RawMessage) (ManagedBinding, error) {
 		return ManagedBinding{}, fmt.Errorf("managed harness requires runtime_binding.agent")
 	}
 	return b, nil
+}
+
+// ManagedHarnessState describes which platform-hosted managed harnesses
+// are currently enabled. Surfaced via the /v1/config/harnesses endpoint
+// so the console UI can grey out disabled options in the Harness
+// dropdown.
+type ManagedHarnessState struct {
+	OpenClaw bool `json:"openclaw"`
+	Hermes   bool `json:"hermes"`
+}
+
+// State returns the on/off state of each managed harness based on the
+// configs used to build the factory. A harness is considered enabled
+// when it is not Disabled AND its GatewayURL is configured (otherwise
+// the factory returns the stub client).
+func ManagedState(oc OpenClawConfig, hc HermesConfig) ManagedHarnessState {
+	return ManagedHarnessState{
+		OpenClaw: !oc.Disabled && oc.GatewayURL != "",
+		Hermes:   !hc.Disabled && hc.GatewayURL != "",
+	}
 }

@@ -910,6 +910,35 @@ function BasicTab({
   runtimes,
   selectedCardId,
 }: BasicTabProps) {
+  const { api } = useApi();
+  // Which managed harnesses the server currently advertises as enabled.
+  // The Harness dropdown reads this to grey out OpenClaw / Hermes options
+  // when their backend has been switched off (OMA_OPENCLAW_ENABLED /
+  // OMA_HERMES_ENABLED env toggles). Defaults to {true, true} so the UI
+  // stays fully usable while the config request is in flight.
+  const [managedHarness, setManagedHarness] = useState<{
+    openclaw: boolean;
+    hermes: boolean;
+  }>({ openclaw: true, hermes: true });
+  useEffect(() => {
+    let cancelled = false;
+    api<{ openclaw?: boolean; hermes?: boolean }>("/v1/config/harnesses")
+      .then((res) => {
+        if (cancelled) return;
+        setManagedHarness({
+          openclaw: res?.openclaw !== false,
+          hermes: res?.hermes !== false,
+        });
+      })
+      .catch(() => {
+        /* swallow — defaults above keep the dropdown fully enabled */
+      });
+    return () => {
+      cancelled = true;
+    };
+    // api() is a stable ref (useApi wraps in useCallback([])); run once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   return (
     <div className="space-y-3">
       {createError && (
@@ -1067,10 +1096,14 @@ function BasicTab({
           <SelectOption value="__cloud__">— Cloud (run on OMA) —</SelectOption>
           <SelectGroup>
             <SelectGroupLabel>Managed (platform-hosted)</SelectGroupLabel>
-            <SelectOption value="__managed_hermes__">
+            <SelectOption value="__managed_hermes__" disabled={!managedHarness.hermes}>
               Hermes (Nous Research)
+              {!managedHarness.hermes ? " — disabled" : ""}
             </SelectOption>
-            <SelectOption value="__managed_openclaw__">OpenClaw</SelectOption>
+            <SelectOption value="__managed_openclaw__" disabled={!managedHarness.openclaw}>
+              OpenClaw
+              {!managedHarness.openclaw ? " — disabled" : ""}
+            </SelectOption>
           </SelectGroup>
           {runtimes.length > 0 && (
             <SelectGroup>

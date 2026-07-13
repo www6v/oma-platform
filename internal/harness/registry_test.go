@@ -397,3 +397,44 @@ func TestNewManagedFactory_BothEmpty_ReturnsStub(t *testing.T) {
 		}
 	}
 }
+
+func TestNewManagedFactory_Disabled_OverridesURL(t *testing.T) {
+	// GatewayURLs configured but explicit Disabled=true must force the
+	// stub client — this is the "switch off" path the env toggle drives.
+	factory := NewManagedFactory(
+		OpenClawConfig{GatewayURL: "http://oc:17772", Token: "oc-tok", Disabled: true},
+		HermesConfig{GatewayURL: "http://hc:8642", Token: "hc-tok", Disabled: true},
+	)
+	for _, agent := range []string{"hermes", "openclaw", "claude-acp"} {
+		c, err := factory(ManagedBinding{Agent: agent})
+		if err != nil {
+			t.Fatalf("%s: %v", agent, err)
+		}
+		if _, ok := c.(ManagedClient); !ok {
+			t.Errorf("%s: disabled must return ManagedClient stub, got %T", agent, c)
+		}
+	}
+}
+
+func TestNewManagedFactory_OneDisabled_RoutesCorrectly(t *testing.T) {
+	// Only OpenClaw disabled — Hermes should still route to a real client.
+	factory := NewManagedFactory(
+		OpenClawConfig{GatewayURL: "http://oc:17772", Token: "oc-tok", Disabled: true},
+		HermesConfig{GatewayURL: "http://hc:8642", Token: "hc-tok"},
+	)
+	hermesClient, err := factory(ManagedBinding{Agent: "hermes"})
+	if err != nil {
+		t.Fatalf("hermes: %v", err)
+	}
+	if _, ok := hermesClient.(*HermesClient); !ok {
+		t.Errorf("hermes: expected *HermesClient, got %T", hermesClient)
+	}
+
+	ocClient, err := factory(ManagedBinding{Agent: "openclaw"})
+	if err != nil {
+		t.Fatalf("openclaw: %v", err)
+	}
+	if _, ok := ocClient.(ManagedClient); !ok {
+		t.Errorf("openclaw: expected ManagedClient stub, got %T", ocClient)
+	}
+}

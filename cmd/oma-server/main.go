@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/open-ma/oma-building/internal/api"
@@ -159,10 +160,12 @@ func main() {
 	openclawCfg := harness.OpenClawConfig{
 		GatewayURL: os.Getenv("OMA_OPENCLAW_GATEWAY_URL"),
 		Token:      os.Getenv("OMA_OPENCLAW_TOKEN"),
+		Disabled:   envDisabled("OMA_OPENCLAW_ENABLED"),
 	}
 	hermesCfg := harness.HermesConfig{
 		GatewayURL: os.Getenv("OMA_HERMES_GATEWAY_URL"),
 		Token:      os.Getenv("OMA_HERMES_API_KEY"),
+		Disabled:   envDisabled("OMA_HERMES_ENABLED"),
 	}
 	harnessRegistry := harness.NewRegistry(harness.RegistryConfig{
 		Default:        harnessClient,
@@ -349,6 +352,7 @@ func main() {
 		RateLimit:         rateGates,
 		OAuthState:        oauthState,
 		PublicURL:         publicURL,
+		ManagedHarness:    harness.ManagedState(openclawCfg, hermesCfg),
 	})
 
 	log.Printf("oma-server listening on %s", addr)
@@ -387,4 +391,20 @@ func envOrDefault(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// envDisabled reports whether the named env var explicitly disables a
+// feature. Returns true only when the value is one of "0", "false",
+// "no", "off" (case-insensitive). Unset or any other value returns
+// false (feature enabled) — the safe default for backward compatibility.
+func envDisabled(key string) bool {
+	v := os.Getenv(key)
+	if v == "" {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "0", "false", "no", "off":
+		return true
+	}
+	return false
 }
