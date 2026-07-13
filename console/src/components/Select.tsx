@@ -83,10 +83,20 @@ interface SelectOptionProps {
  * wrapper exists so call sites don't have to import both `Select` from
  * here and `SelectItem` from `@/components/ui/select` (mixed-source
  * imports were a common source of stale-prop bugs in the prior wrapper).
+ *
+ * When `disabled` is true, the item is both functionally disabled
+ * (Radix prevents selection) and visually muted via an explicit
+ * className so the greyed-out state is obvious regardless of how the
+ * surrounding theme resolves the `data-disabled:` variant.
  */
 export const SelectOption = forwardRef<HTMLDivElement, SelectOptionProps>(
   ({ value, disabled, children }, ref) => (
-    <SelectItem ref={ref} value={value} disabled={disabled}>
+    <SelectItem
+      ref={ref}
+      value={value}
+      disabled={disabled}
+      className={disabled ? "opacity-50 pointer-events-none text-fg-subtle" : undefined}
+    >
       {children}
     </SelectItem>
   ),

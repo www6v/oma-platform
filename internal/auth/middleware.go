@@ -174,6 +174,13 @@ func isExempt(path string, consoleMounted bool) bool {
 	if strings.HasPrefix(path, "/v1/internal/") {
 		return true
 	}
+	// Server-wide configuration (harness availability, feature flags) —
+	// not tenant-scoped, so no auth required. The console UI fetches this
+	// on mount to populate feature-dependent UI (e.g. greyed-out harness
+	// options) before any tenant is pinned.
+	if strings.HasPrefix(path, "/v1/config/") {
+		return true
+	}
 	if strings.HasPrefix(path, "/linear/oauth/") ||
 		strings.HasPrefix(path, "/linear/webhook/") {
 		return true

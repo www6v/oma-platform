@@ -925,13 +925,15 @@ function BasicTab({
     api<{ openclaw?: boolean; hermes?: boolean }>("/v1/config/harnesses")
       .then((res) => {
         if (cancelled) return;
-        setManagedHarness({
-          openclaw: res?.openclaw !== false,
-          hermes: res?.hermes !== false,
-        });
+        const openclaw = res?.openclaw !== false;
+        const hermes = res?.hermes !== false;
+        // eslint-disable-next-line no-console
+        console.info("[harness-config] openclaw=%s hermes=%s raw=%o", openclaw, hermes, res);
+        setManagedHarness({ openclaw, hermes });
       })
-      .catch(() => {
-        /* swallow — defaults above keep the dropdown fully enabled */
+      .catch((err) => {
+        // eslint-disable-next-line no-console
+        console.warn("[harness-config] fetch failed, defaulting to enabled:", err);
       });
     return () => {
       cancelled = true;
