@@ -66,6 +66,8 @@ func (r *Registry) Acquire(ctx context.Context, opts AcquireOpts) (Executor, err
 		ex, err = NewLiteBoxExecutor(ctx, r.cfg, opts)
 	case ProviderBoxRun:
 		ex, err = NewBoxRunExecutor(ctx, r.cfg, opts.SessionID, r.httpClient)
+	case ProviderOpenSandbox:
+		ex, err = NewOpenSandboxExecutor(ctx, r.cfg, opts, r.httpClient)
 	default:
 		return NewLocalExecutor(opts.WorkdirPath), nil
 	}

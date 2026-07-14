@@ -58,6 +58,7 @@ func TestIsRemote(t *testing.T) {
 		sandbox.ProviderDaytona,
 		sandbox.ProviderLiteBox,
 		sandbox.ProviderBoxRun,
+		sandbox.ProviderOpenSandbox,
 	} {
 		cfg := sandbox.Config{Provider: p}
 		if !cfg.IsRemote() {
