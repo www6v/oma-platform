@@ -94,6 +94,13 @@ MOUNT_PATH = f"/mnt/session/uploads/{CSV_PATH.name}"
 ANALYST_SYSTEM_PROMPT = """\
 You are a senior data analyst producing a publication-quality report.
 
+## Environment
+You run inside a fresh Python 3.12 Linux container. ``pandas`` and
+``plotly`` are NOT preinstalled — before running your first analysis
+script, execute:
+    pip install -q pandas plotly
+The container has outbound internet, so pip works without extra config.
+
 ## Style
 - Professional and precise. Let the data speak with concrete numbers.
 - Short paragraphs (2-3 sentences) between charts.
@@ -273,19 +280,26 @@ async def main() -> None:
         # ------------------------------------------------------------------
         # §1 Create an environment — Cookbook Cell 4
         # ------------------------------------------------------------------
-        # Reusable container spec: pandas + plotly preinstalled so the agent
-        # can analyze immediately. ``unrestricted`` networking lets plotly load
-        # from CDN; use a host allowlist in production.
+        # OpenSandbox-backed environment: the session runs inside a real
+        # python:3.12 container (Linux, isolated filesystem) rather than
+        # the host workdir. The server's global SANDBOX_PROVIDER is used
+        # as a fallback for missing fields, so we only need to set
+        # ``image`` here to pin a specific container image.
         #
-        # Cookbook config.packages includes ``"type": "packages"``; OMA accepts
-        # the pip list directly under packages.
+        # The cookbook's ``packages.pip`` (pandas/plotly preinstalled) has
+        # no direct OpenSandbox equivalent — the agent pip-installs them
+        # as its first step (see ANALYST_SYSTEM_PROMPT below).
         env = client.environments.create(
             name=ENV_NAME,
             config={
-                "type": "cloud",
-                "networking": {"type": "unrestricted"},
-                "packages": {
-                    "pip": ["pandas", "plotly"],
+                "type": "sandbox",
+                "sandbox": {
+                    "provider": "opensandbox",
+                    "opensandbox": {
+                        # python:3.12-slim keeps the image small; the agent
+                        # installs pandas/plotly on first use.
+                        "image": "python:3.12-slim",
+                    },
                 },
             },
         )
