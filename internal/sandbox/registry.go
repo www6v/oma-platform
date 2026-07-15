@@ -3,10 +3,19 @@ package sandbox
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 )
+
+// fallbackCooldown is how long the registry skips OpenSandbox after a
+// failure before trying it again. Short enough that a recovered service is
+// picked up quickly; long enough to avoid hammering a down service on
+// every session create.
+const fallbackCooldown = 30 * time.Second
 
 // Registry holds per-session sandbox executors.
 type Registry struct {
@@ -14,6 +23,11 @@ type Registry struct {
 	httpClient *http.Client
 	mu         sync.Mutex
 	sessions   map[string]Executor
+
+	// degradedUntil is a unix-nano timestamp. While time.Now() < this
+	// value, OpenSandbox is assumed unavailable and AcquireWith returns
+	// a local executor immediately (only when fallback is enabled).
+	degradedUntil atomic.Int64
 }
 
 // NewRegistry returns a sandbox registry for the configured provider.
@@ -98,7 +112,31 @@ func (r *Registry) AcquireWith(
 	case ProviderBoxRun:
 		ex, err = NewBoxRunExecutor(ctx, cfg, opts.SessionID, r.httpClient)
 	case ProviderOpenSandbox:
+		// Fast path: if fallback is enabled and a recent OpenSandbox
+		// failure opened the circuit, skip the remote call entirely
+		// and serve local. Avoids paying the (long) create timeout on
+		// every session while the service is known-down.
+		if cfg.OpenSandboxFallbackLocal &&
+			r.degradedUntil.Load() > time.Now().UnixNano() {
+			log.Printf(
+				"sandbox: opensandbox circuit open, using local fallback (session=%s)",
+				opts.SessionID,
+			)
+			ex = NewLocalExecutor(opts.WorkdirPath)
+			break
+		}
 		ex, err = NewOpenSandboxExecutor(ctx, cfg, opts, r.httpClient)
+		if err != nil && cfg.OpenSandboxFallbackLocal {
+			log.Printf(
+				"sandbox: opensandbox unavailable, falling back to local: %v (session=%s, cooldown=%s)",
+				err, opts.SessionID, fallbackCooldown,
+			)
+			r.degradedUntil.Store(
+				time.Now().Add(fallbackCooldown).UnixNano(),
+			)
+			ex = NewLocalExecutor(opts.WorkdirPath)
+			err = nil
+		}
 	default:
 		return NewLocalExecutor(opts.WorkdirPath), nil
 	}

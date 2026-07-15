@@ -44,6 +44,13 @@ type Config struct {
 	OpenSandboxTimeoutSec    int    // default 3600
 	OpenSandboxCPU           string // default "500m"
 	OpenSandboxMemory        string // default "512Mi"
+
+	// OpenSandboxFallbackLocal, when true, makes AcquireWith fall back to
+	// a LocalExecutor if OpenSandbox is unreachable at acquire time. The
+	// change in security boundary (remote sandbox → host workdir) is
+	// logged loudly. Defaults to true — set OPENSANDBOX_FALLBACK_TO_LOCAL=0
+	// to require OpenSandbox and fail sessions when it is unavailable.
+	OpenSandboxFallbackLocal bool
 }
 
 // LoadConfigFromEnv reads SANDBOX_PROVIDER and provider credentials.
@@ -76,6 +83,7 @@ func LoadConfigFromEnv() Config {
 		OpenSandboxTimeoutSec:     envInt("OPENSANDBOX_TIMEOUT_SECONDS", 3600),
 		OpenSandboxCPU:            envOrDefault("OPENSANDBOX_CPU", "500m"),
 		OpenSandboxMemory:         envOrDefault("OPENSANDBOX_MEMORY", "512Mi"),
+		OpenSandboxFallbackLocal:  envBool("OPENSANDBOX_FALLBACK_TO_LOCAL", true),
 	}
 	if v := os.Getenv("BOXRUN_CPUS"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
