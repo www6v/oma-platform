@@ -142,7 +142,7 @@ sess_resp="$(
   curl -sf -X POST "${PLATFORM_URL}/v1/sessions" \
     -H "content-type: application/json" \
     -H "x-api-key: ${API_KEY}" \
-    -d "{\"agent_id\":\"${agent_id}\"}"
+    -d "{\"agent\":\"${agent_id}\"}"
 )"
 session_id="$(python3 "${SMOKE_UTILS}" json-field id <<<"${sess_resp}")"
 log "session_id=${session_id}"

@@ -4,7 +4,6 @@
 
 Self-hostable **Open Managed Agents (OMA)** stack: a Go platform runtime plus a Python piPy harness sidecar. The platform owns durability, concurrency, and the HTTP API; the harness owns the LLM loop and tool execution.
 
-This repo implements a large slice of the [open-managed-agents](https://github.com/open-ma/open-managed-agents) contract for self-hosted deployments. As of 2026-07-07, **~91% feature parity** (44/52 domains aligned). See [MVP-MIGRATION-PLAN.md](./docs/api-migrate/MVP-MIGRATION-PLAN.md) for the full matrix and backlog.
 
 ## Features
 

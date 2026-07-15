@@ -4,7 +4,6 @@
 
 可自托管的 **Open Managed Agents (OMA)** 栈：Go 平台运行时 + Python piPy 执行侧车（sidecar）。平台负责持久化、并发与 HTTP API；执行器负责 LLM 循环与工具调用。
 
-本仓库实现了 [open-managed-agents](https://github.com/open-ma/open-managed-agents) 协议在自托管场景下的大部分能力。截至 2026-07-07，**功能对齐约 91%**（52 个功能域中 44 个已对齐）。完整矩阵见 [MVP-MIGRATION-PLAN.md](./docs/api-migrate/MVP-MIGRATION-PLAN.md)。
 
 ## 系统特性
 
