@@ -100,7 +100,7 @@ func (r *SessionRepo) Create(
 			return nil, ErrNotFound
 		}
 		if env.ArchivedAt != nil {
-			return nil, ErrArchived
+			return nil, ErrEnvironmentArchived
 		}
 		envSnap, err = json.Marshal(env)
 		if err != nil {

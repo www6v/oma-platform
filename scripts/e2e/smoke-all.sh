@@ -143,6 +143,9 @@ run_core_suite() {
   run_case "litebox sandbox (bridge + exec API)" \
     run_shell smoke-litebox-sandbox-e2e.sh
 
+  run_case "per-environment sandbox binding (mock lifecycle)" \
+    run_shell smoke-environment-sandbox-binding-e2e.sh
+
   run_case "session wakeup schedules" \
     run_shell smoke-schedule-e2e.sh
 

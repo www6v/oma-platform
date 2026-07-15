@@ -36,7 +36,7 @@ PLATFORM_PORT="${OPENSANDBOX_SMOKE_PORT:-8797}"
 PLATFORM_URL="http://127.0.0.1:${PLATFORM_PORT}"
 API_KEY="${OMA_API_KEY:-dev-key}"
 MARKER="${OPENSANDBOX_SMOKE_MARKER:-opensandbox-smoke-$(date +%s)}"
-IMAGE="${OMA_OPENSANDBOX_E2E_IMAGE:-${OPENSANDBOX_IMAGE:-python:3.12}}"
+IMAGE="${OMA_OPENSANDBOX_E2E_IMAGE:-${OPENSANDBOX_IMAGE:-python:3.12-slim}}"
 
 log() {
   echo "[opensandbox-smoke] $*"

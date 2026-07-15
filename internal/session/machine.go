@@ -34,12 +34,14 @@ type Machine struct {
 	Teams       *store.TeamRepo
 	Events      *store.EventRepo
 	Pending     *store.PendingRepo
+	Environments *store.EnvironmentRepo // optional; nil → legacy global sandbox cfg
 	Hub         Broadcaster
 	Workdirs    *workdir.Manager
 	HarnessRegistry  *harness.Registry
 	OutcomeEvaluator harness.OutcomeEvaluator
 	Models           *modelresolve.Resolver
-	Resources    *harness.ResourceResolver
+	Resources        *harness.ResourceResolver
+	SandboxResolver  *sandbox.Resolver // optional; nil → legacy global sandbox cfg
 	McpProxyBase        string
 	McpProxyAPIKey      string
 	PlatformBase        string
@@ -71,12 +73,14 @@ func (m *Machine) syncDeps(src *Machine) {
 	m.Teams = src.Teams
 	m.Events = src.Events
 	m.Pending = src.Pending
+	m.Environments = src.Environments
 	m.Hub = src.Hub
 	m.Workdirs = src.Workdirs
 	m.HarnessRegistry = src.HarnessRegistry
 	m.OutcomeEvaluator = src.OutcomeEvaluator
 	m.Models = src.Models
 	m.Resources = src.Resources
+	m.SandboxResolver = src.SandboxResolver
 	m.McpProxyBase = src.McpProxyBase
 	m.McpProxyAPIKey = src.McpProxyAPIKey
 	m.PlatformBase = src.PlatformBase
@@ -182,24 +186,39 @@ func (m *Machine) runSingleHarnessTurn(ctx context.Context, threadID string) err
 		}
 	}
 
-	if m.Workdirs != nil && m.Workdirs.Sandbox != nil && m.Workdirs.Sandbox.Config().IsRemote() {
-		sandboxMounts := make([]sandbox.MemoryMount, 0, len(memoryMounts))
-		for _, mm := range memoryMounts {
-			sandboxMounts = append(sandboxMounts, sandbox.MemoryMount{
-				StoreName: mm.StoreName,
-				StoreID:   mm.StoreID,
-				ReadOnly:  mm.ReadOnly,
-			})
+	if m.Workdirs != nil && m.Workdirs.Sandbox != nil {
+		// Resolve the per-session sandbox config from the session's
+		// bound Environment. When either the resolver or the env
+		// repo is unavailable (tests, legacy callers) fall back to
+		// the registry's global Config — identical to pre-environment
+		// behaviour.
+		var resolved sandbox.Config
+		if m.SandboxResolver != nil && m.Environments != nil {
+			envView := m.loadEnvironmentView(ctx, sess.EnvironmentID)
+			resolved, _ = m.SandboxResolver.Resolve(envView)
+		} else {
+			resolved = m.Workdirs.Sandbox.Config()
 		}
-		if _, err := m.Workdirs.Sandbox.Acquire(ctx, sandbox.AcquireOpts{
-			SessionID:   m.SessionID,
-			WorkdirPath: filepath.Join(m.Workdirs.BaseDir(), m.SessionID),
-			TenantID:    m.TenantID,
-			MemoryRoot:  m.Workdirs.MemoryRoot(),
-			OutputsRoot: m.Workdirs.OutputsRoot(),
-			MemoryMounts: sandboxMounts,
-		}); err != nil {
-			return err
+
+		if resolved.IsRemote() {
+			sandboxMounts := make([]sandbox.MemoryMount, 0, len(memoryMounts))
+			for _, mm := range memoryMounts {
+				sandboxMounts = append(sandboxMounts, sandbox.MemoryMount{
+					StoreName: mm.StoreName,
+					StoreID:   mm.StoreID,
+					ReadOnly:  mm.ReadOnly,
+				})
+			}
+			if _, err := m.Workdirs.Sandbox.AcquireWith(ctx, resolved, sandbox.AcquireOpts{
+				SessionID:   m.SessionID,
+				WorkdirPath: filepath.Join(m.Workdirs.BaseDir(), m.SessionID),
+				TenantID:    m.TenantID,
+				MemoryRoot:  m.Workdirs.MemoryRoot(),
+				OutputsRoot: m.Workdirs.OutputsRoot(),
+				MemoryMounts: sandboxMounts,
+			}); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -603,6 +622,29 @@ func (m *Machine) resolveModel(
 		return harness.ModelConfig{Model: agentModel}, nil
 	}
 	return m.Models.Resolve(ctx, m.TenantID, agentModel)
+}
+
+// loadEnvironmentView reads the session's bound Environment and projects it
+// into a sandbox.EnvironmentView. On any error (env missing, DB read
+// failure, envID empty) it returns a non-nil view with empty ConfigJSON —
+// the resolver treats that as "no environment config" and falls back to
+// the global sandbox config. This keeps session startup robust: a broken
+// or missing environment never blocks a turn.
+func (m *Machine) loadEnvironmentView(
+	ctx context.Context,
+	envID string,
+) *sandbox.EnvironmentView {
+	out := &sandbox.EnvironmentView{ID: envID}
+	if envID == "" || m.Environments == nil {
+		return out
+	}
+	env, err := m.Environments.Get(ctx, m.TenantID, envID)
+	if err != nil || env == nil {
+		return out
+	}
+	out.ID = env.ID
+	out.ConfigJSON = []byte(env.Config)
+	return out
 }
 
 func randomTurnID() string {

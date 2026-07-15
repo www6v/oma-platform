@@ -14,6 +14,7 @@ import (
 	"github.com/open-ma/oma-building/internal/harness"
 	"github.com/open-ma/oma-building/internal/modelresolve"
 	"github.com/open-ma/oma-building/internal/ratelimit"
+	"github.com/open-ma/oma-building/internal/sandbox"
 	"github.com/open-ma/oma-building/internal/session"
 	"github.com/open-ma/oma-building/internal/sessionoutputs"
 	"github.com/open-ma/oma-building/internal/store"
@@ -66,6 +67,23 @@ type sessionHandlers struct {
 	outboundProxyAddr string
 	outboundProxyKey  string
 	databasePath      string
+	// environments + sandboxResolver enable per-session sandbox binding
+	// via Environment.config. Both are optional; when nil, Machine falls
+	// back to the legacy global sandbox cfg.
+	environments    *store.EnvironmentRepo
+	sandboxResolver *sandbox.Resolver
+}
+
+// SetSandboxEnvironmentSupport wires per-environment sandbox resolution
+// into the session handler. Call after NewSessionHandlers when you want
+// sessions to honour their bound Environment's sandbox config. Either
+// argument may be nil to disable (tests typically pass nil for both).
+func (h *sessionHandlers) SetSandboxEnvironmentSupport(
+	envs *store.EnvironmentRepo,
+	resolver *sandbox.Resolver,
+) {
+	h.environments = envs
+	h.sandboxResolver = resolver
 }
 
 func (h *sessionHandlers) registerMachine(sess *store.Session) {
@@ -77,12 +95,14 @@ func (h *sessionHandlers) registerMachine(sess *store.Session) {
 		Teams:         h.teams,
 		Events:        h.events,
 		Pending:       h.pending,
+		Environments:  h.environments,
 		Hub:           h.hub,
 		Workdirs:      h.workdirs,
 		HarnessRegistry: h.harnessRegistry,
 		OutcomeEvaluator:  h.outcomeEvaluator,
 		Models:            h.models,
 		Resources:     h.resources,
+		SandboxResolver: h.sandboxResolver,
 		McpProxyBase:  h.mcpProxyBase,
 		McpProxyAPIKey: h.mcpProxyKey,
 		PlatformBase: h.platformBase,
@@ -138,6 +158,10 @@ func mountSessionRoutes(
 		}
 		if err == store.ErrArchived {
 			writeError(w, http.StatusConflict, "agent archived")
+			return
+		}
+		if err == store.ErrEnvironmentArchived {
+			writeError(w, http.StatusConflict, "environment archived")
 			return
 		}
 		if err != nil {

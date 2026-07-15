@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/open-ma/oma-building/internal/sandbox"
 	"github.com/open-ma/oma-building/internal/store"
 )
 
@@ -27,6 +28,10 @@ func mountEnvironmentRoutes(
 		}
 		if body.Name == "" {
 			writeError(w, http.StatusBadRequest, "name is required")
+			return
+		}
+		if err := sandbox.ValidateConfigJSON(body.Config); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		env, err := envs.Create(req.Context(), store.CreateEnvironmentInput{
@@ -145,6 +150,10 @@ func updateEnvironment(
 		Description: body.Description,
 	}
 	if body.Config != nil {
+		if err := sandbox.ValidateConfigJSON(*body.Config); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		patch.Config = *body.Config
 		patch.ConfigSet = true
 	}

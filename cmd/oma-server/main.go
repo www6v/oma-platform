@@ -209,6 +209,13 @@ func main() {
 		outbound.HostForHarness(outboundAddr), apiKey,
 		dbPath,
 	)
+	// Enable per-environment sandbox resolution. Sessions bound to an
+	// Environment whose config declares a sandbox provider will now use
+	// that provider instead of the global SANDBOX_PROVIDER.
+	sessionHandlers.SetSandboxEnvironmentSupport(
+		environments,
+		sandbox.NewResolver(sandboxCfg),
+	)
 	if os.Getenv("OMA_WAKEUP_WORKER_DISABLED") != "1" {
 		wakeupWorker := &api.WakeupWorker{
 			Wakeups:  wakeups,

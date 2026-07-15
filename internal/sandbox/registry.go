@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 )
 
@@ -44,12 +45,42 @@ func (r *Registry) Config() Config {
 }
 
 // Acquire returns the session executor, creating isolated sandboxes lazily.
+// It uses the registry's global Config — callers that need per-environment
+// resolution should call AcquireWith instead.
 func (r *Registry) Acquire(ctx context.Context, opts AcquireOpts) (Executor, error) {
-	if r == nil || !r.cfg.IsRemote() {
+	if r == nil {
 		return NewLocalExecutor(opts.WorkdirPath), nil
 	}
+	return r.AcquireWith(ctx, r.cfg, opts)
+}
+
+// AcquireWith returns the session executor using the supplied per-session
+// Config. This is the path used when a session binds to a non-default
+// Environment whose config selects a sandbox provider.
+//
+// The cfg argument fully determines the provider and its parameters — the
+// registry's own global cfg is only used as a fallback when cfg is empty.
+// The per-session cache is keyed by (sessionID, provider) so a session
+// that resolves to a different provider than a prior lookup does not
+// silently reuse the prior executor.
+func (r *Registry) AcquireWith(
+	ctx context.Context,
+	cfg Config,
+	opts AcquireOpts,
+) (Executor, error) {
+	if r == nil || (cfg.Provider == "" && (r.cfg.Provider == "" || !r.cfg.IsRemote())) {
+		return NewLocalExecutor(opts.WorkdirPath), nil
+	}
+	if cfg.Provider == "" {
+		cfg = r.cfg
+	}
+	if !cfg.IsRemote() {
+		return NewLocalExecutor(opts.WorkdirPath), nil
+	}
+
 	r.mu.Lock()
-	if ex, ok := r.sessions[opts.SessionID]; ok {
+	key := registryCacheKey(opts.SessionID, cfg.Provider)
+	if ex, ok := r.sessions[key]; ok {
 		r.mu.Unlock()
 		return ex, nil
 	}
@@ -57,17 +88,17 @@ func (r *Registry) Acquire(ctx context.Context, opts AcquireOpts) (Executor, err
 
 	var ex Executor
 	var err error
-	switch r.cfg.Provider {
+	switch cfg.Provider {
 	case ProviderE2B:
-		ex, err = NewE2BExecutor(ctx, r.cfg, opts.SessionID, r.httpClient)
+		ex, err = NewE2BExecutor(ctx, cfg, opts.SessionID, r.httpClient)
 	case ProviderDaytona:
-		ex, err = NewDaytonaExecutor(ctx, r.cfg, r.httpClient)
+		ex, err = NewDaytonaExecutor(ctx, cfg, r.httpClient)
 	case ProviderLiteBox:
-		ex, err = NewLiteBoxExecutor(ctx, r.cfg, opts)
+		ex, err = NewLiteBoxExecutor(ctx, cfg, opts)
 	case ProviderBoxRun:
-		ex, err = NewBoxRunExecutor(ctx, r.cfg, opts.SessionID, r.httpClient)
+		ex, err = NewBoxRunExecutor(ctx, cfg, opts.SessionID, r.httpClient)
 	case ProviderOpenSandbox:
-		ex, err = NewOpenSandboxExecutor(ctx, r.cfg, opts, r.httpClient)
+		ex, err = NewOpenSandboxExecutor(ctx, cfg, opts, r.httpClient)
 	default:
 		return NewLocalExecutor(opts.WorkdirPath), nil
 	}
@@ -75,41 +106,66 @@ func (r *Registry) Acquire(ctx context.Context, opts AcquireOpts) (Executor, err
 		return nil, err
 	}
 	r.mu.Lock()
-	r.sessions[opts.SessionID] = ex
+	r.sessions[key] = ex
 	r.mu.Unlock()
 	return ex, nil
 }
 
-// Get returns an existing executor or a local fallback.
+// registryCacheKey builds the per-session cache key. Today it includes the
+// provider so that a session whose Environment resolves differently from a
+// previous lookup doesn't silently reuse the wrong executor. If session→
+// environment bindings ever become mutable, extend this key with the
+// environment ID.
+func registryCacheKey(sessionID, provider string) string {
+	if provider == "" || provider == ProviderLocal {
+		return sessionID
+	}
+	return sessionID + "|" + provider
+}
+
+// Get returns an existing executor or a local fallback. Provider-aware:
+// returns a cached executor regardless of which provider produced it.
 func (r *Registry) Get(sessionID, workdirPath string) Executor {
 	if r == nil {
 		return NewLocalExecutor(workdirPath)
 	}
 	r.mu.Lock()
-	ex, ok := r.sessions[sessionID]
-	r.mu.Unlock()
-	if ok {
-		return ex
+	defer r.mu.Unlock()
+	// Scan keys with matching sessionID prefix (cache keys are
+	// "sessionID" or "sessionID|provider").
+	for k, ex := range r.sessions {
+		if k == sessionID || strings.HasPrefix(k, sessionID+"|") {
+			return ex
+		}
 	}
 	return NewLocalExecutor(workdirPath)
 }
 
-// Release destroys and removes a session sandbox.
+// Release destroys and removes a session sandbox. Matches all cache keys
+// for the session (today at most one, since session→environment is 1:1).
 func (r *Registry) Release(ctx context.Context, sessionID string) error {
 	if r == nil {
 		return nil
 	}
 	r.mu.Lock()
-	ex, ok := r.sessions[sessionID]
-	if ok {
-		delete(r.sessions, sessionID)
+	// Collect matching keys and their executors atomically.
+	var removed []Executor
+	for k, ex := range r.sessions {
+		if k == sessionID || strings.HasPrefix(k, sessionID+"|") {
+			removed = append(removed, ex)
+			delete(r.sessions, k)
+		}
 	}
 	r.mu.Unlock()
-	if !ok || ex == nil {
+	if len(removed) == 0 {
 		return nil
 	}
-	if err := ex.Destroy(ctx); err != nil {
-		return fmt.Errorf("sandbox destroy: %w", err)
+	// Destroy outside the lock — destroy may hit the network.
+	var firstErr error
+	for _, ex := range removed {
+		if err := ex.Destroy(ctx); err != nil && firstErr == nil {
+			firstErr = fmt.Errorf("sandbox destroy: %w", err)
+		}
 	}
-	return nil
+	return firstErr
 }

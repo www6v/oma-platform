@@ -40,7 +40,7 @@ func TestOpenSandboxIntegration(t *testing.T) {
 		OpenSandboxProtocol:     proto,
 		OpenSandboxAPIKey:       os.Getenv("OPENSANDBOX_API_KEY"),
 		OpenSandboxUseServerProxy: true,
-		OpenSandboxImage:        envOr("OPENSANDBOX_IMAGE", "python:3.12"),
+		OpenSandboxImage:        envOr("OPENSANDBOX_IMAGE", "python:3.12-slim"),
 		OpenSandboxTimeoutSec:   600,
 		OpenSandboxCPU:          "500m",
 		OpenSandboxMemory:       "256Mi",

@@ -7,6 +7,10 @@ var (
 	ErrNotFound = errors.New("not found")
 	// ErrArchived is returned when mutating an archived agent.
 	ErrArchived = errors.New("agent archived")
+	// ErrEnvironmentArchived is returned when creating a session against an
+	// archived environment. Distinct from ErrArchived (agent) so the API
+	// layer can surface an accurate error message.
+	ErrEnvironmentArchived = errors.New("environment archived")
 	// ErrDuplicate is returned on unique constraint violations.
 	ErrDuplicate = errors.New("duplicate")
 	// ErrCredentialMaxExceeded is returned when a vault is at capacity.

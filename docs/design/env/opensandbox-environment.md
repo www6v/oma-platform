@@ -144,7 +144,7 @@ type Config struct {
     OpenSandboxExecdPort     int      // 默认 44772
 
     // 沙箱创建参数
-    OpenSandboxImage         string   // 默认 "python:3.12"
+    OpenSandboxImage         string   // 默认 "python:3.12-slim"(slim 变体,~150MB)
     OpenSandboxEntrypoint    string   // 默认 "tail -f /dev/null"(服务端必填,Python SDK 行为一致)
     OpenSandboxTimeoutSec    int      // 默认 3600
     OpenSandboxCPU           string   // 默认 "500m"
@@ -161,7 +161,7 @@ type Config struct {
 | `OPENSANDBOX_API_KEY` | `OpenSandboxAPIKey` | `""` |
 | `OPENSANDBOX_USE_SERVER_PROXY` | `OpenSandboxUseServerProxy` | `true` |
 | `OPENSANDBOX_EXECD_PORT` | `OpenSandboxExecdPort` | `44772` |
-| `OPENSANDBOX_IMAGE` | `OpenSandboxImage` | `python:3.12` |
+| `OPENSANDBOX_IMAGE` | `OpenSandboxImage` | `python:3.12-slim` |
 | `OPENSANDBOX_ENTRYPOINT` | `OpenSandboxEntrypoint` | `""` |
 | `OPENSANDBOX_TIMEOUT_SECONDS` | `OpenSandboxTimeoutSec` | `3600` |
 | `OPENSANDBOX_CPU` | `OpenSandboxCPU` | `500m` |
@@ -349,7 +349,7 @@ oma-platform 不直接部署 OpenSandbox Server——后者由运维团队独立
 
 1. `.env` 增加 `SANDBOX_PROVIDER=opensandbox` 与 `OPENSANDBOX_DOMAIN` 等变量。
 2. 网络可达：oma-server → Lifecycle Server (18090) → execd (44772，代理模式只需开到 Server)。
-3. 容器镜像：默认 `python:3.12` 即可跑 shell + Python；若要 Code Interpreter 能力，换成 `opensandbox/code-interpreter:v1.1.0` 并设置 `OPENSANDBOX_ENTRYPOINT=/opt/code-interpreter/code-interpreter.sh`。
+3. 容器镜像：默认 `python:3.12-slim`（slim 变体约 150MB，原版约 900MB；execd + shell + Python 都能跑，缺 build 工具链）。若要 Code Interpreter 能力或需要 `bash` / 编译器，换成 `python:3.12` 或 `opensandbox/code-interpreter:v1.1.0` 并设置 `OPENSANDBOX_ENTRYPOINT=/opt/code-interpreter/code-interpreter.sh`。
 
 ## MVP 不做（显式排除）
 

@@ -99,7 +99,10 @@ func NewOpenSandboxExecutor(
 
 	image := cfg.OpenSandboxImage
 	if image == "" {
-		image = "python:3.12"
+		// Slim variant (~150MB vs ~900MB) is sufficient for shell + Python
+		// exec + execd agent. Use the full image only when explicitly
+		// configured via OPENSANDBOX_IMAGE / Environment.config.
+		image = "python:3.12-slim"
 	}
 	timeout := cfg.OpenSandboxTimeoutSec
 	if timeout <= 0 {

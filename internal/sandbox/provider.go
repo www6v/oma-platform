@@ -71,7 +71,7 @@ func LoadConfigFromEnv() Config {
 		OpenSandboxAPIKey:         os.Getenv("OPENSANDBOX_API_KEY"),
 		OpenSandboxUseServerProxy: envBool("OPENSANDBOX_USE_SERVER_PROXY", true),
 		OpenSandboxExecdPort:      envInt("OPENSANDBOX_EXECD_PORT", 44772),
-		OpenSandboxImage:          envOrDefault("OPENSANDBOX_IMAGE", "python:3.12"),
+		OpenSandboxImage:          envOrDefault("OPENSANDBOX_IMAGE", "python:3.12-slim"),
 		OpenSandboxEntrypoint:     os.Getenv("OPENSANDBOX_ENTRYPOINT"),
 		OpenSandboxTimeoutSec:     envInt("OPENSANDBOX_TIMEOUT_SECONDS", 3600),
 		OpenSandboxCPU:            envOrDefault("OPENSANDBOX_CPU", "500m"),
