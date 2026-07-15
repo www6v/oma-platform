@@ -64,7 +64,13 @@ async def run_explore_unfamiliar_codebase_soak(
     )
     env = client.environments.create(
         name=ENV_NAME,
-        config={"type": "cloud", "networking": {"type": "limited"}},
+        config={
+            "type": "sandbox",
+            "sandbox": {
+                "provider": "opensandbox",
+                "opensandbox": {"image": "python:3.12-slim"},
+            },
+        },
     )
     session = client.sessions.create(
         environment_id=env.id,

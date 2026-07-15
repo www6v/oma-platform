@@ -104,7 +104,16 @@ def build_define_outcome_event(client_rubric_file_id: str | None) -> dict:
 async def main() -> None:
     use_file_rubric = os.getenv("OMA_USE_FILE_RUBRIC") == "1"
     async with OMAClient(base_url=OMA_BASE_URL) as client:
-        env = client.environments.create(name=ENV_NAME)
+        env = client.environments.create(
+            name=ENV_NAME,
+            config={
+                "type": "sandbox",
+                "sandbox": {
+                    "provider": "opensandbox",
+                    "opensandbox": {"image": "python:3.12-slim"},
+                },
+            },
+        )
         agent = client.agents.create(
             name=AGENT_NAME,
             model={"id": MODEL},

@@ -96,7 +96,13 @@ async def run_ev_charging_outcome_soak(
 
     env = client.environments.create(
         name=ENV_NAME,
-        config={"type": "cloud", "networking": {"type": "unrestricted"}},
+        config={
+            "type": "sandbox",
+            "sandbox": {
+                "provider": "opensandbox",
+                "opensandbox": {"image": "python:3.12-slim"},
+            },
+        },
     )
     agent = client.agents.create(
         name=AGENT_NAME,

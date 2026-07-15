@@ -352,6 +352,9 @@ func mountSessionRoutes(
 			return
 		}
 		h.registry.Remove(id)
+		if h.workdirs != nil && h.workdirs.Sandbox != nil {
+			_ = h.workdirs.Sandbox.Release(req.Context(), id)
+		}
 		writeJSON(w, http.StatusOK, formatAPISession(sess))
 	})
 

@@ -240,7 +240,13 @@ async def main() -> None:
 
         env = client.environments.create(
             name=ENV_NAME,
-            config={"type": "cloud", "networking": {"type": "limited"}},
+            config={
+                "type": "sandbox",
+                "sandbox": {
+                    "provider": "opensandbox",
+                    "opensandbox": {"image": "python:3.12-slim"},
+                },
+            },
         )
         print(f"Created environment: {env.id}")
 

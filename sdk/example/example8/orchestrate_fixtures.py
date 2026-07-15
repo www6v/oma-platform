@@ -39,9 +39,11 @@ AGENT_SYSTEM = (
 )
 
 ENV_CONFIG = {
-    "type": "cloud",
-    "networking": {"type": "limited", "allow_package_managers": True},
-    "packages": {"pip": ["pytest"]},
+    "type": "sandbox",
+    "sandbox": {
+        "provider": "opensandbox",
+        "opensandbox": {"image": "python:3.12-slim"},
+    },
 }
 
 CHAIN_USER_MESSAGE = (

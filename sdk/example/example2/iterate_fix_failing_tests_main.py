@@ -96,10 +96,14 @@ TEST_MOUNT = "test_calc.py"
 # Cookbook mapping: notebook Cell 3 (§1 Create the agent)
 # ---------------------------------------------------------------------------
 # System prompt is deliberately sparse — the test output makes the task obvious.
+# Iteration budget: cap the fix loop at 2 attempts so the example terminates
+# predictably even when the agent introduces a regression mid-fix.
 ITERATE_SYSTEM_PROMPT = (
     "You are a debugging agent. Your job is to make failing tests pass. "
-    "Run the tests, read the failures, fix the code, repeat until green. "
-    "Stop when every assertion passes."
+    "Run the tests, read the failures, fix the code. "
+    "You may iterate at most 2 times: run → fix → run → fix. "
+    "After the 2nd fix attempt, stop and write the final calc.py even if "
+    "some tests still fail."
 )
 
 # Cookbook Cell 3: agent_toolset_20260401 with always_allow permission policy.
@@ -238,7 +242,13 @@ async def main() -> None:
         # Iterate uses ``python3 -c`` instead of pytest; no packages block.
         env = client.environments.create(
             name=ENV_NAME,
-            config={"type": "cloud", "networking": {"type": "limited"}},
+            config={
+                "type": "sandbox",
+                "sandbox": {
+                    "provider": "opensandbox",
+                    "opensandbox": {"image": "python:3.12-slim"},
+                },
+            },
         )
         print(f"Created environment: {env.id}")
 

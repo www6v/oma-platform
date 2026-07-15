@@ -87,8 +87,11 @@ AGENT_TOOLS = [
 ]
 
 ENV_CONFIG = {
-    "type": "cloud",
-    "networking": {"type": "limited"},
+    "type": "sandbox",
+    "sandbox": {
+        "provider": "opensandbox",
+        "opensandbox": {"image": "python:3.12-slim"},
+    },
 }
 
 

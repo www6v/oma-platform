@@ -79,7 +79,13 @@ async def run_remember_preferences_soak(
     )
     env = client.environments.create(
         name=ENV_NAME,
-        config={"type": "cloud", "networking": {"type": "limited"}},
+        config={
+            "type": "sandbox",
+            "sandbox": {
+                "provider": "opensandbox",
+                "opensandbox": {"image": "python:3.12-slim"},
+            },
+        },
     )
     resource = build_memory_resource(store.id)
 

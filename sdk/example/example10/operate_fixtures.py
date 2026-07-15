@@ -10,8 +10,11 @@ SESSION_TITLE = "Operate in production"
 ENV_NAME = "operate-local"
 
 ENV_CONFIG = {
-    "name": ENV_NAME,
-    "networking": {"type": "limited"},
+    "type": "sandbox",
+    "sandbox": {
+        "provider": "opensandbox",
+        "opensandbox": {"image": "python:3.12-slim"},
+    },
 }
 
 GITHUB_MCP_SERVER_NAME = "github"
