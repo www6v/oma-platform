@@ -826,6 +826,10 @@ CREATE TABLE schema_migrations (
 --     same MySQL database as the platform). Auto-created by better-auth on
 --     first start if missing, but listed here so a fresh `platform_mysql.sql`
 --     import is sufficient to bring up the whole stack.
+--
+--     IMPORTANT: better-auth's MySQL adapter writes datetime strings (e.g.
+--     "2026-07-23 18:17:53.596"), NOT unix timestamps. Date columns MUST be
+--     DATETIME(3); BIGINT would cause "Data truncated" errors at runtime.
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS `user` (
   `id` VARCHAR(64) NOT NULL,
@@ -835,8 +839,8 @@ CREATE TABLE IF NOT EXISTS `user` (
   `image` TEXT,
   `tenantId` VARCHAR(64),
   `role` VARCHAR(32),
-  `createdAt` BIGINT NOT NULL,
-  `updatedAt` BIGINT NOT NULL,
+  `createdAt` DATETIME(3) NOT NULL,
+  `updatedAt` DATETIME(3) NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `user_email_unique` (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -845,11 +849,11 @@ CREATE TABLE IF NOT EXISTS `session` (
   `id` VARCHAR(64) NOT NULL,
   `userId` VARCHAR(64) NOT NULL,
   `token` VARCHAR(255) NOT NULL,
-  `expiresAt` BIGINT NOT NULL,
+  `expiresAt` DATETIME(3) NOT NULL,
   `ipAddress` VARCHAR(255),
   `userAgent` TEXT,
-  `createdAt` BIGINT NOT NULL,
-  `updatedAt` BIGINT NOT NULL,
+  `createdAt` DATETIME(3) NOT NULL,
+  `updatedAt` DATETIME(3) NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `session_token_unique` (`token`),
   KEY `session_user_idx` (`userId`)
@@ -863,12 +867,12 @@ CREATE TABLE IF NOT EXISTS `account` (
   `accessToken` TEXT,
   `refreshToken` TEXT,
   `idToken` TEXT,
-  `accessTokenExpiresAt` BIGINT,
-  `refreshTokenExpiresAt` BIGINT,
+  `accessTokenExpiresAt` DATETIME(3),
+  `refreshTokenExpiresAt` DATETIME(3),
   `scope` VARCHAR(255),
   `password` TEXT,
-  `createdAt` BIGINT NOT NULL,
-  `updatedAt` BIGINT NOT NULL,
+  `createdAt` DATETIME(3) NOT NULL,
+  `updatedAt` DATETIME(3) NOT NULL,
   PRIMARY KEY (`id`),
   KEY `account_user_idx` (`userId`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -877,9 +881,9 @@ CREATE TABLE IF NOT EXISTS `verification` (
   `id` VARCHAR(64) NOT NULL,
   `identifier` VARCHAR(255) NOT NULL,
   `value` TEXT NOT NULL,
-  `expiresAt` BIGINT NOT NULL,
-  `createdAt` BIGINT,
-  `updatedAt` BIGINT,
+  `expiresAt` DATETIME(3) NOT NULL,
+  `createdAt` DATETIME(3),
+  `updatedAt` DATETIME(3),
   PRIMARY KEY (`id`),
   KEY `verification_identifier_idx` (`identifier`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

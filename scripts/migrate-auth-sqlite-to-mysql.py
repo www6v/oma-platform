@@ -81,6 +81,9 @@ def _urldecode(s: str | None) -> str:
 # ---------------------------------------------------------------------------
 
 BETTER_AUTH_DDL = [
+    # better-auth's MySQL adapter writes datetime strings (e.g.
+    # "2026-07-23 18:17:53.596"), so date columns MUST be DATETIME(3)
+    # (or TIMESTAMP(3)), NOT BIGINT — the adapter doesn't convert.
     """
     CREATE TABLE IF NOT EXISTS `user` (
       `id` VARCHAR(64) NOT NULL,
@@ -90,8 +93,8 @@ BETTER_AUTH_DDL = [
       `image` TEXT,
       `tenantId` VARCHAR(64),
       `role` VARCHAR(32),
-      `createdAt` BIGINT NOT NULL,
-      `updatedAt` BIGINT NOT NULL,
+      `createdAt` DATETIME(3) NOT NULL,
+      `updatedAt` DATETIME(3) NOT NULL,
       PRIMARY KEY (`id`),
       UNIQUE KEY `user_email_unique` (`email`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
@@ -101,11 +104,11 @@ BETTER_AUTH_DDL = [
       `id` VARCHAR(64) NOT NULL,
       `userId` VARCHAR(64) NOT NULL,
       `token` VARCHAR(255) NOT NULL,
-      `expiresAt` BIGINT NOT NULL,
+      `expiresAt` DATETIME(3) NOT NULL,
       `ipAddress` VARCHAR(255),
       `userAgent` TEXT,
-      `createdAt` BIGINT NOT NULL,
-      `updatedAt` BIGINT NOT NULL,
+      `createdAt` DATETIME(3) NOT NULL,
+      `updatedAt` DATETIME(3) NOT NULL,
       PRIMARY KEY (`id`),
       UNIQUE KEY `session_token_unique` (`token`),
       KEY `session_user_idx` (`userId`)
@@ -120,12 +123,12 @@ BETTER_AUTH_DDL = [
       `accessToken` TEXT,
       `refreshToken` TEXT,
       `idToken` TEXT,
-      `accessTokenExpiresAt` BIGINT,
-      `refreshTokenExpiresAt` BIGINT,
+      `accessTokenExpiresAt` DATETIME(3),
+      `refreshTokenExpiresAt` DATETIME(3),
       `scope` VARCHAR(255),
       `password` TEXT,
-      `createdAt` BIGINT NOT NULL,
-      `updatedAt` BIGINT NOT NULL,
+      `createdAt` DATETIME(3) NOT NULL,
+      `updatedAt` DATETIME(3) NOT NULL,
       PRIMARY KEY (`id`),
       KEY `account_user_idx` (`userId`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
@@ -135,9 +138,9 @@ BETTER_AUTH_DDL = [
       `id` VARCHAR(64) NOT NULL,
       `identifier` VARCHAR(255) NOT NULL,
       `value` TEXT NOT NULL,
-      `expiresAt` BIGINT NOT NULL,
-      `createdAt` BIGINT,
-      `updatedAt` BIGINT,
+      `expiresAt` DATETIME(3) NOT NULL,
+      `createdAt` DATETIME(3),
+      `updatedAt` DATETIME(3),
       PRIMARY KEY (`id`),
       KEY `verification_identifier_idx` (`identifier`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
@@ -229,8 +232,29 @@ def copy_table(sqlite_db: sqlite3.Connection, mysql, table: str) -> None:
 
 
 def _coerce(v):
-    """SQLite may store booleans as 0/1; MySQL wants 0/1 too, so pass through."""
+    """SQLite stores better-auth dates as ISO strings (e.g.
+    '2026-07-04T11:04:07.496Z'). MySQL DATETIME(3) accepts the same
+    values but without the trailing 'Z' and with a space instead of 'T'.
+    Convert on the fly; pass everything else through unchanged."""
+    if isinstance(v, str) and _ISO_DATE.match(v):
+        return _iso_to_mysql_datetime(v)
     return v
+
+
+_ISO_DATE = __import__("re").compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z?$"
+)
+
+
+def _iso_to_mysql_datetime(s: str) -> str:
+    # '2026-07-04T11:04:07.496Z' → '2026-07-04 11:04:07.496'
+    s = s.rstrip("Z").replace("T", " ")
+    # Truncate/pad fractional seconds to 3 digits (millisecond precision)
+    if "." in s:
+        base, frac = s.split(".")
+        frac = (frac + "000")[:3]
+        s = f"{base}.{frac}"
+    return s
 
 
 # ---------------------------------------------------------------------------
