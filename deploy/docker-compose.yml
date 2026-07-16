@@ -10,10 +10,12 @@ services:
       - ../.env
     environment:
       AUTH_LISTEN_ADDR: 0.0.0.0:8788
-      AUTH_DATABASE_PATH: /data/auth.db
-      OMA_DATABASE_PATH: /data/oma.db
-    volumes:
-      - ../data:/data
+      # Better Auth + tenant helper now both talk to MySQL via DATABASE_URL
+      # (inherited from env_file above). No local SQLite files needed.
+      # Browser may reach the auth sidecar via the remote public IP; add it
+      # to Better Auth's trusted origins alongside the default 127.0.0.1 /
+      # localhost entries so login requests aren't rejected.
+      TRUSTED_ORIGINS: http://124.221.28.203:8787
     healthcheck:
       test:
         [
@@ -43,7 +45,8 @@ services:
       # Container paths / in-network URLs only. App secrets and toggles
       # (OMA_FAKE_HARNESS, OMA_INTERNAL_SECRET, OMA_API_KEY, …) come from
       # env_file above — do not re-declare them here or they override .env.
-      DATABASE_PATH: /data/oma.db
+      # Database: oma-platform now connects to MySQL via DATABASE_URL in .env;
+      # no local SQLite file is used by the Go server anymore.
       SANDBOX_WORKDIR: /data/sandboxes
       # All artifact dirs must live on the shared /data volume so harness
       # (separate container) can follow workdir symlinks into session outputs.
