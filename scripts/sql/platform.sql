@@ -803,6 +803,59 @@ CREATE INDEX IF NOT EXISTS idx_system_runtime_leases_ttl
   ON system_runtime_leases (idle_ttl_at) WHERE released_at IS NOT NULL;
 
 -- ============================================================================
+-- Better Auth 相关表（由 oma-auth / auth-sidecar 使用，但与 platform 共用同一
+-- 个数据库）。better-auth 启动时会自动创建，这里列出便于整体导入 / 对账。
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS "user" (
+  "id"            TEXT PRIMARY KEY NOT NULL,
+  "email"         TEXT NOT NULL UNIQUE,
+  "emailVerified" INTEGER NOT NULL DEFAULT 0,
+  "name"          TEXT NOT NULL,
+  "image"         TEXT,
+  "tenantId"      TEXT,
+  "role"          TEXT,
+  "createdAt"     INTEGER NOT NULL,
+  "updatedAt"     INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS "session" (
+  "id"          TEXT PRIMARY KEY NOT NULL,
+  "userId"      TEXT NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
+  "token"       TEXT NOT NULL UNIQUE,
+  "expiresAt"   INTEGER NOT NULL,
+  "ipAddress"   TEXT,
+  "userAgent"   TEXT,
+  "createdAt"   INTEGER NOT NULL,
+  "updatedAt"   INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS "account" (
+  "id"                     TEXT PRIMARY KEY NOT NULL,
+  "userId"                 TEXT NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
+  "accountId"              TEXT NOT NULL,
+  "providerId"             TEXT NOT NULL,
+  "accessToken"            TEXT,
+  "refreshToken"           TEXT,
+  "idToken"                TEXT,
+  "accessTokenExpiresAt"   INTEGER,
+  "refreshTokenExpiresAt"  INTEGER,
+  "scope"                  TEXT,
+  "password"               TEXT,
+  "createdAt"              INTEGER NOT NULL,
+  "updatedAt"              INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS "verification" (
+  "id"          TEXT PRIMARY KEY NOT NULL,
+  "identifier"  TEXT NOT NULL,
+  "value"       TEXT NOT NULL,
+  "expiresAt"   INTEGER NOT NULL,
+  "createdAt"   INTEGER,
+  "updatedAt"   INTEGER
+);
+
+-- ============================================================================
 -- 内部迁移追踪表
 -- ============================================================================
 
