@@ -32,12 +32,23 @@ import (
 
 func main() {
 	addr := envOrDefault("OMA_LISTEN_ADDR", ":8787")
-	dbPath := envOrDefault("DATABASE_PATH", "./data/oma.db")
-	absDbPath, err := filepath.Abs(dbPath)
-	if err != nil {
-		log.Fatal(err)
-	}
-	dbPath = absDbPath
+	// [SQLite] 原配置项（已切换到 MySQL）
+	// dbPath := envOrDefault("DATABASE_PATH", "./data/oma.db")
+	// absDbPath, err := filepath.Abs(dbPath)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// dbPath = absDbPath
+
+	// [MySQL] 新配置项 — DATABASE_URL 示例:
+	//   mysql+aiomysql://managed:managedAgent123@124.221.28.203:3306/managed_agent
+	//   或 Go 风格: managed:managedAgent123@tcp(124.221.28.203:3306)/managed_agent?parseTime=true&charset=utf8mb4
+	dbDSN := envOrDefault(
+		"DATABASE_URL",
+		"mysql+aiomysql://managed:managedAgent123@124.221.28.203:3306/managed_agent",
+	)
+	// 兼容旧字段：仍然保留 dbPath 变量给下游（如 harness），但内容改为 DSN
+	dbPath := dbDSN
 	workdirBase := envOrDefault("SANDBOX_WORKDIR", "./data/sandboxes")
 	skillsDataDir := envOrDefault("SKILLS_DATA_DIR", "./data/skills")
 	filesDataDir := envOrDefault("FILES_DATA_DIR", "./data/files")
@@ -67,9 +78,10 @@ func main() {
 		log.Print("warning: console mounted without AUTH_UPSTREAM_URL — cookie auth disabled")
 	}
 
-	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
-		log.Fatal(err)
-	}
+	// [SQLite] 原：创建数据库文件所在目录（MySQL 不需要）
+	// if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
+	// 	log.Fatal(err)
+	// }
 	if err := os.MkdirAll(workdirBase, 0o755); err != nil {
 		log.Fatal(err)
 	}

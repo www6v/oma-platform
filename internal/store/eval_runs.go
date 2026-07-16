@@ -243,7 +243,7 @@ func (r *EvalRunRepo) MarkFinished(
 	}
 	_, err = r.db.ExecContext(ctx, `
 		UPDATE eval_runs
-		SET status = ?, results = ?, score = ?, error = ?, completed_at = ?
+		SET status = ?, results = ?, score = ?, "error" = ?, completed_at = ?
 		WHERE tenant_id = ? AND id = ?
 	`, string(status), string(results), nullSQLFloat(scoreVal),
 		nullSQLString(errSQL), now, tenantOrDefault(tenantID), runID)
@@ -268,7 +268,7 @@ func (r *EvalRunRepo) MarkFailed(
 	now := time.Now().UnixMilli()
 	_, err = r.db.ExecContext(ctx, `
 		UPDATE eval_runs
-		SET status = ?, completed_at = ?, error = ?
+		SET status = ?, completed_at = ?, "error" = ?
 		WHERE tenant_id = ? AND id = ?
 	`, string(EvalStatusFailed), now, errMsg, tenantOrDefault(tenantID), runID)
 	return err

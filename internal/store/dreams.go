@@ -141,7 +141,7 @@ func (r *DreamRepo) Create(
 	_, err = r.db.ExecContext(ctx, `
 		INSERT INTO dreams (
 			id, tenant_id, status, input_memory_store_id, input_session_ids,
-			model, instructions, usage, created_at
+			model, instructions, "usage", created_at
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id, tenantID, string(DreamStatusPending), input.InputMemoryStoreID,
 		string(sessionJSON), input.Model, nullSQLString(instructions),
@@ -159,8 +159,8 @@ func (r *DreamRepo) Get(
 ) (*DreamRow, error) {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT id, tenant_id, status, input_memory_store_id, input_session_ids,
-		       output_memory_store_id, model, instructions, session_id, usage,
-		       error, created_at, started_at, ended_at, archived_at
+		       output_memory_store_id, model, instructions, session_id, "usage",
+		       "error", created_at, started_at, ended_at, archived_at
 		FROM dreams
 		WHERE tenant_id = ? AND id = ?
 	`, tenantOrDefault(tenantID), dreamID)
@@ -183,8 +183,8 @@ func (r *DreamRepo) List(
 	fetch := limit + 1
 	query := `
 		SELECT id, tenant_id, status, input_memory_store_id, input_session_ids,
-		       output_memory_store_id, model, instructions, session_id, usage,
-		       error, created_at, started_at, ended_at, archived_at
+		       output_memory_store_id, model, instructions, session_id, "usage",
+		       "error", created_at, started_at, ended_at, archived_at
 		FROM dreams
 		WHERE tenant_id = ?
 	`
@@ -227,8 +227,8 @@ func (r *DreamRepo) List(
 func (r *DreamRepo) ListActive(ctx context.Context) ([]DreamRow, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, tenant_id, status, input_memory_store_id, input_session_ids,
-		       output_memory_store_id, model, instructions, session_id, usage,
-		       error, created_at, started_at, ended_at, archived_at
+		       output_memory_store_id, model, instructions, session_id, "usage",
+		       "error", created_at, started_at, ended_at, archived_at
 		FROM dreams
 		WHERE status IN (?, ?)
 		ORDER BY created_at ASC
@@ -247,8 +247,8 @@ func (r *DreamRepo) FindActiveByOutputStore(
 ) ([]DreamRow, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, tenant_id, status, input_memory_store_id, input_session_ids,
-		       output_memory_store_id, model, instructions, session_id, usage,
-		       error, created_at, started_at, ended_at, archived_at
+		       output_memory_store_id, model, instructions, session_id, "usage",
+		       "error", created_at, started_at, ended_at, archived_at
 		FROM dreams
 		WHERE tenant_id = ? AND output_memory_store_id = ?
 		  AND status IN (?, ?)
@@ -324,7 +324,7 @@ func (r *DreamRepo) MarkFailed(
 	}
 	_, err = r.db.ExecContext(ctx, `
 		UPDATE dreams
-		SET status = ?, error = ?, ended_at = ?
+		SET status = ?, "error" = ?, ended_at = ?
 		WHERE tenant_id = ? AND id = ?
 		  AND status IN (?, ?)
 	`, string(DreamStatusFailed), string(payload), now,

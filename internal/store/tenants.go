@@ -109,7 +109,7 @@ func (r *TenantRepo) EnsureTenant(
 		return "", fmt.Errorf("insert tenant: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO membership (user_id, tenant_id, role, created_at)
+		INSERT INTO membership (user_id, tenant_id, "role", created_at)
 		VALUES (?, ?, 'owner', ?)
 		ON CONFLICT (user_id, tenant_id) DO NOTHING
 	`, userID, tenantID, now); err != nil {
@@ -162,7 +162,7 @@ func (r *TenantRepo) CreateTenant(
 		return TenantMembership{}, fmt.Errorf("insert tenant: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO membership (user_id, tenant_id, role, created_at)
+		INSERT INTO membership (user_id, tenant_id, "role", created_at)
 		VALUES (?, ?, 'owner', ?)
 		ON CONFLICT (user_id, tenant_id) DO NOTHING
 	`, userID, tenantID, now); err != nil {
@@ -185,7 +185,7 @@ func (r *TenantRepo) ListForUser(
 	userID string,
 ) ([]TenantMembership, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT m.tenant_id, t.name, m.role
+		SELECT m.tenant_id, t.name, m."role"
 		FROM membership m
 		JOIN tenant t ON t.id = m.tenant_id
 		WHERE m.user_id = ?

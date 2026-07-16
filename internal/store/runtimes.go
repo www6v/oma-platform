@@ -466,7 +466,7 @@ func (r *RuntimeRepo) ListRuntimeTenantsForMe(
 	runtimeID, userID string,
 ) ([]RuntimeTenantInfo, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT rt.tenant_id, t.name, m.role
+		SELECT rt.tenant_id, t.name, m."role"
 		FROM runtime_tenants rt
 		LEFT JOIN tenant t ON t.id = rt.tenant_id
 		LEFT JOIN membership m
