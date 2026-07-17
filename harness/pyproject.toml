@@ -12,7 +12,15 @@ dependencies = [
   "pi-ai",
   "pi-subagent",
   "pi-team",
+  "pi-dynamic-workflows",
   "mcp>=1.27.2",
+  # Required by pi-dynamic-workflows when DATABASE_URL is set (MySQL backend).
+  # Listed here so harness venv picks it up even if the workflows package was
+  # installed from an older git pin that didn't declare pymysql yet.
+  "pymysql>=1.1.0",
+  # OMA platform SDK — workflow bootstrap uses it to create OMA agents /
+  # sessions so workflow executions appear in /agents and /sessions.
+  "oma-sdk",
 ]
 
 [tool.uv.sources]
@@ -20,7 +28,8 @@ pi-coding-agent = { git = "https://gitee.com/www6v6v/piPy.git", branch = "v0.2.0
 pi-ai = { git = "https://gitee.com/www6v6v/piPy.git", branch = "v0.2.0", subdirectory = "packages/pi_ai" }
 pi-subagent = { git = "https://gitee.com/www6v6v/pipy-subagent.git", branch = "v0.1.0", subdirectory = "packages/pi_subagent" }
 pi-team = { git = "https://gitee.com/www6v6v/pipy-teams.git", branch = "v0.1.0", subdirectory = "packages/pi_team" }
-pipy-dynamic-workflows = { git = "https://gitee.com/www6v6v/pipy-dynamic-workflows.git", branch = "v0.1.0", subdirectory = "pipy_dynamic_workflows" }
+pi-dynamic-workflows = { git = "https://gitee.com/www6v6v/pipy-dynamic-workflows.git", branch = "v0.1.0", subdirectory = "packages/pi_dynamic_workflows" }
+oma-sdk = { path = "../sdk", editable = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

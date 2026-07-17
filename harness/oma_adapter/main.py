@@ -27,10 +27,27 @@ from oma_adapter.types import (
 
 # Load piPy extensions
 try:
-    from pipy_dynamic_workflows import register_extension
+    from pi_dynamic_workflows import register_extension
     _workflows_ext = register_extension()
 except ImportError:
     _workflows_ext = None
+
+# Wire OMA-specific implementations into the workflow package's abstract
+# interfaces (SubAgentRunner + WorkflowBootstrap Protocols). Must happen
+# after ``register_extension()`` so the workflow router is mounted before
+# any workflow executes.
+if _workflows_ext is not None:
+    try:
+        from oma_adapter.workflow_integration import (
+            configure_workflow_oma_integration,
+        )
+        configure_workflow_oma_integration()
+    except Exception:  # pragma: no cover - startup-time wiring
+        import logging
+
+        logging.getLogger(__name__).exception(
+            "failed to configure workflow ↔ OMA integration",
+        )
 
 TURN_TIMEOUT_SEC = float(os.environ.get("HARNESS_TURN_TIMEOUT_SEC", "900"))
 STREAM_KEEPALIVE_SEC = float(

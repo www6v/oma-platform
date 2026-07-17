@@ -65,7 +65,7 @@ func Middleware(cfg Config) func(http.Handler) http.Handler {
 			}
 
 			if key := strings.TrimSpace(r.Header.Get("x-api-key")); key != "" {
-				tenantID, userID, ok := resolveAPIKey(r.Context(), cfg, key)
+				tenantID, userID, ok := resolveAPIKey(r.Context(), cfg, key, r.Header)
 				if !ok {
 					writeAuthError(w, http.StatusUnauthorized, "unauthorized")
 					return
@@ -108,8 +108,15 @@ func resolveAPIKey(
 	ctx context.Context,
 	cfg Config,
 	header string,
+	httpHeaders http.Header,
 ) (tenantID string, userID string, ok bool) {
 	if cfg.APIKey != "" && header == cfg.APIKey {
+		// Global API key: honor x-active-tenant header if provided.
+		// This allows workflow orchestrators to create resources in a
+		// specific tenant while authenticating with the shared API key.
+		if requested := strings.TrimSpace(httpHeaders.Get("x-active-tenant")); requested != "" {
+			return requested, "", true
+		}
 		return fallbackTenant, "", true
 	}
 	if cfg.ApiKeys == nil {

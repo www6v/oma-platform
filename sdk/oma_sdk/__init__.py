@@ -78,15 +78,30 @@ __all__ = [
 
 
 class OMAClient:
-    def __init__(self, base_url: str = "http://localhost:8787") -> None:
+    def __init__(
+        self,
+        base_url: str = "http://localhost:8787",
+        tenant_id: str | None = None,
+    ) -> None:
         api_key = os.environ["OMA_API_KEY"]
-        self._anthropic = anthropic.Anthropic(api_key=api_key, base_url=base_url)
+        # Build headers for tenant isolation
+        anthropic_headers = {}
+        http_headers = {"x-api-key": api_key}
+        if tenant_id:
+            anthropic_headers["x-active-tenant"] = tenant_id
+            http_headers["x-active-tenant"] = tenant_id
+        self._anthropic = anthropic.Anthropic(
+            api_key=api_key,
+            base_url=base_url,
+            default_headers=anthropic_headers,
+        )
         self._http = httpx.AsyncClient(
             base_url=base_url,
-            headers={"x-api-key": api_key},
+            headers=http_headers,
             timeout=30.0,
         )
         self._base_url = base_url
+        self._tenant_id = tenant_id
 
         # OMA-platform-only resources
         self.dreams = DreamsResource(self._http)
