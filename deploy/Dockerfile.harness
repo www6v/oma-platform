@@ -25,6 +25,10 @@ ENV UV_INDEX_URL=${UV_INDEX_URL} \
 RUN pip install --no-cache-dir -i "${PIP_INDEX_URL}" uv
 
 COPY harness/pyproject.toml harness/uv.lock ./
+# Copy the local path dependency referenced by harness/pyproject.toml:
+#   oma-sdk = { path = "../sdk", editable = true }
+# Without this, `uv sync` fails with: Distribution not found at: file:///app/sdk
+COPY sdk/ /app/sdk/
 
 RUN if [ -n "${PYPI_MIRROR_PACKAGES}" ]; then \
       sed -i \
