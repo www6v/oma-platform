@@ -117,7 +117,13 @@ def _resolve_workdir(session_id: str) -> str:
 
 
 def _platform_config() -> Tuple[str, str, str]:
-    base = os.environ.get("OMA_API_BASE", "http://localhost:8787").rstrip("/")
+    # Resolve base URL: OMA_API_BASE > OMA_PLATFORM_URL > localhost default.
+    # Keeps harness consistent with OMAClient (sdk/oma_sdk/__init__.py).
+    base = (
+        os.environ.get("OMA_API_BASE")
+        or os.environ.get("OMA_PLATFORM_URL")
+        or "http://localhost:8787"
+    ).rstrip("/")
     secret = os.environ.get("OMA_INTERNAL_SECRET", "")
     tenant = os.environ.get("OMA_TENANT_ID", "")
     return base, secret, tenant
@@ -262,8 +268,10 @@ async def _post_events_batch(
     enqueue: bool = False,
 ) -> None:
     base, secret, _tenant = _platform_config()
-    if not base or not secret:
-        raise RuntimeError("OMA event bridge requires OMA_API_BASE and OMA_INTERNAL_SECRET")
+    if not secret:
+        raise RuntimeError("OMA event bridge requires OMA_INTERNAL_SECRET")
+    if not base:
+        raise RuntimeError("OMA event bridge requires OMA_API_BASE or OMA_PLATFORM_URL")
     url = urljoin(base + "/", f"v1/internal/sessions/{session_id}/events/batch")
     async with httpx.AsyncClient(timeout=60.0) as client:
         resp = await client.post(
