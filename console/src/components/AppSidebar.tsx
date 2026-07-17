@@ -188,7 +188,7 @@ export function AppSidebar() {
       <SidebarHeader className="bg-sidebar h-11 px-3 flex-row items-center gap-2">
         <Logo size="sm" />
         <span className="font-mono font-bold text-base text-brand group-data-[collapsible=icon]:hidden">
-          openma
+          Managed Agent
         </span>
       </SidebarHeader>
 
