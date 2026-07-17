@@ -6,7 +6,7 @@ Usage:
     os.environ["OMA_API_KEY"] = "your-key"
 
     from oma_sdk import OMAClient
-    client = OMAClient()                          # defaults to http://localhost:8787
+    client = OMAClient()                          # reads OMA_PLATFORM_URL, else http://localhost:8787
     client = OMAClient(base_url="http://...")     # custom server
 
 Managed-agents resources (routed through anthropic SDK with custom base_url):
@@ -80,9 +80,12 @@ __all__ = [
 class OMAClient:
     def __init__(
         self,
-        base_url: str = "http://localhost:8787",
+        base_url: str | None = None,
         tenant_id: str | None = None,
     ) -> None:
+        # Resolve base_url: explicit arg > OMA_PLATFORM_URL env var > localhost default.
+        # Mirrors the convention used by the anthropic SDK (ANTHROPIC_BASE_URL).
+        base_url = base_url or os.environ.get("OMA_PLATFORM_URL", "http://localhost:8787")
         api_key = os.environ["OMA_API_KEY"]
         # Build headers for tenant isolation
         anthropic_headers = {}
