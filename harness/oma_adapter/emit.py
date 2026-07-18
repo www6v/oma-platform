@@ -23,9 +23,15 @@ def emit_oma_events(
     seen_agent_text: set[str] | None = None,
     custom_tool_names: frozenset[str] | None = None,
     event_lookup_buffer: list[dict[str, Any]] | None = None,
+    streaming_state: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     seen_agent_text = seen_agent_text if seen_agent_text is not None else set()
+    # streaming_state tracks the last emitted text length for message_update
+    # deltas so the frontend sees incremental text instead of each update
+    # repeating the entire accumulated message.
+    if streaming_state is None:
+        streaming_state = {"last_emitted_len": 0}
     lookup_events = (
         event_lookup_buffer if event_lookup_buffer is not None else raw_events
     )
@@ -42,21 +48,57 @@ def emit_oma_events(
             print(f"DEBUG emit_oma_events: Skipping non-dict at index {idx}: type={type(item).__name__}, value={item!r}", file=sys.stderr, flush=True)
             continue
         kind = item.get("type") or item.get("event")
-        if kind in {"assistant_message", "agent.message"}:
+        if kind == "message_update":
+            # Streaming text delta: message contains the accumulated
+            # AssistantMessage so far. Emit only the new portion.
+            message = item.get("message")
+            if isinstance(message, dict):
+                full_text = _extract_pi_message_text(message)
+                last_len = int(streaming_state.get("last_emitted_len", 0))
+                if len(full_text) > last_len:
+                    delta = full_text[last_len:]
+                    streaming_state["last_emitted_len"] = len(full_text)
+                    if delta:
+                        out.append(_agent_message(delta))
+        elif kind in {"assistant_message", "agent.message"}:
             text = _extract_text(item)
             if text and text not in seen_agent_text:
                 seen_agent_text.add(text)
                 out.append(_agent_message(text))
+        elif kind in {"message_start"}:
+            # New message started — reset streaming delta tracker so the
+            # first message_update of the new message emits from position 0.
+            streaming_state["last_emitted_len"] = 0
         elif kind in {"message_end", "turn_end"}:
             message = item.get("message")
             if isinstance(message, dict) and message.get("role") == "assistant":
                 text = _extract_pi_message_text(message)
-                if text and text not in seen_agent_text:
+                last_len = int(streaming_state.get("last_emitted_len", 0))
+                if text and text in seen_agent_text:
+                    # This exact text was already emitted (e.g. via an
+                    # assistant_message event); skip to avoid duplication.
+                    pass
+                elif text and len(text) > last_len:
+                    # Emit any trailing portion that didn't come through as
+                    # a message_update (defensive — handles the case where
+                    # the agent produced text without streaming updates, or
+                    # where the final message has extra content beyond the
+                    # last streamed update).
+                    delta = text[last_len:]
+                    streaming_state["last_emitted_len"] = len(text)
+                    if delta:
+                        out.append(_agent_message(delta))
+                elif text and last_len == 0:
+                    # No streaming happened; emit the full text once.
                     seen_agent_text.add(text)
                     out.append(_agent_message(text))
+                if text:
+                    seen_agent_text.add(text)
                 usage_span = _model_usage_span(message)
                 if usage_span is not None:
                     out.append(usage_span)
+            # Reset streaming tracker at message boundary.
+            streaming_state["last_emitted_len"] = 0
         elif kind in {"tool_use", "agent.tool_use", "tool_execution_start"}:
             tool_id = (
                 item.get("id")

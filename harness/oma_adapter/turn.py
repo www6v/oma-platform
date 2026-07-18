@@ -540,6 +540,7 @@ async def _run_turn_core(
             buffer: list[dict[str, Any]] = []
             raw_cursor = 0
             seen_agent_text: set[str] = set()
+            streaming_state: dict[str, Any] = {"last_emitted_len": 0}
             oma_events: list[dict[str, Any]] = []
 
             import logging as _tlog
@@ -566,6 +567,7 @@ async def _run_turn_core(
                     seen_agent_text=seen_agent_text,
                     custom_tool_names=agent_custom_tools,
                     event_lookup_buffer=buffer,
+                    streaming_state=streaming_state,
                 )
                 raw_cursor = len(buffer)
                 # Debug: log what we got and what we emitted
@@ -618,6 +620,7 @@ async def _run_turn_core(
                 buffer,
                 seen_agent_text=seen_agent_text,
                 custom_tool_names=agent_custom_tools,
+                streaming_state=streaming_state,
             )
             fallback_tool_events: list[dict[str, Any]] = []
             pending_mcp = requested_mcp & {
@@ -655,6 +658,7 @@ async def _run_turn_core(
                     buffer,
                     seen_agent_text=seen_agent_text,
                     custom_tool_names=agent_custom_tools,
+                    streaming_state=streaming_state,
                 )
                 if not fallback:
                     text = _assistant_text_from_session(session)
