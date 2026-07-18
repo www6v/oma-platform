@@ -118,6 +118,81 @@ async def _curl_fallback(workdir: str, url: str, cap: int) -> str:
     )
 
 
+async def _remote_markdown_service_fetch(url: str, cap: int) -> str | None:
+    """Fetch URL via remote Markdown conversion service.
+
+    The service should be deployed on a server with good network connectivity
+    (e.g., overseas server) and accessible from China.
+
+    Returns markdown content if successful, None if service is unavailable or fails.
+    """
+    service_url = os.environ.get("MARKDOWN_SERVICE_URL")
+    if not service_url:
+        return None
+
+    # Call the remote service
+    endpoint = f"{service_url.rstrip('/')}/convert"
+    headers = {
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "url": url,
+        "max_length": cap,
+    }
+
+    try:
+        async with httpx.AsyncClient(
+            follow_redirects=True,
+            timeout=FETCH_TIMEOUT_SEC,
+        ) as client:
+            response = await client.post(endpoint, headers=headers, json=payload)
+            response.raise_for_status()
+            markdown = response.text
+            if markdown and markdown.strip():
+                return _truncate(markdown, cap)
+    except Exception:
+        pass
+    return None
+
+
+async def _jina_reader_fetch(url: str, cap: int) -> str | None:
+    """Fetch URL via Jina Reader API (https://r.jina.ai/<url>).
+
+    Returns markdown content if successful, None if Jina is unavailable or fails.
+    Jina Reader converts web pages to clean markdown, bypassing bot protection
+    and working well in environments where direct fetching fails (e.g., China).
+    """
+    jina_api_key = os.environ.get("JINA_API_KEY")
+    if not jina_api_key:
+        print(f"[JINA] No JINA_API_KEY set, skipping Jina Reader")
+        return None
+
+    jina_url = f"https://r.jina.ai/{url}"
+    print(f"[JINA] Attempting to fetch via Jina Reader: {url}")
+    headers = {
+        "Authorization": f"Bearer {jina_api_key}",
+        "Accept": "text/plain",
+        "X-Return-Format": "markdown",
+    }
+
+    try:
+        async with httpx.AsyncClient(
+            follow_redirects=True,
+            timeout=FETCH_TIMEOUT_SEC,
+        ) as client:
+            response = await client.get(jina_url, headers=headers)
+            response.raise_for_status()
+            markdown = response.text
+            if markdown and markdown.strip():
+                print(f"[JINA] ✓ Success: got {len(markdown)} chars of markdown")
+                return _truncate(markdown, cap)
+            else:
+                print(f"[JINA] ✗ Empty response from Jina")
+    except Exception as e:
+        print(f"[JINA] ✗ Failed: {type(e).__name__}: {e}")
+    return None
+
+
 async def _fetch_bytes(url: str, runtime: WebFetchRuntime) -> tuple[bytes, str, str]:
     headers = {
         "User-Agent": USER_AGENT,
@@ -153,6 +228,17 @@ async def _fetch_to_markdown(
     runtime: WebFetchRuntime,
 ) -> tuple[str, bool]:
     """Return (markdown, is_raw_fallback)."""
+    # Try remote Markdown service first if configured (for China deployment)
+    remote_markdown = await _remote_markdown_service_fetch(url, cap)
+    if remote_markdown:
+        return remote_markdown, False
+
+    # Try Jina Reader API if configured (blocked by GFW in China)
+    jina_markdown = await _jina_reader_fetch(url, cap)
+    if jina_markdown:
+        return jina_markdown, False
+
+    # Fall back to direct httpx fetch + markdownify
     try:
         body, content_type, _final_url = await _fetch_bytes(url, runtime)
         text = body.decode("utf-8", errors="replace")

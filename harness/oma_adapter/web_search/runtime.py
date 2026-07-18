@@ -31,8 +31,15 @@ def _tool_types(agent: AgentSnapshot) -> set[str]:
 
 
 def resolve_search_backend(agent: AgentSnapshot) -> str:
-    """Mirror harness/tools.ts: Tavily type overrides DDG when present."""
+    """Mirror harness/tools.ts: Tavily type overrides DDG when present.
+
+    Also use Tavily if TAVILY_API_KEY is set (for China deployment where
+    DuckDuckGo is blocked by GFW).
+    """
     if "web_search_tavily" in _tool_types(agent):
+        return "tavily"
+    # Fallback: if TAVILY_API_KEY is set, prefer Tavily over DDG
+    if os.environ.get("TAVILY_API_KEY"):
         return "tavily"
     return "ddg"
 
