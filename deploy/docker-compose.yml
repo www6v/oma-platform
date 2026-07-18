@@ -12,10 +12,10 @@ services:
       AUTH_LISTEN_ADDR: 0.0.0.0:8788
       # Better Auth + tenant helper now both talk to MySQL via DATABASE_URL
       # (inherited from env_file above). No local SQLite files needed.
-      # Browser may reach the auth sidecar via the remote public IP; add it
-      # to Better Auth's trusted origins alongside the default 127.0.0.1 /
-      # localhost entries so login requests aren't rejected.
-      TRUSTED_ORIGINS: http://124.221.28.203:8787
+      # Browser Origin must be trusted by Better Auth. PUBLIC_BASE_URL from
+      # .env is always trusted (see auth-sidecar). Set TRUSTED_ORIGINS for
+      # extra comma-separated origins (IP + domain, etc.).
+      TRUSTED_ORIGINS: ${TRUSTED_ORIGINS:-}
     healthcheck:
       test:
         [
