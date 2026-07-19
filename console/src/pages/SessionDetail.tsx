@@ -4,12 +4,16 @@ import { useApi } from "../lib/api";
 import { toast } from "sonner";
 import { Markdown } from "../components/Markdown";
 import { formatDuration, formatRelative, shortenId } from "../lib/format";
+import { pairSessionErrors, pairToolResults } from "../lib/tool-pairing";
 import { Badge, StatusPill } from "../components/Badge";
 import { Modal } from "../components/Modal";
 import { Button } from "@/components/ui/button";
 import { AgentIcon, ClockIcon, DurationIcon, EnvIcon, VaultIcon } from "../components/icons";
 import { FilesPanel, ResourcePanel } from "./session-detail/Panels";
 import { HitlActionPanel } from "./session-detail/HitlActionPanel";
+import { TranscriptTab } from "./session-detail/TranscriptTab";
+import { DebugTab } from "./session-detail/DebugTab";
+import { useViewMode } from "./session-detail/useViewMode";
 import {
   isHitlActive,
   latestIdleStopReason,
@@ -63,7 +67,7 @@ import {
 } from "../components/ai-elements/prompt-input";
 import { CodeBlock } from "../components/ai-elements/code-block";
 
-type View = "chat" | "timeline" | "team";
+type View = "transcript" | "debug" | "timeline" | "team" | "chat";
 
 /** A user.* event sitting in the server-side pending_events queue.
  *  Maintained client-side via system.user_message_pending /
@@ -95,7 +99,8 @@ export function SessionDetail() {
    *  with the same id (toolCallId on the AI SDK side). The accumulated
    *  string is partial JSON — render as a code block, not Markdown. */
   const [toolInputStreams, setToolInputStreams] = useState<Map<string, { name?: string; partial: string }>>(new Map());
-  const [view, setView] = useState<View>("chat");
+  const [view, setView] = useState<View>("transcript");
+  const viewMode = useViewMode("transcript");
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   // Optimistic outbox slot — what the user typed, between hitting Send
@@ -1020,7 +1025,7 @@ export function SessionDetail() {
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
       {/* Header — badges row + page-specific action buttons.
           The redundant `← Sessions / sess-xxx` back-link + id heading
           was removed; AppBreadcrumb above the page now carries the
@@ -1118,14 +1123,15 @@ export function SessionDetail() {
 
       {/* View tabs */}
       <div role="tablist" aria-label="Session view" className="pl-3 pr-4 flex items-center gap-1 shrink-0">
-        <ViewTab label="Conversation" active={view === "chat"} onClick={() => setView("chat")} />
+        <ViewTab label="Transcript" active={view === "transcript"} onClick={() => setView("transcript")} />
+        <ViewTab label="Debug" active={view === "debug"} onClick={() => setView("debug")} />
         <ViewTab label="Timeline" active={view === "timeline"} onClick={() => setView("timeline")} />
         <ViewTab
           label={`Team${teams.length > 0 ? ` (${teams.length})` : ""}`}
           active={view === "team"}
           onClick={() => setView("team")}
         />
-        {view === "timeline" && (
+        {(view === "timeline" || view === "debug") && (
           <span className="ml-auto text-xs text-fg-subtle font-mono">{events.length} events</span>
         )}
         {/* Trajectory viewer trigger — pushed to the right edge of the tab
@@ -1226,9 +1232,27 @@ export function SessionDetail() {
           that haven't been thread-stamped yet) are treated as primary —
           matches the bridge filter in handleSSEStream. */}
       {(() => null)()}
-      <div className="flex-1 flex min-h-0">
-        <div className="flex-1 flex flex-col min-w-0">
-      {view === "chat" ? (
+      {/* Tab content: full-bleed under the chrome. Transcript/Debug
+          own an equal 50/50 split that reaches the right viewport edge. */}
+      <div className="flex min-h-0 w-full flex-1 overflow-hidden">
+        <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-hidden">
+      {view === "transcript" ? (
+        <TranscriptTab
+          events={events}
+          activeThreadId={activeThreadId}
+          selectedEventId={viewMode.selectedEventId}
+          onSelectEvent={viewMode.setSelectedEventId}
+          onViewInDebug={viewMode.scrollToDebugEvent}
+        />
+      ) : view === "debug" ? (
+        <DebugTab
+          events={events}
+          activeThreadId={activeThreadId}
+          selectedDebugEventId={viewMode.selectedDebugEventId}
+          onSelectDebugEvent={viewMode.setSelectedDebugEventId}
+          scrollRef={viewMode.debugScrollRef}
+        />
+      ) : view === "chat" ? (
         <>
           {/* Conversation surface. ai-elements <Conversation> wraps
               StickToBottom, which auto-pins to the latest message while
@@ -1271,7 +1295,7 @@ export function SessionDetail() {
                 // The previous pairing only covered builtin → custom tools
                 // (e.g. general_subagent) showed their result as an "unpaired"
                 // orphan block because the use side was custom_tool_use.
-                const resultByToolUseId = new Map<string, typeof filtered[number]>();
+                const { resultByToolUseId } = pairToolResults(filtered);
                 // session.error → upstream model_request_end error_message
                 // map. session.error's payload from SSE only carries the
                 // generic "No output generated. Check the stream for errors."
@@ -1283,33 +1307,7 @@ export function SessionDetail() {
                 // with finish_reason!=error (succeeded → previous failure is
                 // no longer the immediate cause). Keyed by stable event id
                 // so EventRender can look it up at render time.
-                const sessionErrorCause = new Map<string, { error: string; model?: string }>();
-                let pendingModelErr: { error: string; model?: string } | null = null;
-                for (const ev of filtered) {
-                  if (ev.type === "agent.tool_result") {
-                    const id = (ev as { tool_use_id?: string }).tool_use_id;
-                    if (id) resultByToolUseId.set(id, ev);
-                  } else if (ev.type === "agent.mcp_tool_result") {
-                    const id = (ev as { mcp_tool_use_id?: string }).mcp_tool_use_id;
-                    if (id) resultByToolUseId.set(id, ev);
-                  } else if (ev.type === "span.model_request_end") {
-                    const d = (ev as { data?: { finish_reason?: string; error_message?: string; model?: string }; finish_reason?: string; error_message?: string; model?: string });
-                    const finish = d.data?.finish_reason ?? d.finish_reason;
-                    const errMsg = d.data?.error_message ?? d.error_message;
-                    const model = d.data?.model ?? d.model;
-                    if (finish === "error" && errMsg) {
-                      pendingModelErr = { error: errMsg, model };
-                    } else if (finish && finish !== "error") {
-                      pendingModelErr = null;
-                    }
-                  } else if (ev.type === "session.error") {
-                    const id = (ev as { id?: string }).id;
-                    if (id && pendingModelErr) {
-                      sessionErrorCause.set(id, pendingModelErr);
-                      pendingModelErr = null;
-                    }
-                  }
-                }
+                const sessionErrorCause = pairSessionErrors(filtered);
                 const pairedResultIds = new Set<string>();
                 return filtered.map((e, i) => {
                   // Stable React key — `e.id` (sevt_*) lives on every event
@@ -1546,7 +1544,7 @@ export function SessionDetail() {
             }}
             onSelectThread={(threadId) => {
               setActiveThreadId(threadId);
-              setView("chat");
+              setView("transcript");
             }}
           />
         ) : null
