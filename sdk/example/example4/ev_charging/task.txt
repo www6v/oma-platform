@@ -1,9 +1,0 @@
-Write a brief on the unit economics of public DC fast charging in the United States.
-The brief should cover:
-  1. Capex range
-  2. Demand charges
-  3. Utilization breakeven
-  4. Subsidy programs
-  5. Named-operator economics
-  6. A contrarian or skeptical source
-  7. Hardware vs install cost split
