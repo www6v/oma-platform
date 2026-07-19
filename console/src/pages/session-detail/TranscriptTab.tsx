@@ -15,9 +15,16 @@
 
 import { ChevronRightIcon } from "lucide-react";
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
 import type { Event } from "../../lib/events";
 import { pairSessionErrors, pairToolResults } from "../../lib/tool-pairing";
 import { cn } from "../../lib/utils";
+import {
+  PromptInput,
+  PromptInputTextarea,
+  PromptInputFooter,
+  PromptInputSubmit,
+} from "../../components/ai-elements/prompt-input";
 import { EventDetail } from "./EventDetail";
 import {
   categorizeEvent,
@@ -34,6 +41,8 @@ export interface TranscriptTabProps {
   selectedEventId: string | null;
   onSelectEvent: (eventId: string | null) => void;
   onViewInDebug?: (eventId: string) => void;
+  onSend?: (text: string) => void;
+  sending?: boolean;
   /** Streaming overlays — rendered only in Transcript tab */
   streams?: Map<string, Event>;
   thinkingStreams?: Map<string, Event>;
@@ -70,6 +79,8 @@ export function TranscriptTab({
   selectedEventId,
   onSelectEvent,
   onViewInDebug,
+  onSend,
+  sending = false,
 }: TranscriptTabProps) {
   const [selectedCategories, setSelectedCategories] = useState<Set<TranscriptCategory>>(
     new Set(["user", "agent", "tool", "error"])
@@ -198,10 +209,28 @@ export function TranscriptTab({
           )}
         </div>
 
-        {/* HITL panel placeholder — will be filled in T5 */}
-        <div className="border-t border-border p-2 text-xs text-muted-foreground">
-          HITL panel (T5)
-        </div>
+        {/* Query input at the bottom of the transcript */}
+        {onSend && (
+          <div className="border-t border-border bg-bg p-2">
+            <PromptInput
+              accept=""
+              maxFiles={0}
+              maxFileSize={0}
+              onError={(err) => toast.error(err.message)}
+              onSubmit={({ text }) => {
+                if (text.trim()) onSend(text);
+              }}
+            >
+              <PromptInputTextarea
+                placeholder="Send a message to the agent…"
+                disabled={sending}
+              />
+              <PromptInputFooter>
+                <PromptInputSubmit disabled={sending} />
+              </PromptInputFooter>
+            </PromptInput>
+          </div>
+        )}
       </div>
 
       {/* Right: detail pane flush to the content’s right edge */}

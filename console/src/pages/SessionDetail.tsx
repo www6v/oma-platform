@@ -1243,6 +1243,8 @@ export function SessionDetail() {
           selectedEventId={viewMode.selectedEventId}
           onSelectEvent={viewMode.setSelectedEventId}
           onViewInDebug={viewMode.scrollToDebugEvent}
+          onSend={(text) => void send(text)}
+          sending={sending}
         />
       ) : view === "debug" ? (
         <DebugTab
