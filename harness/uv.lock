@@ -566,7 +566,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28.0" },
     { name = "markdownify", specifier = ">=0.14.0" },
     { name = "mcp", specifier = ">=1.27.2" },
-    { name = "oma-sdk", editable = "../sdk" },
+    { name = "oma-sdk", git = "https://gitee.com/www6v6v/oma-sdk.git?branch=master" },
     { name = "pi-ai", git = "https://gitee.com/www6v6v/piPy.git?subdirectory=packages%2Fpi_ai&branch=v0.2.0" },
     { name = "pi-coding-agent", git = "https://gitee.com/www6v6v/piPy.git?subdirectory=packages%2Fpi_coding_agent&branch=v0.2.0" },
     { name = "pi-dynamic-workflows", git = "https://gitee.com/www6v6v/pipy-dynamic-workflows.git?subdirectory=packages%2Fpi_dynamic_workflows&branch=v0.1.0" },
@@ -586,22 +586,10 @@ dev = [
 [[package]]
 name = "oma-sdk"
 version = "0.1.0"
-source = { editable = "../sdk" }
+source = { git = "https://gitee.com/www6v6v/oma-sdk.git?branch=master#779ce34533705e28becb80f9940918f1e84dfdb6" }
 dependencies = [
     { name = "anthropic" },
     { name = "httpx" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "anthropic", specifier = ">=0.111.0" },
-    { name = "httpx", specifier = ">=0.28.0" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=8.0" },
-    { name = "pytest-asyncio", specifier = ">=0.24" },
 ]
 
 [[package]]
