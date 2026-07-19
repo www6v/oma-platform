@@ -7,7 +7,7 @@
  *
  * Events are color-coded by category:
  * - User: red/pink
- * - Agent: green
+ * - Agent: green (consecutive agent.message events are merged)
  * - Tool: blue/cyan
  * - Error: red/dark red
  * - System: gray
@@ -19,7 +19,14 @@ import type { Event } from "../../lib/events";
 import { pairSessionErrors, pairToolResults } from "../../lib/tool-pairing";
 import { cn } from "../../lib/utils";
 import { EventDetail } from "./EventDetail";
-import { categorizeEvent, EventRow, type TranscriptCategory } from "./EventRow";
+import {
+  categorizeEvent,
+  DisplayEvent,
+  EventRow,
+  getMergedEventText,
+  mergeConsecutiveAgentEvents,
+  type TranscriptCategory,
+} from "./EventRow";
 
 export interface TranscriptTabProps {
   events: Event[];
@@ -107,11 +114,19 @@ export function TranscriptTab({
     });
   }, [filteredEvents, selectedCategories, pairedResultIds]);
 
-  // Selected event
-  const selectedEvent = useMemo(() => {
+  // Merge consecutive agent.message events
+  const displayEvents = useMemo(
+    () => mergeConsecutiveAgentEvents(visibleEvents),
+    [visibleEvents]
+  );
+
+  // Check if selected event is part of a merged group
+  const selectedDisplayEvent = useMemo(() => {
     if (!selectedEventId) return null;
-    return filteredEvents.find((e) => e.id === selectedEventId) ?? null;
-  }, [filteredEvents, selectedEventId]);
+    return displayEvents.find((de) =>
+      de.events.some((e) => e.id === selectedEventId)
+    ) ?? null;
+  }, [displayEvents, selectedEventId]);
 
   const toggleCategory = (cat: TranscriptCategory) => {
     setSelectedCategories((prev) => {
@@ -151,27 +166,34 @@ export function TranscriptTab({
 
         {/* Event list */}
         <div className="min-h-0 flex-1 overflow-y-auto p-2">
-          {visibleEvents.length === 0 ? (
+          {displayEvents.length === 0 ? (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
               No events
             </div>
           ) : (
             <div className="flex flex-col gap-1">
-              {visibleEvents.map((e) => (
-                <div
-                  key={e.id ?? e.seq ?? `event-${e.type}`}
-                  className={cn(
-                    "rounded-md p-1",
-                    CATEGORY_BG[categorizeEvent(e)]
-                  )}
-                >
-                  <EventRow
-                    event={e}
-                    selected={e.id === selectedEventId}
-                    onClick={() => onSelectEvent(e.id ?? null)}
-                  />
-                </div>
-              ))}
+              {displayEvents.map((de, idx) => {
+                const isMerged = de.events.length > 1;
+                const isSelected = de.events.some((e) => e.id === selectedEventId);
+
+                return (
+                  <div
+                    key={de.primaryEvent.id ?? `group-${idx}`}
+                    className={cn(
+                      "rounded-md p-1",
+                      CATEGORY_BG[de.category]
+                    )}
+                  >
+                    <EventRow
+                      event={de.primaryEvent}
+                      selected={isSelected}
+                      onClick={() => onSelectEvent(de.primaryEvent.id ?? null)}
+                      mergedCount={isMerged ? de.events.length : undefined}
+                      mergedText={isMerged ? getMergedEventText(de.events) : undefined}
+                    />
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -184,22 +206,29 @@ export function TranscriptTab({
 
       {/* Right: detail pane flush to the content’s right edge */}
       <div className="flex min-h-0 min-w-0 flex-col overflow-y-auto bg-bg p-4">
-        {selectedEvent ? (
+        {selectedDisplayEvent ? (
           <EventDetail
-            event={selectedEvent}
+            event={selectedDisplayEvent.primaryEvent}
             pairedResult={
-              selectedEvent.id && resultByToolUseId.has(selectedEvent.id)
-                ? resultByToolUseId.get(selectedEvent.id)
+              selectedDisplayEvent.primaryEvent.id &&
+              resultByToolUseId.has(selectedDisplayEvent.primaryEvent.id)
+                ? resultByToolUseId.get(selectedDisplayEvent.primaryEvent.id)
                 : undefined
             }
             modelErrorCause={
-              selectedEvent.id && selectedEvent.type === "session.error"
-                ? sessionErrorCause.get(selectedEvent.id)
+              selectedDisplayEvent.primaryEvent.id &&
+              selectedDisplayEvent.primaryEvent.type === "session.error"
+                ? sessionErrorCause.get(selectedDisplayEvent.primaryEvent.id)
                 : undefined
             }
             onViewInDebug={
-              onViewInDebug && selectedEvent.id
-                ? () => onViewInDebug(selectedEvent.id!)
+              onViewInDebug && selectedDisplayEvent.primaryEvent.id
+                ? () => onViewInDebug(selectedDisplayEvent.primaryEvent.id!)
+                : undefined
+            }
+            mergedEvents={
+              selectedDisplayEvent.events.length > 1
+                ? selectedDisplayEvent.events
                 : undefined
             }
           />

@@ -25,6 +25,16 @@ export interface EventRowProps {
   selected?: boolean;
   onClick?: () => void;
   className?: string;
+  /**
+   * If this row represents a group of merged consecutive events,
+   * this is the total number of events in the group.
+   */
+  mergedCount?: number;
+  /**
+   * Combined text snippet from all merged events. When present,
+   * overrides the single-event snippet for the row label.
+   */
+  mergedText?: string;
 }
 
 /**
@@ -75,6 +85,73 @@ export function categorizeEvent(event: Event): TranscriptCategory {
     default:
       return "system";
   }
+}
+
+/**
+ * A display event can be a single event or a merged group of consecutive
+ * agent events (for compact display). Shared between TranscriptTab and
+ * DebugTab — both want the same "collapse adjacent agent.message events"
+ * behavior.
+ */
+export type DisplayEvent = {
+  events: Event[];
+  category: TranscriptCategory;
+  /** Primary event for selection/detail (first in group) */
+  primaryEvent: Event;
+};
+
+/**
+ * Merge consecutive agent.message events into a single display event.
+ * Thinking / tool_use / other categories break the run.
+ */
+export function mergeConsecutiveAgentEvents(events: Event[]): DisplayEvent[] {
+  const result: DisplayEvent[] = [];
+  let currentGroup: Event[] = [];
+
+  for (const e of events) {
+    const category = categorizeEvent(e);
+
+    if (category === "agent" && e.type === "agent.message") {
+      currentGroup.push(e);
+    } else {
+      if (currentGroup.length > 0) {
+        result.push({
+          events: [...currentGroup],
+          category: "agent",
+          primaryEvent: currentGroup[0],
+        });
+        currentGroup = [];
+      }
+      result.push({ events: [e], category, primaryEvent: e });
+    }
+  }
+
+  if (currentGroup.length > 0) {
+    result.push({
+      events: [...currentGroup],
+      category: "agent",
+      primaryEvent: currentGroup[0],
+    });
+  }
+
+  return result;
+}
+
+/**
+ * Combine text from merged events for the row snippet and detail pane.
+ */
+export function getMergedEventText(events: Event[]): string {
+  return events
+    .map((e) => {
+      const text = Array.isArray(e.content)
+        ? e.content.map((b) => b.text).join("")
+        : typeof e.content === "string"
+          ? e.content
+          : "";
+      return text;
+    })
+    .filter((t) => t.length > 0)
+    .join("\n\n");
 }
 
 /**
@@ -159,12 +236,25 @@ function getEventTimestamp(event: Event): string | null {
   return null;
 }
 
-export function EventRow({ event, selected, onClick, className }: EventRowProps) {
+export function EventRow({
+  event,
+  selected,
+  onClick,
+  className,
+  mergedCount,
+  mergedText,
+}: EventRowProps) {
   const Icon = getEventIcon(event.type);
-  const snippet = getEventSnippet(event);
+  const rawSnippet = getEventSnippet(event);
+  // If merged, use combined text (first ~80 chars) instead of single-event snippet
+  const snippet =
+    mergedText !== undefined
+      ? mergedText.slice(0, 80) + (mergedText.length > 80 ? "…" : "")
+      : rawSnippet;
   const badge = getEventBadge(event);
   const timestamp = getEventTimestamp(event);
   const category = categorizeEvent(event);
+  const isMerged = (mergedCount ?? 0) > 1;
 
   return (
     <button
@@ -190,6 +280,11 @@ export function EventRow({ event, selected, onClick, className }: EventRowProps)
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <div className="flex items-center gap-1.5">
           <span className="truncate font-medium">{snippet}</span>
+          {isMerged && (
+            <span className="shrink-0 rounded-full bg-green-500/20 px-1.5 py-0 text-[10px] font-medium text-green-700">
+              ×{mergedCount}
+            </span>
+          )}
           {badge && (
             <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
               {badge}

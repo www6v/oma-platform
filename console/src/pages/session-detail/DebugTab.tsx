@@ -1,18 +1,26 @@
 /**
  * DebugTab — raw event stream view for debugging.
  *
- * Left panel: flat event list with raw type filter.
+ * Left panel: flat event list with raw type filter. Adjacent agent.message
+ * events are merged into a single row (with a ×N count badge) to keep the
+ * list compact — same merge behavior as TranscriptTab.
  * Right panel: EventDetail with Rendered/Raw toggle.
  * Scroll to selectedDebugEventId on mount/update.
  * Shows only canonical events (no streaming overlays).
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Event } from "../../lib/events";
 import { pairSessionErrors, pairToolResults } from "../../lib/tool-pairing";
 import { cn } from "../../lib/utils";
 import { EventDetail } from "./EventDetail";
-import { EventRow } from "./EventRow";
+import {
+  categorizeEvent,
+  DisplayEvent,
+  EventRow,
+  getMergedEventText,
+  mergeConsecutiveAgentEvents,
+} from "./EventRow";
 
 export interface DebugTabProps {
   events: Event[];
@@ -61,14 +69,23 @@ export function DebugTab({
       ? filteredEvents
       : filteredEvents.filter((e) => selectedTypes.has(e.type));
 
+  // Merge consecutive agent.message events (reuses TranscriptTab logic)
+  const displayEvents: DisplayEvent[] = useMemo(
+    () => mergeConsecutiveAgentEvents(visibleEvents),
+    [visibleEvents]
+  );
+
   // Pair tool_use ↔ tool_result
   const { resultByToolUseId } = pairToolResults(filteredEvents);
 
   // Pair session.error ↔ upstream model error cause
   const sessionErrorCause = pairSessionErrors(filteredEvents);
 
-  // Selected event
-  const selectedEvent = visibleEvents.find((e) => e.id === selectedDebugEventId) ?? null;
+  // Find the display group containing the selected event (for scroll + detail)
+  const selectedDisplayEvent = useMemo(() => {
+    if (!selectedDebugEventId) return null;
+    return displayEvents.find((de) => de.events.some((e) => e.id === selectedDebugEventId)) ?? null;
+  }, [displayEvents, selectedDebugEventId]);
 
   // Scroll to selected event
   useEffect(() => {
@@ -137,29 +154,35 @@ export function DebugTab({
           )}
         </div>
 
-        {/* Event list */}
+        {/* Event list — merged display events */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto p-2">
-          {visibleEvents.length === 0 ? (
+          {displayEvents.length === 0 ? (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
               No events
             </div>
           ) : (
             <div className="flex flex-col gap-0.5">
-              {visibleEvents.map((e) => (
-                <div
-                  key={e.id ?? e.seq ?? `event-${e.type}`}
-                  ref={(el) => registerRef(e.id ?? "", el)}
-                >
-                  <EventRow
-                    event={e}
-                    selected={e.id === selectedDebugEventId}
-                    onClick={() => onSelectDebugEvent(e.id ?? null)}
-                    className={cn(
-                      e.id === selectedDebugEventId && "ring-2 ring-brand"
-                    )}
-                  />
-                </div>
-              ))}
+              {displayEvents.map((de, idx) => {
+                const isMerged = de.events.length > 1;
+                const isSelected = de.events.some((e) => e.id === selectedDebugEventId);
+                return (
+                  <div
+                    key={de.primaryEvent.id ?? `group-${idx}`}
+                    ref={(el) => registerRef(de.primaryEvent.id ?? "", el)}
+                  >
+                    <EventRow
+                      event={de.primaryEvent}
+                      selected={isSelected}
+                      onClick={() => onSelectDebugEvent(de.primaryEvent.id ?? null)}
+                      mergedCount={isMerged ? de.events.length : undefined}
+                      mergedText={isMerged ? getMergedEventText(de.events) : undefined}
+                      className={cn(
+                        isSelected && "ring-2 ring-brand"
+                      )}
+                    />
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -195,24 +218,33 @@ export function DebugTab({
           </button>
         </div>
 
-        {selectedEvent ? (
+        {selectedDisplayEvent ? (
           viewMode === "rendered" ? (
             <EventDetail
-              event={selectedEvent}
+              event={selectedDisplayEvent.primaryEvent}
               pairedResult={
-                selectedEvent.id && resultByToolUseId.has(selectedEvent.id)
-                  ? resultByToolUseId.get(selectedEvent.id)
+                selectedDisplayEvent.primaryEvent.id &&
+                resultByToolUseId.has(selectedDisplayEvent.primaryEvent.id)
+                  ? resultByToolUseId.get(selectedDisplayEvent.primaryEvent.id)
                   : undefined
               }
               modelErrorCause={
-                selectedEvent.id && selectedEvent.type === "session.error"
-                  ? sessionErrorCause.get(selectedEvent.id)
+                selectedDisplayEvent.primaryEvent.id &&
+                selectedDisplayEvent.primaryEvent.type === "session.error"
+                  ? sessionErrorCause.get(selectedDisplayEvent.primaryEvent.id)
+                  : undefined
+              }
+              mergedEvents={
+                selectedDisplayEvent.events.length > 1
+                  ? selectedDisplayEvent.events
                   : undefined
               }
             />
           ) : (
             <pre className="overflow-x-auto rounded bg-muted p-3 text-xs">
-              {JSON.stringify(selectedEvent, null, 2)}
+              {selectedDisplayEvent.events.length > 1
+                ? JSON.stringify(selectedDisplayEvent.events, null, 2)
+                : JSON.stringify(selectedDisplayEvent.primaryEvent, null, 2)}
             </pre>
           )
         ) : (

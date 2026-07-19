@@ -51,6 +51,14 @@ export interface EventDetailProps {
    * If provided, a "View in Debug →" link is shown in the detail header.
    */
   onViewInDebug?: () => void;
+  /**
+   * When this detail represents a group of merged consecutive events
+   * (e.g., multiple agent.message events in a row), pass all events
+   * here. The component will render each one as a separate Message
+   * block, separated by subtle dividers, so the operator sees the
+   * full conversation thread in the right pane.
+   */
+  mergedEvents?: Event[];
 }
 
 export function EventDetail({
@@ -58,7 +66,22 @@ export function EventDetail({
   pairedResult,
   modelErrorCause,
   onViewInDebug,
+  mergedEvents,
 }: EventDetailProps) {
+  // When multiple events are merged, render each as its own Message block
+  // with a subtle divider, so the operator sees the full thread.
+  const content =
+    mergedEvents && mergedEvents.length > 1
+      ? mergedEvents.map((e, idx) => (
+          <div
+            key={e.id ?? idx}
+            className={idx > 0 ? "border-t border-border/50 pt-3" : ""}
+          >
+            {renderEventContent(e, undefined, undefined)}
+          </div>
+        ))
+      : renderEventContent(event, pairedResult, modelErrorCause);
+
   return (
     <div className="flex w-full min-w-0 flex-col gap-3">
       {onViewInDebug && (
@@ -74,10 +97,15 @@ export function EventDetail({
           {event.id && (
             <span className="font-mono text-[10px] opacity-60">{event.id}</span>
           )}
+          {mergedEvents && mergedEvents.length > 1 && (
+            <span className="ml-auto rounded-full bg-green-500/20 px-2 py-0.5 text-[10px] font-medium text-green-700">
+              {mergedEvents.length} merged messages
+            </span>
+          )}
         </div>
       )}
-      <div className="min-w-0 w-full">
-        {renderEventContent(event, pairedResult, modelErrorCause)}
+      <div className="flex min-w-0 w-full flex-col gap-3">
+        {content}
       </div>
     </div>
   );
