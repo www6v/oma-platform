@@ -25,10 +25,13 @@ interface RecentSession {
   created_at: string;
 }
 
+type QuickstartTab = "sdk" | "cli";
+
 export function Dashboard() {
   const nav = useNavigate();
   const { user: _user } = useAuth();
   const [copied, setCopied] = useState<string | null>(null);
+  const [quickstartTab, setQuickstartTab] = useState<QuickstartTab>("sdk");
 
   // Headline cards + recent panel each ride their own TQ query so the
   // dashboard renders the parts it has — a flaky /v1/stats no longer
@@ -76,8 +79,34 @@ export function Dashboard() {
 
   const cmd = "npx -y -p @openma/cli oma";
   const cmdGlobal = "npm i -g @openma/cli";
+  const sdkRepoUrl = "https://github.com/www6v/oma-sdk";
   const examplePrompt =
     "Use oma to create a research agent that monitors arXiv for new ML papers daily";
+
+  const mintApiKeyStep = (borderBottom: boolean) => (
+    <div
+      className={`grid md:grid-cols-[180px_1fr] gap-x-6 gap-y-2 p-5 md:p-6${
+        borderBottom ? " border-b border-border" : ""
+      }`}
+    >
+      <div>
+        <div className="font-mono text-[11px] tracking-wider text-brand">STEP 02</div>
+        <div className="mt-1 font-medium text-fg text-[15px]">Mint an API key</div>
+      </div>
+      <div className="space-y-2.5">
+        <p className="text-sm text-fg-muted">
+          Your agent needs this to authenticate. Keep it somewhere it can read.
+        </p>
+        <button
+          onClick={() => nav("/api-keys")}
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-brand text-brand-fg rounded-md text-[13px] font-medium hover:bg-brand-hover transition-colors duration-[var(--dur-quick)] ease-[var(--ease-soft)]"
+        >
+          Generate API key
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -85,103 +114,158 @@ export function Dashboard() {
         {/* Header */}
         <header>
           <h1 className="font-display text-[32px] leading-tight font-semibold tracking-tight text-fg">
-            Get started with openma
+            Get started with Managed Agent
           </h1>
           <p className="mt-1.5 text-[15px] text-fg-muted">
-            Hand the platform to your agent — install the CLI, mint a key, point them at it.
+            Hand the platform to your agent — pick the SDK or CLI, mint a key, and go.
           </p>
         </header>
 
-        {/* Quickstart — single panel with three rows, no per-step cards */}
-        <section className="border border-border rounded-lg overflow-hidden">
-          {/* Step 1 */}
-          <div className="grid md:grid-cols-[180px_1fr] gap-x-6 gap-y-2 p-5 md:p-6 border-b border-border">
-            <div>
-              <div className="font-mono text-[11px] tracking-wider text-brand">STEP 01</div>
-              <div className="mt-1 font-medium text-fg text-[15px]">Install the CLI</div>
-            </div>
-            <div className="space-y-2.5 min-w-0">
-              <p className="text-sm text-fg-muted">
-                The <code className="font-mono text-[13px] text-fg">oma</code> CLI lets your
-                agent (or you) drive the platform from the terminal.
-              </p>
-              <button
-                onClick={() => copy(cmd, "cmd")}
-                className="group w-full sm:w-auto sm:inline-flex items-center gap-3 pl-3 pr-2 py-2 rounded-md border border-border bg-bg-surface/50 hover:border-border-strong transition-colors duration-[var(--dur-quick)] ease-[var(--ease-soft)] text-left"
-              >
-                <span className="text-fg-subtle select-none font-mono text-xs">›</span>
-                <span className="font-mono text-[13px] text-fg flex-1 truncate">{cmd}</span>
-                <span className="shrink-0 text-fg-subtle group-hover:text-fg transition-colors duration-[var(--dur-quick)] ease-[var(--ease-soft)] p-1">
-                  {copied === "cmd" ? (
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6 9 17l-5-5" /></svg>
-                  ) : (
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" /></svg>
-                  )}
-                </span>
-              </button>
-              <p className="text-[12px] text-fg-subtle">
-                or globally:{" "}
+        {/* Quickstart — SDK (tab 1) or CLI (tab 2) */}
+        <div className="space-y-3">
+          <div
+            role="tablist"
+            aria-label="Get started path"
+            className="flex items-center gap-1 border-b border-border"
+          >
+            {(
+              [
+                { id: "sdk", label: "SDK" },
+                { id: "cli", label: "CLI" },
+              ] as const
+            ).map((tab) => {
+              const active = quickstartTab === tab.id;
+              return (
                 <button
-                  onClick={() => copy(cmdGlobal, "cmd-global")}
-                  className="inline-flex items-center min-h-11 sm:min-h-0 font-mono text-fg-muted hover:text-brand transition-colors duration-[var(--dur-quick)] ease-[var(--ease-soft)]"
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setQuickstartTab(tab.id)}
+                  className={`relative px-4 py-2.5 text-[13px] font-medium transition-colors duration-[var(--dur-quick)] ease-[var(--ease-soft)] ${
+                    active
+                      ? "text-fg"
+                      : "text-fg-muted hover:text-fg"
+                  }`}
                 >
-                  {cmdGlobal}
+                  {tab.label}
+                  {active ? (
+                    <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-brand" />
+                  ) : null}
                 </button>
-              </p>
-            </div>
+              );
+            })}
           </div>
 
-          {/* Step 2 */}
-          <div className="grid md:grid-cols-[180px_1fr] gap-x-6 gap-y-2 p-5 md:p-6 border-b border-border">
-            <div>
-              <div className="font-mono text-[11px] tracking-wider text-brand">STEP 02</div>
-              <div className="mt-1 font-medium text-fg text-[15px]">Mint an API key</div>
-            </div>
-            <div className="space-y-2.5">
-              <p className="text-sm text-fg-muted">
-                Your agent needs this to authenticate. Keep it somewhere it can read.
-              </p>
-              <button
-                onClick={() => nav("/api-keys")}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-brand text-brand-fg rounded-md text-[13px] font-medium hover:bg-brand-hover transition-colors duration-[var(--dur-quick)] ease-[var(--ease-soft)]"
-              >
-                Generate API key
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
-              </button>
-            </div>
-          </div>
+          {quickstartTab === "sdk" ? (
+            <section className="border border-border rounded-lg overflow-hidden">
+              {/* Step 1 — SDK */}
+              <div className="grid md:grid-cols-[180px_1fr] gap-x-6 gap-y-2 p-5 md:p-6 border-b border-border">
+                <div>
+                  <div className="font-mono text-[11px] tracking-wider text-brand">STEP 01</div>
+                  <div className="mt-1 font-medium text-fg text-[15px]">Download and use the SDK</div>
+                </div>
+                <div className="space-y-2.5 min-w-0">
+                  <p className="text-sm text-fg-muted">
+                    Use the{" "}
+                    <code className="font-mono text-[13px] text-fg">oma-sdk</code>{" "}
+                    to integrate the platform into your own apps and agents.
+                  </p>
+                  <a
+                    href={sdkRepoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group w-full sm:w-auto sm:inline-flex items-center gap-3 pl-3 pr-2 py-2 rounded-md border border-border bg-bg-surface/50 hover:border-border-strong transition-colors duration-[var(--dur-quick)] ease-[var(--ease-soft)] text-left"
+                  >
+                    <span className="text-fg-subtle select-none font-mono text-xs">›</span>
+                    <span className="font-mono text-[13px] text-fg flex-1 truncate">
+                      {sdkRepoUrl}
+                    </span>
+                    <span className="shrink-0 text-fg-subtle group-hover:text-fg transition-colors duration-[var(--dur-quick)] ease-[var(--ease-soft)] p-1">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" /></svg>
+                    </span>
+                  </a>
+                </div>
+              </div>
 
-          {/* Step 3 */}
-          <div className="grid md:grid-cols-[180px_1fr] gap-x-6 gap-y-2 p-5 md:p-6">
-            <div>
-              <div className="font-mono text-[11px] tracking-wider text-brand">STEP 03</div>
-              <div className="mt-1 font-medium text-fg text-[15px]">Hand it the reins</div>
-            </div>
-            <div className="space-y-2.5">
-              <p className="text-sm text-fg-muted">
-                Point your agent at the <code className="font-mono text-[13px] text-fg">openma-cli</code>{" "}
-                or <code className="font-mono text-[13px] text-fg">openma-api</code> skill, then
-                ask for what you want:
-              </p>
-              <button
-                onClick={() => copy(examplePrompt, "prompt")}
-                className="group w-full text-left rounded-md border border-border bg-bg-surface/50 hover:border-border-strong transition-colors duration-[var(--dur-quick)] ease-[var(--ease-soft)] p-3 flex items-start gap-3"
-              >
-                <span className="shrink-0 mt-0.5 font-mono text-[10px] tracking-wider text-fg-subtle">
-                  PROMPT
-                </span>
-                <span className="flex-1 text-[13px] text-fg leading-snug">{examplePrompt}</span>
-                <span className="shrink-0 text-fg-subtle group-hover:text-fg transition-colors duration-[var(--dur-quick)] ease-[var(--ease-soft)] mt-0.5">
-                  {copied === "prompt" ? (
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6 9 17l-5-5" /></svg>
-                  ) : (
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" /></svg>
-                  )}
-                </span>
-              </button>
-            </div>
-          </div>
-        </section>
+              {/* Step 2 — mint key */}
+              {mintApiKeyStep(false)}
+            </section>
+          ) : (
+            <section className="border border-border rounded-lg overflow-hidden">
+              {/* Step 1 */}
+              <div className="grid md:grid-cols-[180px_1fr] gap-x-6 gap-y-2 p-5 md:p-6 border-b border-border">
+                <div>
+                  <div className="font-mono text-[11px] tracking-wider text-brand">STEP 01</div>
+                  <div className="mt-1 font-medium text-fg text-[15px]">Install the CLI</div>
+                </div>
+                <div className="space-y-2.5 min-w-0">
+                  <p className="text-sm text-fg-muted">
+                    The <code className="font-mono text-[13px] text-fg">oma</code> CLI lets your
+                    agent (or you) drive the platform from the terminal.
+                  </p>
+                  <button
+                    onClick={() => copy(cmd, "cmd")}
+                    className="group w-full sm:w-auto sm:inline-flex items-center gap-3 pl-3 pr-2 py-2 rounded-md border border-border bg-bg-surface/50 hover:border-border-strong transition-colors duration-[var(--dur-quick)] ease-[var(--ease-soft)] text-left"
+                  >
+                    <span className="text-fg-subtle select-none font-mono text-xs">›</span>
+                    <span className="font-mono text-[13px] text-fg flex-1 truncate">{cmd}</span>
+                    <span className="shrink-0 text-fg-subtle group-hover:text-fg transition-colors duration-[var(--dur-quick)] ease-[var(--ease-soft)] p-1">
+                      {copied === "cmd" ? (
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6 9 17l-5-5" /></svg>
+                      ) : (
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" /></svg>
+                      )}
+                    </span>
+                  </button>
+                  <p className="text-[12px] text-fg-subtle">
+                    or globally:{" "}
+                    <button
+                      onClick={() => copy(cmdGlobal, "cmd-global")}
+                      className="inline-flex items-center min-h-11 sm:min-h-0 font-mono text-fg-muted hover:text-brand transition-colors duration-[var(--dur-quick)] ease-[var(--ease-soft)]"
+                    >
+                      {cmdGlobal}
+                    </button>
+                  </p>
+                </div>
+              </div>
+
+              {/* Step 2 */}
+              {mintApiKeyStep(true)}
+
+              {/* Step 3 */}
+              <div className="grid md:grid-cols-[180px_1fr] gap-x-6 gap-y-2 p-5 md:p-6">
+                <div>
+                  <div className="font-mono text-[11px] tracking-wider text-brand">STEP 03</div>
+                  <div className="mt-1 font-medium text-fg text-[15px]">Hand it the reins</div>
+                </div>
+                <div className="space-y-2.5">
+                  <p className="text-sm text-fg-muted">
+                    Point your agent at the <code className="font-mono text-[13px] text-fg">openma-cli</code>{" "}
+                    or <code className="font-mono text-[13px] text-fg">openma-api</code> skill, then
+                    ask for what you want:
+                  </p>
+                  <button
+                    onClick={() => copy(examplePrompt, "prompt")}
+                    className="group w-full text-left rounded-md border border-border bg-bg-surface/50 hover:border-border-strong transition-colors duration-[var(--dur-quick)] ease-[var(--ease-soft)] p-3 flex items-start gap-3"
+                  >
+                    <span className="shrink-0 mt-0.5 font-mono text-[10px] tracking-wider text-fg-subtle">
+                      PROMPT
+                    </span>
+                    <span className="flex-1 text-[13px] text-fg leading-snug">{examplePrompt}</span>
+                    <span className="shrink-0 text-fg-subtle group-hover:text-fg transition-colors duration-[var(--dur-quick)] ease-[var(--ease-soft)] mt-0.5">
+                      {copied === "prompt" ? (
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6 9 17l-5-5" /></svg>
+                      ) : (
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" /></svg>
+                      )}
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </section>
+          )}
+        </div>
 
         {/* Stats — number-forward, no decorative icons */}
         <section>
