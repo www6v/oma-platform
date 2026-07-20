@@ -112,26 +112,7 @@ const auth = betterAuth({
   database: pool,
   emailAndPassword: { enabled: true },
   socialProviders,
-  // trustedOrigins is static at startup, but deployments may be reached via
-  // multiple IPs/hostnames (dev machine, remote server, domain swap, etc.).
-  // Instead of playing whack-a-mole with PUBLIC_BASE_URL / TRUSTED_ORIGINS,
-  // accept any http(s) origin whose host matches the incoming request's
-  // Host header — Better Auth calls this for every request that carries an
-  // Origin, and the check is just an allowlist membership test, so a dynamic
-  // function keeps logout/CSRF protection working regardless of how the
-  // browser reached us.
-  trustedOrigins: (origin, request) => {
-    if (!origin) return false;
-    if (trustedOrigins.includes(origin)) return true;
-    try {
-      const o = new URL(origin);
-      const hostHeader = request?.headers?.get?.("host");
-      if (hostHeader && o.host === hostHeader) return true;
-    } catch {
-      // malformed origin — fall through to reject
-    }
-    return false;
-  },
+  trustedOrigins,
   user: {
     additionalFields: {
       tenantId: { type: "string", required: false },
