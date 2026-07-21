@@ -21,9 +21,16 @@ func NewStaticHandler(root string) http.Handler {
 			return
 		}
 
+		serveIndex := func() {
+			// Always revalidate the SPA shell so deploys/rebuilds are not
+			// stuck behind a cached index.html pointing at stale hashed assets.
+			w.Header().Set("Cache-Control", "no-cache")
+			http.ServeFile(w, r, indexPath)
+		}
+
 		rel := strings.TrimPrefix(r.URL.Path, "/")
 		if rel == "" || rel == "." {
-			http.ServeFile(w, r, indexPath)
+			serveIndex()
 			return
 		}
 
@@ -41,10 +48,16 @@ func NewStaticHandler(root string) http.Handler {
 
 		info, err := os.Stat(full)
 		if err != nil || info.IsDir() {
-			http.ServeFile(w, r, indexPath)
+			serveIndex()
 			return
 		}
 
+		// Content-hashed Vite assets can be cached aggressively; the shell
+		// (index.html) above stays no-cache so clients discover new hashes.
+		if strings.HasPrefix(clean, "assets"+string(os.PathSeparator)) ||
+			strings.HasPrefix(clean, "assets/") {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		}
 		http.ServeFile(w, r, full)
 	})
 }

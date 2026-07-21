@@ -233,6 +233,10 @@ export function SessionsList() {
   const [memoryStores, setMemoryStores] = useState<MemoryStorePick[]>([]);
   const [, setAuxLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  // Title is kept in local state (not only RHF) so the create payload always
+  // matches what the user typed — RHF register+overridden name previously
+  // dropped it, and Controller alone can still desync under autofill.
+  const [sessionTitle, setSessionTitle] = useState("");
   // Per-field reveal toggle for any masked input (env value, github token).
   // Keyed by `${idx}:${field}`. We intentionally don't try to keep stale
   // entries valid across resource list mutations — adding/removing a row
@@ -470,6 +474,7 @@ export function SessionsList() {
   // Called from Modal onClose (X button, click-away, Esc, Cancel).
   const closeModal = useCallback(() => {
     setShowCreate(false);
+    setSessionTitle("");
     reset(INITIAL_FORM_VALUES);
     setSelectedAgentDetail(null);
     setAgentMcpUrls([]);
@@ -481,6 +486,7 @@ export function SessionsList() {
   // residual state from a prior open (e.g. a successful create that closed
   // the modal) doesn't leak across opens.
   const openModal = useCallback(() => {
+    setSessionTitle("");
     reset({
       ...INITIAL_FORM_VALUES,
       agent: agents[0]?.id ?? "",
@@ -539,9 +545,10 @@ export function SessionsList() {
         }
       }
 
+      const title = sessionTitle.trim() || data.title.trim();
       const body: Record<string, unknown> = {
         agent: data.agent,
-        title: data.title || undefined,
+        title: title || undefined,
       };
       // Only send environment_id when the user actually picked one. For
       // local-runtime agents the picker is hidden and the server picks a
@@ -937,19 +944,24 @@ export function SessionsList() {
           )}
           <div>
             <label htmlFor="session-title" className="text-sm text-fg-muted block mb-1">Title <span className="text-fg-subtle">(optional)</span></label>
-            {/* autoComplete=off + an unrecognised name to defeat Chrome /
-                Safari email autofill — first text input in the dialog
-                got pre-filled with the user's saved email otherwise.
-                Spread register() first, then override name so the input
-                renders the autofill-defeating attribute while RHF still
-                tracks the field by its registered name internally. */}
+            {/* Local state is the source of truth for the create payload.
+                Unrecognised name + autocomplete attrs defeat Chrome/Safari
+                email autofill on the first text input in the dialog. */}
             <input
               id="session-title"
-              {...register("title")}
+              value={sessionTitle}
+              onChange={(e) => {
+                const next = e.target.value;
+                setSessionTitle(next);
+                setValue("title", next, { shouldDirty: true });
+              }}
               name="oma-session-title"
               className={inputCls}
               placeholder="My conversation"
               autoComplete="off"
+              data-1p-ignore
+              data-lpignore="true"
+              data-form-type="other"
             />
           </div>
 
