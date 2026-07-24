@@ -657,7 +657,7 @@ dependencies = [
 [[package]]
 name = "pi-team"
 version = "0.0.1"
-source = { git = "https://gitee.com/www6v6v/pipy-teams.git?subdirectory=packages%2Fpi_team&branch=v0.1.0#63f21c55bcd9473b4bdd9b2b4e3cf2960632103e" }
+source = { git = "https://gitee.com/www6v6v/pipy-teams.git?subdirectory=packages%2Fpi_team&branch=v0.1.0#417f4bb39a1cd16876665417f5e56c789de08725" }
 dependencies = [
     { name = "pi-agent" },
     { name = "pi-ai" },
