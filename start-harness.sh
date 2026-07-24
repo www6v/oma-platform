@@ -13,9 +13,12 @@ fi
 export OMA_FAKE_HARNESS="${OMA_FAKE_HARNESS:-1}"
 export HARNESS_TURN_TIMEOUT_SEC="${HARNESS_TURN_TIMEOUT_SEC:-900}"
 
-export OMA_DATABASE_PATH="${OMA_DATABASE_PATH:-${DATABASE_PATH:-${ROOT_DIR}/data/oma.db}}"
-
-mkdir -p "$(dirname "${OMA_DATABASE_PATH}")"
+# Prefer MySQL (DATABASE_URL) after the platform SQLite→MySQL cutover.
+# Legacy OMA_DATABASE_PATH / DATABASE_PATH are only for SQLite fallback.
+if [[ -z "${DATABASE_URL:-}" ]]; then
+  export OMA_DATABASE_PATH="${OMA_DATABASE_PATH:-${DATABASE_PATH:-${ROOT_DIR}/data/oma.db}}"
+  mkdir -p "$(dirname "${OMA_DATABASE_PATH}")"
+fi
 
 # Shell HTTP(S)_PROXY breaks piPy LLM clients (empty assistant + connection errors).
 # Sandbox outbound uses per-turn .curlrc instead (see outbound/setup.py).

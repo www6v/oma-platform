@@ -25,6 +25,7 @@ CONSOLE_DIST="$(cd "$(dirname "${CONSOLE_DIST}")" && pwd)/$(basename "${CONSOLE_
 export OMA_FAKE_HARNESS="${OMA_FAKE_HARNESS:-1}"
 export HARNESS_URL="${HARNESS_URL:-http://127.0.0.1:8090}"
 export OMA_API_KEY="${OMA_API_KEY:-dev-key}"
+# DATABASE_PATH is legacy SQLite; prefer DATABASE_URL (MySQL) when set.
 export DATABASE_PATH="${DATABASE_PATH:-${ROOT_DIR}/data/oma.db}"
 export SANDBOX_WORKDIR="${SANDBOX_WORKDIR:-${ROOT_DIR}/data/sandboxes}"
 export OMA_LISTEN_ADDR="${OMA_LISTEN_ADDR:-:8787}"
@@ -36,7 +37,10 @@ export AUTH_DATABASE_PATH="${AUTH_DATABASE_PATH:-${ROOT_DIR}/data/auth.db}"
 export OMA_DATABASE_PATH="${OMA_DATABASE_PATH:-${DATABASE_PATH}}"
 export OMA_INTERNAL_SECRET="${OMA_INTERNAL_SECRET:-}"
 
-mkdir -p "$(dirname "${DATABASE_PATH}")" "${SANDBOX_WORKDIR}"
+if [[ -z "${DATABASE_URL:-}" ]]; then
+  mkdir -p "$(dirname "${DATABASE_PATH}")"
+fi
+mkdir -p "${SANDBOX_WORKDIR}"
 
 AUTH_PID=""
 cleanup() {

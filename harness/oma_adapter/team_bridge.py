@@ -64,9 +64,14 @@ def build_team_runtime(
         return None
     import os
 
-    resolved_db = database_path or os.environ.get(
-        "OMA_DATABASE_PATH"
-    ) or os.environ.get("DATABASE_PATH")
+    # Prefer MySQL DATABASE_URL (platform cutover); fall back to legacy
+    # SQLite path env vars only when no MySQL DSN is available.
+    resolved_db = (
+        database_path
+        or os.environ.get("DATABASE_URL")
+        or os.environ.get("OMA_DATABASE_PATH")
+        or os.environ.get("DATABASE_PATH")
+    )
 
     runtime = TeamRuntime(
         session_id=session_id,

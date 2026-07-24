@@ -657,11 +657,12 @@ dependencies = [
 [[package]]
 name = "pi-team"
 version = "0.0.1"
-source = { git = "https://gitee.com/www6v6v/pipy-teams.git?subdirectory=packages%2Fpi_team&branch=v0.1.0#019948e450b4d66331fa5fa42076a7d65beebe4b" }
+source = { git = "https://gitee.com/www6v6v/pipy-teams.git?subdirectory=packages%2Fpi_team&branch=v0.1.0#63f21c55bcd9473b4bdd9b2b4e3cf2960632103e" }
 dependencies = [
     { name = "pi-agent" },
     { name = "pi-ai" },
     { name = "pydantic" },
+    { name = "pymysql" },
 ]
 
 [[package]]
