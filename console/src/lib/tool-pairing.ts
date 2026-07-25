@@ -28,15 +28,84 @@ import type { Event } from "./events";
 export interface ToolPairing {
   /** Map from tool_use_id/mcp_tool_use_id/custom_tool_use_id → result event */
   resultByToolUseId: Map<string, Event>;
+  /** Map from tool_use_id/… → tool_use event (reverse of result map) */
+  useByToolUseId: Map<string, Event>;
   /** Set of result event ids that have been paired (for skip-standalone render) */
   pairedResultIds: Set<string>;
+}
+
+export interface ResolvedToolPair {
+  toolUseId?: string;
+  use?: Event;
+  result?: Event;
+}
+
+const TOOL_USE_TYPES = new Set([
+  "agent.tool_use",
+  "agent.custom_tool_use",
+  "agent.mcp_tool_use",
+]);
+
+const TOOL_RESULT_TYPES = new Set([
+  "agent.tool_result",
+  "agent.mcp_tool_result",
+  "user.custom_tool_result",
+]);
+
+/** Extract the shared call id from a tool_use or tool_result event. */
+export function getToolCallId(event: Event): string | undefined {
+  if (TOOL_USE_TYPES.has(event.type)) {
+    return event.id;
+  }
+  if (event.type === "agent.tool_result") {
+    return event.tool_use_id;
+  }
+  if (event.type === "agent.mcp_tool_result") {
+    return event.mcp_tool_use_id;
+  }
+  if (event.type === "user.custom_tool_result") {
+    return (
+      (event as { custom_tool_use_id?: string }).custom_tool_use_id
+      ?? (event.data as { custom_tool_use_id?: string } | undefined)?.custom_tool_use_id
+      ?? event.id
+    );
+  }
+  return undefined;
+}
+
+/**
+ * Resolve bidirectional tool pairing for a selected event.
+ * Selecting either the use or the result yields both sides when present.
+ */
+export function resolveToolPair(
+  event: Event,
+  pairing: ToolPairing
+): ResolvedToolPair {
+  const toolUseId = getToolCallId(event);
+  if (!toolUseId) return {};
+
+  if (TOOL_USE_TYPES.has(event.type)) {
+    return {
+      toolUseId,
+      use: event,
+      result: pairing.resultByToolUseId.get(toolUseId),
+    };
+  }
+  if (TOOL_RESULT_TYPES.has(event.type)) {
+    return {
+      toolUseId,
+      use: pairing.useByToolUseId.get(toolUseId),
+      result: event,
+    };
+  }
+  return {};
 }
 
 /**
  * Pair tool_use events with their corresponding tool_result events.
  *
  * Returns a map keyed by the call id (tool_use_id / mcp_tool_use_id / custom_tool_use_id)
- * pointing to the result event, plus a set of paired result event ids for filtering.
+ * pointing to the result event, the reverse use map, plus paired result event ids.
  *
  * Wire types:
  * - agent.tool_use + agent.tool_result → key: tool_use_id
@@ -46,7 +115,14 @@ export interface ToolPairing {
  */
 export function pairToolResults(events: Event[]): ToolPairing {
   const resultByToolUseId = new Map<string, Event>();
+  const useByToolUseId = new Map<string, Event>();
   const pairedResultIds = new Set<string>();
+
+  for (const ev of events) {
+    if (TOOL_USE_TYPES.has(ev.type) && ev.id) {
+      useByToolUseId.set(ev.id, ev);
+    }
+  }
 
   for (const ev of events) {
     if (ev.type === "agent.tool_result") {
@@ -74,7 +150,7 @@ export function pairToolResults(events: Event[]): ToolPairing {
     }
   }
 
-  return { resultByToolUseId, pairedResultIds };
+  return { resultByToolUseId, useByToolUseId, pairedResultIds };
 }
 
 // ─── Model Span Pairing ──────────────────────────────────────────────────────

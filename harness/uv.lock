@@ -567,8 +567,8 @@ requires-dist = [
     { name = "markdownify", specifier = ">=0.14.0" },
     { name = "mcp", specifier = ">=1.27.2" },
     { name = "oma-sdk", git = "https://gitee.com/www6v6v/oma-sdk.git?branch=master" },
-    { name = "pi-ai", git = "https://gitee.com/www6v6v/piPy.git?subdirectory=packages%2Fpi_ai&branch=v0.2.0" },
-    { name = "pi-coding-agent", git = "https://gitee.com/www6v6v/piPy.git?subdirectory=packages%2Fpi_coding_agent&branch=v0.2.0" },
+    { name = "pi-ai", git = "https://gitee.com/www6v6v/piPy.git?subdirectory=packages%2Fpi_ai&branch=v0.3.0" },
+    { name = "pi-coding-agent", git = "https://gitee.com/www6v6v/piPy.git?subdirectory=packages%2Fpi_coding_agent&branch=v0.3.0" },
     { name = "pi-dynamic-workflows", git = "https://gitee.com/www6v6v/pipy-dynamic-workflows.git?subdirectory=packages%2Fpi_dynamic_workflows&branch=v0.1.0" },
     { name = "pi-subagent", git = "https://gitee.com/www6v6v/pipy-subagent.git?subdirectory=packages%2Fpi_subagent&branch=v0.1.0" },
     { name = "pi-team", git = "https://gitee.com/www6v6v/pipy-teams.git?subdirectory=packages%2Fpi_team&branch=v0.1.0" },
@@ -604,7 +604,7 @@ wheels = [
 [[package]]
 name = "pi-agent"
 version = "0.0.1"
-source = { git = "https://gitee.com/www6v6v/piPy.git?subdirectory=packages%2Fpi_agent&branch=v0.2.0#cc0228ba74acb4b0b0211dc7972d756f62d23663" }
+source = { git = "https://gitee.com/www6v6v/piPy.git?subdirectory=packages%2Fpi_agent&branch=v0.3.0#285cce68847fbf04e272684d63f2b07581e28675" }
 dependencies = [
     { name = "jsonschema" },
     { name = "pi-ai" },
@@ -613,7 +613,7 @@ dependencies = [
 [[package]]
 name = "pi-ai"
 version = "0.0.1"
-source = { git = "https://gitee.com/www6v6v/piPy.git?subdirectory=packages%2Fpi_ai&branch=v0.2.0#cc0228ba74acb4b0b0211dc7972d756f62d23663" }
+source = { git = "https://gitee.com/www6v6v/piPy.git?subdirectory=packages%2Fpi_ai&branch=v0.3.0#285cce68847fbf04e272684d63f2b07581e28675" }
 dependencies = [
     { name = "httpx" },
 ]
@@ -621,7 +621,7 @@ dependencies = [
 [[package]]
 name = "pi-coding-agent"
 version = "0.0.1"
-source = { git = "https://gitee.com/www6v6v/piPy.git?subdirectory=packages%2Fpi_coding_agent&branch=v0.2.0#cc0228ba74acb4b0b0211dc7972d756f62d23663" }
+source = { git = "https://gitee.com/www6v6v/piPy.git?subdirectory=packages%2Fpi_coding_agent&branch=v0.3.0#285cce68847fbf04e272684d63f2b07581e28675" }
 dependencies = [
     { name = "pi-agent" },
     { name = "pi-ai" },
@@ -630,7 +630,7 @@ dependencies = [
 [[package]]
 name = "pi-dynamic-workflows"
 version = "1.0.0"
-source = { git = "https://gitee.com/www6v6v/pipy-dynamic-workflows.git?subdirectory=packages%2Fpi_dynamic_workflows&branch=v0.1.0#a0b5894a45e02c08b995029c6171bf1f2fee9577" }
+source = { git = "https://gitee.com/www6v6v/pipy-dynamic-workflows.git?subdirectory=packages%2Fpi_dynamic_workflows&branch=v0.1.0#339a7cb49026c25020f2792f6352c7516b5199ab" }
 dependencies = [
     { name = "aiosqlite" },
     { name = "fastapi" },
@@ -647,7 +647,7 @@ dependencies = [
 [[package]]
 name = "pi-subagent"
 version = "0.0.1"
-source = { git = "https://gitee.com/www6v6v/pipy-subagent.git?subdirectory=packages%2Fpi_subagent&branch=v0.1.0#b462c9866d90b3d7632180cb19ad800e823f33dc" }
+source = { git = "https://gitee.com/www6v6v/pipy-subagent.git?subdirectory=packages%2Fpi_subagent&branch=v0.1.0#e34ff9864c65b4673d41cd28ede39bca20c03ff0" }
 dependencies = [
     { name = "pi-agent" },
     { name = "pi-ai" },
@@ -657,7 +657,7 @@ dependencies = [
 [[package]]
 name = "pi-team"
 version = "0.0.1"
-source = { git = "https://gitee.com/www6v6v/pipy-teams.git?subdirectory=packages%2Fpi_team&branch=v0.1.0#417f4bb39a1cd16876665417f5e56c789de08725" }
+source = { git = "https://gitee.com/www6v6v/pipy-teams.git?subdirectory=packages%2Fpi_team&branch=v0.1.0#6d9c05d52cb8d5179b089e481ef42c9db3bdebce" }
 dependencies = [
     { name = "pi-agent" },
     { name = "pi-ai" },

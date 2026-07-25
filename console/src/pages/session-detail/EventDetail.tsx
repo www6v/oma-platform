@@ -4,6 +4,10 @@
  * Uses ai-elements primitives (Message, Tool, Reasoning, Markdown).
  * Includes "View in Debug →" link for Transcript tab to cross-reference
  * the raw event in the Debug tab.
+ *
+ * Tool events support bidirectional pairing: selecting tool_use OR
+ * tool_result shows the same Input + Output Tool card when a pair exists.
+ * Other types use structured Input/Output sections via getEventIO.
  */
 
 import { Link2Icon } from "lucide-react";
@@ -24,6 +28,7 @@ import {
   ToolInput,
   ToolOutput,
 } from "../../components/ai-elements/tool";
+import { formatEventIOValue, getEventIO } from "../../lib/event-io";
 import type { Event } from "../../lib/events";
 
 export interface EventDetailProps {
@@ -35,6 +40,11 @@ export interface EventDetailProps {
    * block instead of two disconnected bubbles.
    */
   pairedResult?: Event;
+  /**
+   * Paired tool_use when the selected event is a tool_result (reverse pair).
+   * When set, renders the same Tool card as selecting the use event.
+   */
+  pairedUse?: Event;
   /**
    * Upstream model error context for `session.error` events. The
    * SSE-delivered session.error payload only carries a generic
@@ -64,6 +74,7 @@ export interface EventDetailProps {
 export function EventDetail({
   event,
   pairedResult,
+  pairedUse,
   modelErrorCause,
   onViewInDebug,
   mergedEvents,
@@ -77,10 +88,10 @@ export function EventDetail({
             key={e.id ?? idx}
             className={idx > 0 ? "border-t border-border/50 pt-3" : ""}
           >
-            {renderEventContent(e, undefined, undefined)}
+            {renderEventContent(e, undefined, undefined, undefined)}
           </div>
         ))
-      : renderEventContent(event, pairedResult, modelErrorCause);
+      : renderEventContent(event, pairedResult, pairedUse, modelErrorCause);
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-3">
@@ -111,12 +122,111 @@ export function EventDetail({
   );
 }
 
+function renderToolCard(useEvent: Event, resultEvent?: Event) {
+  const mcpServerName =
+    useEvent.type === "agent.mcp_tool_use"
+      ? (useEvent as { mcp_server_name?: string }).mcp_server_name
+      : undefined;
+  const baseName = useEvent.name ?? "tool";
+  const title = mcpServerName
+    ? `${baseName} (mcp · ${mcpServerName})`
+    : baseName;
+
+  const rawContent = resultEvent
+    ? (resultEvent as { content?: unknown }).content
+    : undefined;
+  const output: unknown =
+    rawContent === undefined
+      ? undefined
+      : typeof rawContent === "string"
+        ? rawContent
+        : JSON.stringify(rawContent, null, 2);
+
+  const isError = resultEvent
+    ? Boolean((resultEvent as { is_error?: boolean }).is_error)
+    : false;
+  const errorText = isError
+    ? typeof output === "string"
+      ? output
+      : JSON.stringify(output ?? null)
+    : undefined;
+  const state = resultEvent
+    ? isError
+      ? "output-error"
+      : "output-available"
+    : "input-available";
+
+  return (
+    <Tool className="max-w-full">
+      <ToolHeader type="dynamic-tool" toolName={title} state={state} />
+      <ToolContent>
+        <ToolInput input={useEvent.input ?? {}} />
+        <ToolOutput
+          output={isError ? undefined : output}
+          errorText={errorText}
+        />
+      </ToolContent>
+    </Tool>
+  );
+}
+
+function renderIOSections(
+  event: Event,
+  pairedResult?: Event,
+  pairedUse?: Event,
+  modelErrorCause?: { error: string; model?: string }
+) {
+  const io = getEventIO(event, { pairedResult, pairedUse, modelErrorCause });
+  const inputText = formatEventIOValue(io.input);
+  const outputText = formatEventIOValue(io.output);
+
+  return (
+    <div className="flex w-full min-w-0 flex-col gap-3 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="font-mono text-xs text-muted-foreground opacity-80">
+          {event.type}
+        </div>
+        {io.unpaired && (
+          <span className="rounded bg-warning-subtle px-1.5 py-0.5 text-[10px] font-medium text-warning">
+            unpaired
+          </span>
+        )}
+      </div>
+      <div>
+        <div className="mb-1 text-xs font-medium text-muted-foreground">
+          {io.inputLabel ?? "Input"}
+        </div>
+        {inputText ? (
+          <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded bg-muted p-2 text-xs">
+            {inputText}
+          </pre>
+        ) : (
+          <div className="text-xs text-muted-foreground opacity-60">—</div>
+        )}
+      </div>
+      <div>
+        <div className="mb-1 text-xs font-medium text-muted-foreground">
+          {io.outputLabel ?? "Output"}
+        </div>
+        {outputText ? (
+          <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded bg-muted p-2 text-xs">
+            {outputText}
+          </pre>
+        ) : (
+          <div className="text-xs text-muted-foreground opacity-60">—</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /**
  * Render the actual event content using ai-elements primitives.
  */
 function renderEventContent(
   event: Event,
   pairedResult?: Event,
+  pairedUse?: Event,
   modelErrorCause?: { error: string; model?: string }
 ) {
   switch (event.type) {
@@ -161,56 +271,15 @@ function renderEventContent(
 
     case "agent.tool_use":
     case "agent.custom_tool_use":
-    case "agent.mcp_tool_use": {
-      const mcpServerName =
-        event.type === "agent.mcp_tool_use"
-          ? (event as { mcp_server_name?: string }).mcp_server_name
-          : undefined;
-      const baseName = event.name ?? "tool";
-      const title = mcpServerName
-        ? `${baseName} (mcp · ${mcpServerName})`
-        : baseName;
-
-      const rawContent = pairedResult
-        ? (pairedResult as { content?: unknown }).content
-        : undefined;
-      const output: unknown =
-        rawContent === undefined
-          ? undefined
-          : typeof rawContent === "string"
-            ? rawContent
-            : JSON.stringify(rawContent, null, 2);
-
-      const isError = pairedResult
-        ? Boolean((pairedResult as { is_error?: boolean }).is_error)
-        : false;
-      const errorText = isError
-        ? typeof output === "string"
-          ? output
-          : JSON.stringify(output ?? null)
-        : undefined;
-      const state = pairedResult
-        ? isError
-          ? "output-error"
-          : "output-available"
-        : "input-available";
-
-      return (
-        <Tool className="max-w-full">
-          <ToolHeader type="dynamic-tool" toolName={title} state={state} />
-          <ToolContent>
-            <ToolInput input={event.input ?? {}} />
-            <ToolOutput
-              output={isError ? undefined : output}
-              errorText={errorText}
-            />
-          </ToolContent>
-        </Tool>
-      );
-    }
+    case "agent.mcp_tool_use":
+      return renderToolCard(event, pairedResult);
 
     case "agent.tool_result":
-    case "agent.mcp_tool_result": {
+    case "agent.mcp_tool_result":
+    case "user.custom_tool_result": {
+      if (pairedUse) {
+        return renderToolCard(pairedUse, event);
+      }
       const rawContent = (event as { content?: unknown }).content;
       const output: unknown =
         rawContent === undefined
@@ -235,7 +304,11 @@ function renderEventContent(
     case "session.error":
       return (
         <div className="w-full bg-danger-subtle rounded-lg px-4 py-2.5 text-sm text-danger">
-          <div>Error: {event.error}</div>
+          <div>Error: {typeof event.error === "string"
+            ? event.error
+            : event.error
+              ? JSON.stringify(event.error)
+              : String(event.message ?? "")}</div>
           {modelErrorCause && (
             <div className="mt-1.5 pt-1.5 text-[12px] opacity-90">
               <span className="font-medium">Cause</span>
@@ -261,13 +334,6 @@ function renderEventContent(
       );
 
     default:
-      return (
-        <div className="text-sm text-muted-foreground">
-          <div className="font-mono text-xs opacity-60">{event.type}</div>
-          <pre className="mt-2 overflow-x-auto rounded bg-muted p-2 text-xs">
-            {JSON.stringify(event, null, 2)}
-          </pre>
-        </div>
-      );
+      return renderIOSections(event, pairedResult, pairedUse, modelErrorCause);
   }
 }

@@ -31,14 +31,13 @@ cd "${ROOT_DIR}/harness"
 # Kill any process occupying port 8090
 lsof -ti:8090 | xargs kill -9 2>/dev/null || true
 
-if [[ ! -x "${ROOT_DIR}/harness/.venv/bin/uvicorn" ]]; then
-  if ! command -v uv >/dev/null 2>&1; then
-    echo "error: uv is required to install harness dependencies" >&2
-    echo "install uv, then rerun ./start-harness.sh" >&2
-    exit 1
-  fi
-  uv sync
+if ! command -v uv >/dev/null 2>&1; then
+  echo "error: uv is required to install harness dependencies" >&2
+  echo "install uv, then rerun ./start-harness.sh" >&2
+  exit 1
 fi
+# Always sync so local path deps (piPy A2 / monorepo extensions) pick up edits.
+uv sync
 
 # Optional: pre-install common cookbook deps (E1 still installs from env.config at turn time).
 if [[ "${OMA_COOKBOOK_PACKAGES:-0}" == "1" ]]; then

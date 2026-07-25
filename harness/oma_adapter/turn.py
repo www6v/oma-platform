@@ -201,6 +201,16 @@ def _resolve_turn_workdir(workdir: str) -> str:
 
 
 
+def _thinking_level_from_agent(agent: AgentSnapshot | None) -> str | None:
+    """Read thinking level from agent.metadata (off|minimal|low|medium|high|xhigh)."""
+    if agent is None or not agent.metadata:
+        return None
+    level = agent.metadata.get("thinking_level")
+    if isinstance(level, str) and level.strip():
+        return level.strip()
+    return None
+
+
 async def _default_create_session(
     *,
     workdir: str,
@@ -214,6 +224,7 @@ async def _default_create_session(
     session_id: str | None = None,
     sandbox_provider: str | None = None,
     platform_base: str | None = None,
+    thinking_level: str | None = None,
 ) -> Any:
     from pi_coding_agent.sdk import CreateAgentSessionOptions, create_agent_session
 
@@ -226,6 +237,7 @@ async def _default_create_session(
         tools=builtin_tools,
         extension_paths=extension_paths or None,
         in_memory=True,
+        thinking_level=thinking_level,
     )
     result = await create_agent_session(opts)
     _wire_sandbox_bash_proxy(
@@ -532,6 +544,7 @@ async def _run_turn_core(
                     session_id=session_id,
                     sandbox_provider=sandbox_provider,
                     platform_base=platform_base,
+                    thinking_level=_thinking_level_from_agent(agent),
                 )
             session = result.session
             _register_mcp_tools_on_session(session, mcp_runtime)

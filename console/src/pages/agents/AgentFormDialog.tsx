@@ -43,6 +43,39 @@ const ANTHROPIC_SKILLS = [
 // truth lives in the agent_toolset_20260401 toolset; emitting unknown
 // names here would still validate at the API layer but produces a tool
 // the runtime never wires.
+/** piPy / Anthropic extended-thinking budgets (agent.metadata.thinking_level). */
+const THINKING_LEVELS = [
+  { value: "off", label: "Off" },
+  { value: "minimal", label: "Minimal" },
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+  { value: "xhigh", label: "Extra high" },
+] as const;
+
+type ThinkingLevel = (typeof THINKING_LEVELS)[number]["value"];
+
+function parseThinkingLevel(value: unknown): ThinkingLevel {
+  if (typeof value !== "string") return "off";
+  const match = THINKING_LEVELS.find((level) => level.value === value);
+  return match ? match.value : "off";
+}
+
+/** Merge opt-in flags into agent.metadata (do not overwrite one with the other). */
+function buildAgentMetadata(form: {
+  enableTeamTools: boolean;
+  thinkingLevel: ThinkingLevel;
+}): Record<string, unknown> | undefined {
+  const metadata: Record<string, unknown> = {};
+  if (form.enableTeamTools) {
+    metadata.enable_team_tools = true;
+  }
+  if (form.thinkingLevel !== "off") {
+    metadata.thinking_level = form.thinkingLevel;
+  }
+  return Object.keys(metadata).length > 0 ? metadata : undefined;
+}
+
 const BUILTIN_TOOLS: Array<{ name: string; label: string; description: string }> = [
   { name: "bash", label: "bash", description: "Run shell commands in the sandbox" },
   { name: "edit", label: "edit", description: "In-place file edits" },
@@ -95,6 +128,8 @@ const INITIAL_FORM = {
   enableGeneralSubagent: false,
   // Opt-in to team coordination tools (team_create, spawn_teammate, …).
   enableTeamTools: false,
+  // Extended thinking budget → agent.metadata.thinking_level (piPy).
+  thinkingLevel: "off" as ThinkingLevel,
 };
 
 interface AgentFormDialogProps {
@@ -290,8 +325,9 @@ export function AgentFormDialog({
       if (form.enableGeneralSubagent) {
         payload.enable_general_subagent = true;
       }
-      if (form.enableTeamTools) {
-        payload.metadata = { enable_team_tools: true };
+      const metadata = buildAgentMetadata(form);
+      if (metadata) {
+        payload.metadata = metadata;
       }
       // Harness binding — exactly one of three shapes reaches the wire:
       //   1. runtimeId + acpAgentId → acp-proxy (user's own daemon)
@@ -405,8 +441,9 @@ export function AgentFormDialog({
     if (form.enableGeneralSubagent) {
       config.enable_general_subagent = true;
     }
-    if (form.enableTeamTools) {
-      config.metadata = { enable_team_tools: true };
+    const metadata = buildAgentMetadata(form);
+    if (metadata) {
+      config.metadata = metadata;
     }
     // Mirror create() harness binding so switching form → YAML/JSON and back
     // round-trips the harness configuration. (Previously _oma was silently
@@ -522,6 +559,10 @@ export function AgentFormDialog({
           enableTeamTools:
             (parsed.metadata as { enable_team_tools?: boolean } | undefined)
               ?.enable_team_tools === true,
+          thinkingLevel: parseThinkingLevel(
+            (parsed.metadata as { thinking_level?: unknown } | undefined)
+              ?.thinking_level,
+          ),
         });
       } catch {
         /* keep current form if parse fails */
@@ -1017,6 +1058,29 @@ function BasicTab({
           {form.managedAgent === "hermes" ? "Hermes" : "OpenClaw"} gateway — it uses its own
           LLM credentials.
         </p>
+      )}
+      {/* Thinking level — cloud/piPy harness only; stored in agent.metadata. */}
+      {!form.runtimeId && !form.managedAgent && (
+        <div>
+          <label className="text-sm text-fg-muted block mb-1">Thinking level</label>
+          <Select
+            value={form.thinkingLevel}
+            onValueChange={(value) =>
+              setForm({ ...form, thinkingLevel: parseThinkingLevel(value) })
+            }
+            placeholder="Select thinking level"
+          >
+            {THINKING_LEVELS.map((level) => (
+              <SelectOption key={level.value} value={level.value}>
+                {level.label}
+              </SelectOption>
+            ))}
+          </Select>
+          <p className="text-xs text-fg-subtle mt-1">
+            Extended reasoning budget for models that support it (e.g. Anthropic). Stored as{" "}
+            <span className="font-mono">metadata.thinking_level</span>. Off omits the field.
+          </p>
+        </div>
       )}
       <div>
         <label htmlFor="agent-description" className="text-sm text-fg-muted block mb-1">

@@ -4,6 +4,7 @@ import {
   pairModelSpans,
   pairSessionErrors,
   pairToolResults,
+  resolveToolPair,
 } from "./tool-pairing";
 
 describe("pairToolResults", () => {
@@ -22,8 +23,10 @@ describe("pairToolResults", () => {
         content: "result data",
       },
     ];
-    const { resultByToolUseId, pairedResultIds } = pairToolResults(events);
+    const { resultByToolUseId, useByToolUseId, pairedResultIds } =
+      pairToolResults(events);
     expect(resultByToolUseId.get("tu_1")).toBe(events[1]);
+    expect(useByToolUseId.get("tu_1")).toBe(events[0]);
     expect(pairedResultIds.has("tr_1")).toBe(true);
   });
 
@@ -122,9 +125,55 @@ describe("pairToolResults", () => {
   });
 
   it("handles empty events array", () => {
-    const { resultByToolUseId, pairedResultIds } = pairToolResults([]);
+    const { resultByToolUseId, useByToolUseId, pairedResultIds } =
+      pairToolResults([]);
     expect(resultByToolUseId.size).toBe(0);
+    expect(useByToolUseId.size).toBe(0);
     expect(pairedResultIds.size).toBe(0);
+  });
+});
+
+describe("resolveToolPair", () => {
+  const events: Event[] = [
+    {
+      type: "agent.tool_use",
+      id: "tu_1",
+      name: "bash",
+      input: { command: "ls" },
+    },
+    {
+      type: "agent.tool_result",
+      id: "tr_1",
+      tool_use_id: "tu_1",
+      content: "ok",
+    },
+  ];
+  const pairing = pairToolResults(events);
+
+  it("resolves both sides from tool_use", () => {
+    const resolved = resolveToolPair(events[0], pairing);
+    expect(resolved.use).toBe(events[0]);
+    expect(resolved.result).toBe(events[1]);
+    expect(resolved.toolUseId).toBe("tu_1");
+  });
+
+  it("resolves both sides from tool_result (reverse)", () => {
+    const resolved = resolveToolPair(events[1], pairing);
+    expect(resolved.use).toBe(events[0]);
+    expect(resolved.result).toBe(events[1]);
+    expect(resolved.toolUseId).toBe("tu_1");
+  });
+
+  it("returns result-only for orphan tool_result", () => {
+    const orphan: Event = {
+      type: "agent.tool_result",
+      id: "tr_x",
+      tool_use_id: "missing",
+      content: "orphan",
+    };
+    const resolved = resolveToolPair(orphan, pairToolResults([orphan]));
+    expect(resolved.use).toBeUndefined();
+    expect(resolved.result).toBe(orphan);
   });
 });
 

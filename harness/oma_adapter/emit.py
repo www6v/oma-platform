@@ -17,6 +17,14 @@ def _call_agent_tool_name(name: str | None) -> bool:
     return bool(name and name.startswith("call_agent_"))
 
 
+def _thinking_id_for_index(content_index: Any) -> str:
+    try:
+        idx = int(content_index)
+    except (TypeError, ValueError):
+        idx = 0
+    return f"think-{idx}"
+
+
 def emit_oma_events(
     raw_events: list[dict[str, Any]],
     *,
@@ -27,11 +35,18 @@ def emit_oma_events(
 ) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     seen_agent_text = seen_agent_text if seen_agent_text is not None else set()
-    # streaming_state tracks the last emitted text length for message_update
-    # deltas so the frontend sees incremental text instead of each update
-    # repeating the entire accumulated message.
+    # streaming_state tracks text deltas + live thinking streams so the
+    # frontend sees incremental updates and can correlate thinking_id.
     if streaming_state is None:
-        streaming_state = {"last_emitted_len": 0}
+        streaming_state = {
+            "last_emitted_len": 0,
+            "live_thinking": set(),
+            "emitted_thinking_ids": set(),
+        }
+    else:
+        streaming_state.setdefault("last_emitted_len", 0)
+        streaming_state.setdefault("live_thinking", set())
+        streaming_state.setdefault("emitted_thinking_ids", set())
     lookup_events = (
         event_lookup_buffer if event_lookup_buffer is not None else raw_events
     )
@@ -49,6 +64,14 @@ def emit_oma_events(
             continue
         kind = item.get("type") or item.get("event")
         if kind == "message_update":
+            ame = item.get("assistantMessageEvent") or item.get(
+                "assistant_message_event"
+            )
+            if isinstance(ame, dict):
+                thinking_events = _emit_thinking_stream(ame, streaming_state)
+                if thinking_events:
+                    out.extend(thinking_events)
+                    continue
             # Streaming text delta: message contains the accumulated
             # AssistantMessage so far. Emit only the new portion.
             message = item.get("message")
@@ -69,9 +92,14 @@ def emit_oma_events(
             # New message started — reset streaming delta tracker so the
             # first message_update of the new message emits from position 0.
             streaming_state["last_emitted_len"] = 0
+            streaming_state["live_thinking"] = set()
+            streaming_state["emitted_thinking_ids"] = set()
         elif kind in {"message_end", "turn_end"}:
             message = item.get("message")
             if isinstance(message, dict) and message.get("role") == "assistant":
+                out.extend(
+                    _emit_thinking_from_message(message, streaming_state)
+                )
                 text = _extract_pi_message_text(message)
                 last_len = int(streaming_state.get("last_emitted_len", 0))
                 if text and text in seen_agent_text:
@@ -99,6 +127,8 @@ def emit_oma_events(
                     out.append(usage_span)
             # Reset streaming tracker at message boundary.
             streaming_state["last_emitted_len"] = 0
+            streaming_state["live_thinking"] = set()
+            streaming_state["emitted_thinking_ids"] = set()
         elif kind in {"tool_use", "agent.tool_use", "tool_execution_start"}:
             tool_id = (
                 item.get("id")
@@ -177,6 +207,129 @@ def emit_oma_events(
                         received["from_agent_id"] = agent_id
                 out.append(received)
     return out
+
+
+def _emit_thinking_stream(
+    ame: dict[str, Any],
+    streaming_state: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Map pi assistantMessageEvent thinking_* → OMA thinking stream events."""
+    ame_type = ame.get("type")
+    if ame_type not in {"thinking_start", "thinking_delta", "thinking_end"}:
+        return []
+    thinking_id = _thinking_id_for_index(ame.get("content_index"))
+    live: set[str] = streaming_state["live_thinking"]
+    out: list[dict[str, Any]] = []
+    if ame_type == "thinking_start":
+        if thinking_id not in live:
+            live.add(thinking_id)
+            out.append(
+                {
+                    "type": "agent.thinking_stream_start",
+                    "thinking_id": thinking_id,
+                }
+            )
+        return out
+    if ame_type == "thinking_delta":
+        delta = ame.get("delta") or ""
+        if thinking_id not in live:
+            live.add(thinking_id)
+            out.append(
+                {
+                    "type": "agent.thinking_stream_start",
+                    "thinking_id": thinking_id,
+                }
+            )
+        if delta:
+            out.append(
+                {
+                    "type": "agent.thinking_chunk",
+                    "thinking_id": thinking_id,
+                    "delta": str(delta),
+                }
+            )
+        return out
+    # thinking_end
+    if thinking_id in live:
+        live.discard(thinking_id)
+        out.append(
+            {
+                "type": "agent.thinking_stream_end",
+                "thinking_id": thinking_id,
+                "status": "completed",
+            }
+        )
+    return out
+
+
+def _emit_thinking_from_message(
+    message: dict[str, Any],
+    streaming_state: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Emit canonical agent.thinking (+ close any half-open streams)."""
+    content = message.get("content")
+    if not isinstance(content, list):
+        return []
+    live: set[str] = streaming_state["live_thinking"]
+    emitted: set[str] = streaming_state["emitted_thinking_ids"]
+    out: list[dict[str, Any]] = []
+    for index, block in enumerate(content):
+        if not isinstance(block, dict):
+            continue
+        if block.get("type") != "thinking":
+            continue
+        thinking_id = _thinking_id_for_index(index)
+        if thinking_id in live:
+            live.discard(thinking_id)
+            out.append(
+                {
+                    "type": "agent.thinking_stream_end",
+                    "thinking_id": thinking_id,
+                    "status": "completed",
+                }
+            )
+        if thinking_id in emitted:
+            continue
+        text = str(block.get("thinking") or "")
+        event: dict[str, Any] = {
+            "type": "agent.thinking",
+            "text": text,
+            "thinking_id": thinking_id,
+        }
+        provider_options = _thinking_provider_options(block)
+        if provider_options is not None:
+            event["providerOptions"] = provider_options
+        out.append(event)
+        emitted.add(thinking_id)
+    # Close any live streams that never appeared as content blocks.
+    for thinking_id in list(live):
+        live.discard(thinking_id)
+        out.append(
+            {
+                "type": "agent.thinking_stream_end",
+                "thinking_id": thinking_id,
+                "status": "completed",
+            }
+        )
+    return out
+
+
+def _thinking_provider_options(
+    block: dict[str, Any],
+) -> dict[str, Any] | None:
+    signature = block.get("thinking_signature") or block.get(
+        "thinkingSignature"
+    )
+    redacted = bool(block.get("redacted"))
+    if not signature and not redacted:
+        return None
+    anthropic: dict[str, Any] = {}
+    if signature:
+        if redacted:
+            anthropic["redactedData"] = str(signature)
+        else:
+            anthropic["signature"] = str(signature)
+    return {"anthropic": anthropic}
 
 
 def _tool_name_for_call(

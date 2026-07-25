@@ -7,15 +7,23 @@
  * Right panel: EventDetail with Rendered/Raw toggle.
  * Scroll to selectedDebugEventId on mount/update.
  * Shows only canonical events (no streaming overlays).
+ *
+ * Default filter hides span.model_request_* (telemetry noise); chips stay
+ * listed so operators can opt in. Tool use/result rows both remain (A2);
+ * selecting either shows bidirectional Input/Output.
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { isDefaultHiddenDebugType } from "../../lib/event-io";
 import type { Event } from "../../lib/events";
-import { pairSessionErrors, pairToolResults } from "../../lib/tool-pairing";
+import {
+  pairSessionErrors,
+  pairToolResults,
+  resolveToolPair,
+} from "../../lib/tool-pairing";
 import { cn } from "../../lib/utils";
 import { EventDetail } from "./EventDetail";
 import {
-  categorizeEvent,
   DisplayEvent,
   EventRow,
   getMergedEventText,
@@ -34,12 +42,38 @@ export interface DebugTabProps {
 /**
  * Get all unique event types from the events array.
  */
-function getEventTypes(events: Event[]): string[] {
+export function getEventTypes(events: Event[]): string[] {
   const types = new Set<string>();
   for (const e of events) {
     types.add(e.type);
   }
   return Array.from(types).sort();
+}
+
+/**
+ * Apply Debug type filter.
+ * - selectedTypes empty → all events except default-hidden telemetry
+ * - selectedTypes non-empty → only those types
+ */
+export function filterDebugEvents(
+  events: Event[],
+  selectedTypes: Set<string>
+): Event[] {
+  if (selectedTypes.size === 0) {
+    return events.filter((e) => !isDefaultHiddenDebugType(e.type));
+  }
+  return events.filter((e) => selectedTypes.has(e.type));
+}
+
+/** Whether a type chip appears active under the current filter selection. */
+export function isDebugTypeChipActive(
+  type: string,
+  selectedTypes: Set<string>
+): boolean {
+  if (selectedTypes.size === 0) {
+    return !isDefaultHiddenDebugType(type);
+  }
+  return selectedTypes.has(type);
 }
 
 export function DebugTab({
@@ -63,11 +97,13 @@ export function DebugTab({
   // Get all event types for filter
   const eventTypes = getEventTypes(filteredEvents);
 
-  // Filter by selected types
-  const visibleEvents =
-    selectedTypes.size === 0
-      ? filteredEvents
-      : filteredEvents.filter((e) => selectedTypes.has(e.type));
+  const hasDefaultHidden = eventTypes.some((t) => isDefaultHiddenDebugType(t));
+
+  // Filter by selected types (default: hide telemetry spans)
+  const visibleEvents = useMemo(
+    () => filterDebugEvents(filteredEvents, selectedTypes),
+    [filteredEvents, selectedTypes]
+  );
 
   // Merge consecutive agent.message events (reuses TranscriptTab logic)
   const displayEvents: DisplayEvent[] = useMemo(
@@ -75,17 +111,44 @@ export function DebugTab({
     [visibleEvents]
   );
 
-  // Pair tool_use ↔ tool_result
-  const { resultByToolUseId } = pairToolResults(filteredEvents);
+  // Pair tool_use ↔ tool_result (bidirectional)
+  const toolPairing = useMemo(
+    () => pairToolResults(filteredEvents),
+    [filteredEvents]
+  );
 
   // Pair session.error ↔ upstream model error cause
-  const sessionErrorCause = pairSessionErrors(filteredEvents);
+  const sessionErrorCause = useMemo(
+    () => pairSessionErrors(filteredEvents),
+    [filteredEvents]
+  );
 
-  // Find the display group containing the selected event (for scroll + detail)
+  // Prefer the exact selected event inside a merged group for detail/pairing
+  const selectedPrimaryEvent = useMemo(() => {
+    if (!selectedDebugEventId) return null;
+    const group = displayEvents.find((de) =>
+      de.events.some((e) => e.id === selectedDebugEventId)
+    );
+    if (!group) return null;
+    return (
+      group.events.find((e) => e.id === selectedDebugEventId)
+      ?? group.primaryEvent
+    );
+  }, [displayEvents, selectedDebugEventId]);
+
   const selectedDisplayEvent = useMemo(() => {
     if (!selectedDebugEventId) return null;
-    return displayEvents.find((de) => de.events.some((e) => e.id === selectedDebugEventId)) ?? null;
+    return (
+      displayEvents.find((de) =>
+        de.events.some((e) => e.id === selectedDebugEventId)
+      ) ?? null
+    );
   }, [displayEvents, selectedDebugEventId]);
+
+  const toolPair = useMemo(() => {
+    if (!selectedPrimaryEvent) return undefined;
+    return resolveToolPair(selectedPrimaryEvent, toolPairing);
+  }, [selectedPrimaryEvent, toolPairing]);
 
   // Scroll to selected event
   useEffect(() => {
@@ -99,6 +162,19 @@ export function DebugTab({
 
   const toggleType = (type: string) => {
     setSelectedTypes((prev) => {
+      if (prev.size === 0) {
+        // Leaving default view
+        if (isDefaultHiddenDebugType(type)) {
+          // Opt in telemetry while keeping default-visible types
+          const next = new Set(
+            eventTypes.filter((t) => !isDefaultHiddenDebugType(t))
+          );
+          next.add(type);
+          return next;
+        }
+        // Narrow to a single type
+        return new Set([type]);
+      }
       const next = new Set(prev);
       if (next.has(type)) {
         next.delete(type);
@@ -123,8 +199,15 @@ export function DebugTab({
       <div className="flex min-h-0 min-w-0 flex-col border-r border-border">
         {/* Type filter */}
         <div className="border-b border-border p-2">
-          <div className="mb-1 text-xs font-medium text-muted-foreground">
-            Filter by type
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <div className="text-xs font-medium text-muted-foreground">
+              Filter by type
+            </div>
+            {hasDefaultHidden && selectedTypes.size === 0 && (
+              <span className="text-[10px] text-muted-foreground opacity-70">
+                model spans hidden by default
+              </span>
+            )}
           </div>
           <div className="flex max-h-32 flex-wrap gap-1 overflow-y-auto">
             {eventTypes.map((type) => (
@@ -134,7 +217,7 @@ export function DebugTab({
                 onClick={() => toggleType(type)}
                 className={cn(
                   "rounded bg-muted px-1.5 py-0.5 text-xs transition-colors",
-                  selectedTypes.size === 0 || selectedTypes.has(type)
+                  isDebugTypeChipActive(type, selectedTypes)
                     ? "text-foreground"
                     : "text-muted-foreground opacity-50"
                 )}
@@ -143,15 +226,26 @@ export function DebugTab({
               </button>
             ))}
           </div>
-          {selectedTypes.size > 0 && (
-            <button
-              type="button"
-              onClick={() => setSelectedTypes(new Set())}
-              className="mt-1 text-xs text-brand hover:underline"
-            >
-              Clear filters
-            </button>
-          )}
+          <div className="mt-1 flex flex-wrap gap-2">
+            {selectedTypes.size > 0 && (
+              <button
+                type="button"
+                onClick={() => setSelectedTypes(new Set())}
+                className="text-xs text-brand hover:underline"
+              >
+                Reset filter
+              </button>
+            )}
+            {hasDefaultHidden && (
+              <button
+                type="button"
+                onClick={() => setSelectedTypes(new Set(eventTypes))}
+                className="text-xs text-brand hover:underline"
+              >
+                Show all types
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Event list — merged display events */}
@@ -164,7 +258,9 @@ export function DebugTab({
             <div className="flex flex-col gap-0.5">
               {displayEvents.map((de, idx) => {
                 const isMerged = de.events.length > 1;
-                const isSelected = de.events.some((e) => e.id === selectedDebugEventId);
+                const isSelected = de.events.some(
+                  (e) => e.id === selectedDebugEventId
+                );
                 return (
                   <div
                     key={de.primaryEvent.id ?? `group-${idx}`}
@@ -173,12 +269,14 @@ export function DebugTab({
                     <EventRow
                       event={de.primaryEvent}
                       selected={isSelected}
-                      onClick={() => onSelectDebugEvent(de.primaryEvent.id ?? null)}
+                      onClick={() =>
+                        onSelectDebugEvent(de.primaryEvent.id ?? null)
+                      }
                       mergedCount={isMerged ? de.events.length : undefined}
-                      mergedText={isMerged ? getMergedEventText(de.events) : undefined}
-                      className={cn(
-                        isSelected && "ring-2 ring-brand"
-                      )}
+                      mergedText={
+                        isMerged ? getMergedEventText(de.events) : undefined
+                      }
+                      className={cn(isSelected && "ring-2 ring-brand")}
                     />
                   </div>
                 );
@@ -218,20 +316,23 @@ export function DebugTab({
           </button>
         </div>
 
-        {selectedDisplayEvent ? (
+        {selectedDisplayEvent && selectedPrimaryEvent ? (
           viewMode === "rendered" ? (
             <EventDetail
-              event={selectedDisplayEvent.primaryEvent}
-              pairedResult={
-                selectedDisplayEvent.primaryEvent.id &&
-                resultByToolUseId.has(selectedDisplayEvent.primaryEvent.id)
-                  ? resultByToolUseId.get(selectedDisplayEvent.primaryEvent.id)
+              event={selectedPrimaryEvent}
+              pairedResult={toolPair?.result}
+              pairedUse={
+                // Only pass pairedUse when viewing a result (avoid circular self)
+                selectedPrimaryEvent.type === "agent.tool_result"
+                || selectedPrimaryEvent.type === "agent.mcp_tool_result"
+                || selectedPrimaryEvent.type === "user.custom_tool_result"
+                  ? toolPair?.use
                   : undefined
               }
               modelErrorCause={
-                selectedDisplayEvent.primaryEvent.id &&
-                selectedDisplayEvent.primaryEvent.type === "session.error"
-                  ? sessionErrorCause.get(selectedDisplayEvent.primaryEvent.id)
+                selectedPrimaryEvent.id
+                && selectedPrimaryEvent.type === "session.error"
+                  ? sessionErrorCause.get(selectedPrimaryEvent.id)
                   : undefined
               }
               mergedEvents={
@@ -244,7 +345,7 @@ export function DebugTab({
             <pre className="overflow-x-auto rounded bg-muted p-3 text-xs">
               {selectedDisplayEvent.events.length > 1
                 ? JSON.stringify(selectedDisplayEvent.events, null, 2)
-                : JSON.stringify(selectedDisplayEvent.primaryEvent, null, 2)}
+                : JSON.stringify(selectedPrimaryEvent, null, 2)}
             </pre>
           )
         ) : (
