@@ -1,6 +1,31 @@
 import { describe, expect, it } from "vitest";
 import type { Event } from "../../lib/events";
-import { categorizeEvent } from "./EventRow";
+import { categorizeEvent, getMergedEventText } from "./EventRow";
+
+describe("getMergedEventText", () => {
+  it("concatenates streaming fragments into continuous text", () => {
+    const events: Event[] = [
+      { type: "agent.message", content: [{ type: "text", text: "## ✅ " }] },
+      { type: "agent.message", content: [{ type: "text", text: "团队任务全部" }] },
+      { type: "agent.message", content: [{ type: "text", text: "完成！" }] },
+      { type: "agent.message", content: [{ type: "text", text: "\n\n### 团队结构\n" }] },
+      { type: "agent.message", content: [{ type: "text", text: "| 角色 | 职责 |\n" }] },
+      { type: "agent.message", content: [{ type: "text", text: "| --- | --- |" }] },
+    ];
+    expect(getMergedEventText(events)).toBe(
+      "## ✅ 团队任务全部完成！\n\n### 团队结构\n| 角色 | 职责 |\n| --- | --- |"
+    );
+  });
+
+  it("skips empty fragments", () => {
+    const events: Event[] = [
+      { type: "agent.message", content: [{ type: "text", text: "Hello" }] },
+      { type: "agent.message", content: [{ type: "text", text: "" }] },
+      { type: "agent.message", content: [{ type: "text", text: " world" }] },
+    ];
+    expect(getMergedEventText(events)).toBe("Hello world");
+  });
+});
 
 describe("categorizeEvent", () => {
   it("categorizes user.message as user", () => {

@@ -4,7 +4,7 @@
  * Left panel: flat event list with raw type filter. Adjacent agent.message
  * events are merged into a single row (with a ×N count badge) to keep the
  * list compact — same merge behavior as TranscriptTab.
- * Right panel: EventDetail with Rendered/Raw toggle.
+ * Right panel: EventDetailPane with type badge, clock time, Rendered/Raw.
  * Scroll to selectedDebugEventId on mount/update.
  * Shows only canonical events (no streaming overlays).
  *
@@ -23,6 +23,11 @@ import {
 } from "../../lib/tool-pairing";
 import { cn } from "../../lib/utils";
 import { EventDetail } from "./EventDetail";
+import {
+  EventDetailPane,
+  formatEventRaw,
+  type DetailViewMode,
+} from "./EventDetailPane";
 import {
   DisplayEvent,
   EventRow,
@@ -84,7 +89,7 @@ export function DebugTab({
   scrollRef,
 }: DebugTabProps) {
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set());
-  const [viewMode, setViewMode] = useState<"rendered" | "raw">("rendered");
+  const [viewMode, setViewMode] = useState<DetailViewMode>("rendered");
   const eventRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   // Filter events by active thread
@@ -150,15 +155,31 @@ export function DebugTab({
     return resolveToolPair(selectedPrimaryEvent, toolPairing);
   }, [selectedPrimaryEvent, toolPairing]);
 
-  // Scroll to selected event
+  // Scroll to the selected event's list row. Merged agent.message groups
+  // register under every member id, so either the primary or a fragment
+  // id resolves to the same row. rAF covers the tab-switch mount case
+  // where callback refs may not be in the map yet when the effect runs.
   useEffect(() => {
-    if (selectedDebugEventId && scrollRef?.current) {
-      const el = eventRefs.current.get(selectedDebugEventId);
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
-    }
-  }, [selectedDebugEventId, scrollRef]);
+    if (!selectedDebugEventId || !scrollRef?.current) return;
+
+    const scrollToSelected = (): boolean => {
+      const rowId =
+        selectedDisplayEvent?.primaryEvent.id ?? selectedDebugEventId;
+      const el =
+        eventRefs.current.get(selectedDebugEventId) ??
+        eventRefs.current.get(rowId);
+      if (!el) return false;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      return true;
+    };
+
+    if (scrollToSelected()) return;
+
+    const raf = requestAnimationFrame(() => {
+      scrollToSelected();
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [selectedDebugEventId, selectedDisplayEvent, scrollRef]);
 
   const toggleType = (type: string) => {
     setSelectedTypes((prev) => {
@@ -264,7 +285,13 @@ export function DebugTab({
                 return (
                   <div
                     key={de.primaryEvent.id ?? `group-${idx}`}
-                    ref={(el) => registerRef(de.primaryEvent.id ?? "", el)}
+                    ref={(el) => {
+                      // Register every member id so "View in Debug" from
+                      // any fragment in a merged group can find this row.
+                      for (const e of de.events) {
+                        if (e.id) registerRef(e.id, el);
+                      }
+                    }}
                   >
                     <EventRow
                       event={de.primaryEvent}
@@ -287,67 +314,47 @@ export function DebugTab({
       </div>
 
       {/* Right: detail pane flush to the content’s right edge */}
-      <div className="flex min-h-0 min-w-0 flex-col overflow-y-auto bg-bg p-4">
-        {/* View mode toggle */}
-        <div className="mb-3 flex items-center gap-2 border-b border-border pb-2">
-          <button
-            type="button"
-            onClick={() => setViewMode("rendered")}
-            className={cn(
-              "rounded px-2 py-1 text-sm transition-colors",
-              viewMode === "rendered"
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:bg-accent/50"
-            )}
-          >
-            Rendered
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode("raw")}
-            className={cn(
-              "rounded px-2 py-1 text-sm transition-colors",
-              viewMode === "raw"
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:bg-accent/50"
-            )}
-          >
-            Raw
-          </button>
-        </div>
-
+      <div className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-bg p-4">
         {selectedDisplayEvent && selectedPrimaryEvent ? (
-          viewMode === "rendered" ? (
-            <EventDetail
-              event={selectedPrimaryEvent}
-              pairedResult={toolPair?.result}
-              pairedUse={
-                // Only pass pairedUse when viewing a result (avoid circular self)
-                selectedPrimaryEvent.type === "agent.tool_result"
-                || selectedPrimaryEvent.type === "agent.mcp_tool_result"
-                || selectedPrimaryEvent.type === "user.custom_tool_result"
-                  ? toolPair?.use
-                  : undefined
-              }
-              modelErrorCause={
-                selectedPrimaryEvent.id
-                && selectedPrimaryEvent.type === "session.error"
-                  ? sessionErrorCause.get(selectedPrimaryEvent.id)
-                  : undefined
-              }
-              mergedEvents={
-                selectedDisplayEvent.events.length > 1
-                  ? selectedDisplayEvent.events
-                  : undefined
-              }
-            />
-          ) : (
-            <pre className="overflow-x-auto rounded bg-muted p-3 text-xs">
-              {selectedDisplayEvent.events.length > 1
-                ? JSON.stringify(selectedDisplayEvent.events, null, 2)
-                : JSON.stringify(selectedPrimaryEvent, null, 2)}
-            </pre>
-          )
+          <EventDetailPane
+            event={selectedPrimaryEvent}
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            onClose={() => onSelectDebugEvent(null)}
+            badgeMode="type"
+            mergedCount={selectedDisplayEvent.events.length}
+            rendered={
+              <EventDetail
+                event={selectedPrimaryEvent}
+                pairedResult={toolPair?.result}
+                pairedUse={
+                  // Only pass pairedUse when viewing a result (avoid circular self)
+                  selectedPrimaryEvent.type === "agent.tool_result"
+                  || selectedPrimaryEvent.type === "agent.mcp_tool_result"
+                  || selectedPrimaryEvent.type === "user.custom_tool_result"
+                    ? toolPair?.use
+                    : undefined
+                }
+                modelErrorCause={
+                  selectedPrimaryEvent.id
+                  && selectedPrimaryEvent.type === "session.error"
+                    ? sessionErrorCause.get(selectedPrimaryEvent.id)
+                    : undefined
+                }
+                mergedEvents={
+                  selectedDisplayEvent.events.length > 1
+                    ? selectedDisplayEvent.events
+                    : undefined
+                }
+              />
+            }
+            raw={formatEventRaw(
+              selectedPrimaryEvent,
+              selectedDisplayEvent.events.length > 1
+                ? selectedDisplayEvent.events
+                : undefined
+            )}
+          />
         ) : (
           <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
             Select an event to view details

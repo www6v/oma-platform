@@ -1242,7 +1242,13 @@ export function SessionDetail() {
           activeThreadId={activeThreadId}
           selectedEventId={viewMode.selectedEventId}
           onSelectEvent={viewMode.setSelectedEventId}
-          onViewInDebug={viewMode.scrollToDebugEvent}
+          onViewInDebug={(eventId) => {
+            // scrollToDebugEvent updates viewMode.activeTab, but the
+            // visible tab is driven by the local `view` state — keep
+            // them in sync so the Debug tab actually mounts.
+            setView("debug");
+            viewMode.scrollToDebugEvent(eventId);
+          }}
           onSend={(text) => void send(text)}
           sending={sending}
         />

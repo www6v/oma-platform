@@ -2,7 +2,7 @@
  * TranscriptTab — Claude Console-style transcript view.
  *
  * Left panel: flat event list with category filter, HITL panel at bottom.
- * Right panel: EventDetail with "View in Debug →" link.
+ * Right panel: EventDetailPane (type / time / Rendered|Raw) + "View in Debug →".
  * Streaming overlays render only in this tab (not in Debug tab).
  *
  * Events are color-coded by category:
@@ -13,7 +13,7 @@
  * - System: gray
  */
 
-import { ChevronRightIcon } from "lucide-react";
+import { Link2Icon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { Event } from "../../lib/events";
@@ -27,8 +27,12 @@ import {
 } from "../../components/ai-elements/prompt-input";
 import { EventDetail } from "./EventDetail";
 import {
+  EventDetailPane,
+  formatEventRaw,
+  type DetailViewMode,
+} from "./EventDetailPane";
+import {
   categorizeEvent,
-  DisplayEvent,
   EventRow,
   getMergedEventText,
   mergeConsecutiveAgentEvents,
@@ -85,6 +89,7 @@ export function TranscriptTab({
   const [selectedCategories, setSelectedCategories] = useState<Set<TranscriptCategory>>(
     new Set(["user", "agent", "tool", "error"])
   );
+  const [viewMode, setViewMode] = useState<DetailViewMode>("rendered");
 
   // Filter events by active thread
   const filteredEvents = useMemo(
@@ -234,32 +239,61 @@ export function TranscriptTab({
       </div>
 
       {/* Right: detail pane flush to the content’s right edge */}
-      <div className="flex min-h-0 min-w-0 flex-col overflow-y-auto bg-bg p-4">
+      <div className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-bg p-4">
         {selectedDisplayEvent ? (
-          <EventDetail
+          <EventDetailPane
             event={selectedDisplayEvent.primaryEvent}
-            pairedResult={
-              selectedDisplayEvent.primaryEvent.id &&
-              resultByToolUseId.has(selectedDisplayEvent.primaryEvent.id)
-                ? resultByToolUseId.get(selectedDisplayEvent.primaryEvent.id)
-                : undefined
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            onClose={() => onSelectEvent(null)}
+            badgeMode="category"
+            mergedCount={selectedDisplayEvent.events.length}
+            headerExtra={
+              onViewInDebug && selectedDisplayEvent.primaryEvent.id ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onViewInDebug(selectedDisplayEvent.primaryEvent.id!)
+                  }
+                  className="mb-2 flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  <Link2Icon className="h-3 w-3" />
+                  <span>View in Debug →</span>
+                </button>
+              ) : undefined
             }
-            modelErrorCause={
-              selectedDisplayEvent.primaryEvent.id &&
-              selectedDisplayEvent.primaryEvent.type === "session.error"
-                ? sessionErrorCause.get(selectedDisplayEvent.primaryEvent.id)
-                : undefined
+            rendered={
+              <EventDetail
+                event={selectedDisplayEvent.primaryEvent}
+                pairedResult={
+                  selectedDisplayEvent.primaryEvent.id &&
+                  resultByToolUseId.has(selectedDisplayEvent.primaryEvent.id)
+                    ? resultByToolUseId.get(
+                        selectedDisplayEvent.primaryEvent.id
+                      )
+                    : undefined
+                }
+                modelErrorCause={
+                  selectedDisplayEvent.primaryEvent.id &&
+                  selectedDisplayEvent.primaryEvent.type === "session.error"
+                    ? sessionErrorCause.get(
+                        selectedDisplayEvent.primaryEvent.id
+                      )
+                    : undefined
+                }
+                mergedEvents={
+                  selectedDisplayEvent.events.length > 1
+                    ? selectedDisplayEvent.events
+                    : undefined
+                }
+              />
             }
-            onViewInDebug={
-              onViewInDebug && selectedDisplayEvent.primaryEvent.id
-                ? () => onViewInDebug(selectedDisplayEvent.primaryEvent.id!)
-                : undefined
-            }
-            mergedEvents={
+            raw={formatEventRaw(
+              selectedDisplayEvent.primaryEvent,
               selectedDisplayEvent.events.length > 1
                 ? selectedDisplayEvent.events
                 : undefined
-            }
+            )}
           />
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">

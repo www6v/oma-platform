@@ -10,51 +10,53 @@ Self-hostable **Open Managed Agents (OMA)** stack: a Go platform runtime plus a 
 ### Core agent loop
 
 - **Versioned agents** — CRUD, archive, immutable version snapshots (`/v1/agents`).
-- **Durable sessions** — Append-only event log in SQLite; sessions pin agent version and environment at creation.
+- **Durable sessions** — Append-only event log in MySQL; sessions pin agent version and environment at creation.
 - **Harness turns** — Stateless LLM turns via the piPy sidecar (`POST /internal/turn`).
 - **Real-time streaming** — Server-Sent Events (`GET /v1/sessions/:id/events/stream`) with optional replay.
 - **Turn interruption** — `user.interrupt` cancels the active harness turn (optionally scoped by `session_thread_id`), clears HITL pending state, and returns the session to idle. Console Stop button supported.
 - **Crash recovery** — Orphan `running` sessions reset to `idle` on platform startup.
-- **Per-session sandboxes** — Isolated workdirs under `SANDBOX_WORKDIR/<session_id>/`.
+- **Pluggable sandboxes** — Providers `local` | `litebox` | `boxrun` | `e2b` | `daytona` | `opensandbox` via `SANDBOX_PROVIDER`; per-environment binding; session exec (`POST /v1/sessions/:id/exec`) and file promote ([design](./docs/design/env/sandbox.md), [binding](./docs/design/environment-sandbox-binding.md)).
 - **Agent toolset** — OMA `agent_toolset_20260401` maps to piPy builtins plus `web_fetch` and `web_search`.
 - **Custom tools + HITL** — Agent-declared custom tools with `requires_action` / `user.custom_tool_result` human-in-the-loop flow ([design doc](./docs/design/loop-task-termination.md)).
 - **Session resources** — Mount skills, files, and other resources at session creation or mid-session (`/v1/sessions/:id/resources`).
-- **Sub-agents** — `call_agent_*` and `general_subagent` delegation with session threads ([design doc](./docs/design/subagent.md)).
-- **Agent teams** — Multi-agent coordination via `team_*` harness tools and `/v1/sessions/:id/teams/*` ([design doc](./docs/design/agent-team.md)).
+- **Sub-agents** — `call_agent_*` and `general_subagent` delegation with session threads ([design doc](./docs/design/orch/subagent.md)).
+- **Agent teams** — Multi-agent coordination via `team_*` harness tools and `/v1/sessions/:id/teams/*` ([design doc](./docs/design/orch/agent-team.md)).
+- **Dynamic workflows** — YAML workflows (NL generation) via the harness `pi_dynamic_workflows` extension; platform proxies `/api/workflows` to the sidecar; steps run as sub-agents on sessions with execution traces visible in Session (Console plugin `console/src/plugins/dynamic-workflows/`; extension [`../piPy-dynamic-workflows/`](../piPy-dynamic-workflows/)).
 - **Compaction** — Context summarization before long turns (`harness/oma_adapter/compaction.py`).
-- **Schedule tools** — `schedule`, `cancel_schedule`, `list_schedules` with SQLite-backed worker.
+- **Schedule tools** — `schedule`, `cancel_schedule`, `list_schedules` with MySQL-backed wakeup worker.
 - **MCP tools** — Agent-declared MCP servers via harness loader + `/v1/mcp-proxy`.
-- **Resource mounter + outcome evaluator** — Session resource mounting and rubric-based outcome grading ([design doc](./docs/design/resource-mounter-and-outcome-evaluator.md)).
+- **Resource mounter + outcome evaluator** — Session resource mounting and rubric-based outcome grading ([design doc](./docs/design/env/resource-mounter-and-outcome-evaluator.md)).
 
 ### Platform APIs (Console-aligned)
 
-- **Environments** — Named execution contexts; default `env-local-default` on boot.
+- **Environments** — Named execution contexts with optional sandbox config; default `env-local-default` on boot.
 - **Model cards** — Per-tenant credentials; resolved at turn time; internal key endpoints for the harness.
-- **Skills** — Builtin catalog + custom skills with zip/file upload (`/v1/skills`).
+- **Skills** — Builtin catalog + custom skills with zip/file upload (`/v1/skills`); ClawHub import (`/v1/clawhub`).
 - **Files** — Upload/download blobs scoped to sessions (`/v1/files`).
 - **Vaults & credentials** — Secret storage with OAuth refresh; outbound HTTP proxy injects credentials.
-- **Session aux** — Threads (derived from events), pending confirmations, trajectory export, outputs.
+- **Session aux** — Threads (derived from events), pending confirmations, trajectory export, outputs, sandbox exec.
 - **Stats & identity** — `/v1/stats`, `/v1/me`, `/v1/api_keys`.
 - **Integrations** — Linear, GitHub, and Slack publications, OAuth, install proxy, and webhook dispatch.
 - **Eval runs** — CRUD plus background worker (`internal/eval/worker.go`).
 - **Dreams** — CRUD plus background dream worker (`internal/dream/worker.go`).
 - **Cost report** — Usage and cost aggregation (`/v1/cost_report`).
 - **Runtimes** — ACP daemon connect/exchange for local IDE attach ([design doc](./docs/design/runtime-architecture.md)).
-- **Memory stores** — Large-object storage with retention worker.
+- **Memory stores** — Large-object storage with retention worker ([design doc](./docs/design/memory/memory.md)).
+- **Managed harnesses** — Optional OpenClaw / Hermes backends via agent `_oma.harness: "managed"`; availability at `GET /v1/config/harnesses` (`OMA_OPENCLAW_*` / `OMA_HERMES_*`).
 
 ### Python SDK
 
-- **`oma-sdk` v0.1.0** — Python client in `sdk/` using `anthropic` SDK with custom `base_url` for managed-agents resources plus `httpx` for OMA-only endpoints.
-- **Cookbook parity** — Managed Agents Cookbook examples 1–9 under `sdk/example/` with shared helpers in `oma_sdk.cookbook`.
-- **E2E tests** — pytest suite in `sdk/tests/` validates the full API surface against a running server.
+- **`oma-sdk` v0.1.0** — Python client in sibling [`../oma-sdk/`](../oma-sdk/) using `anthropic` SDK with custom `base_url` for managed-agents resources plus `httpx` for OMA-only endpoints.
+- **Cookbook parity** — Managed Agents Cookbook examples 1–9 under `oma-sdk/example/` with shared helpers in `oma_sdk.cookbook`.
+- **E2E tests** — pytest suite in `oma-sdk/tests/` validates the full API surface against a running server.
 
 ### Operations
 
-- **Console UI** — SPA in `console/`, same origin as the API.
+- **Console UI** — SPA in `console/`, same origin as the API (includes Workflows Quickstart/Editor).
 - **Auth** — API key (`x-api-key` / `Authorization: Bearer`) or better-auth cookie session.
 - **Docker Compose** — Three-service stack (`oma-platform` + `oma-auth` + `oma-harness`) with health checks.
 - **Fake harness mode** — `OMA_FAKE_HARNESS=1` for local dev and CI without LLM API keys.
-- **Smoke & integration scripts** — `scripts/e2e/smoke-all.sh` (full suite), `scripts/e2e/smoke-test.sh`, `scripts/e2e/console-integration.sh`, provider webhooks, MCP, runtime, sub-agent E2E.
+- **Smoke & integration scripts** — `scripts/e2e/smoke-all.sh` (full suite), workflows / team / sandbox / managed-harness smokes under `scripts/workflows/`, `scripts/multi-agent/`, and `scripts/e2e/`.
 
 ## Architecture
 
@@ -62,30 +64,33 @@ Self-hostable **Open Managed Agents (OMA)** stack: a Go platform runtime plus a 
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                    Client (Console / curl / SDK)                        │
 └───────────────────────────────────┬─────────────────────────────────────┘
-                                    │ HTTP + SSE
+                                    │ HTTP + SSE (+ WS for workflows)
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  oma-server (Go)                                           :8787        │
 │  agents · sessions · vaults · skills · files · model_cards              │
 │  integrations · eval worker · dream worker · runtimes · memory_stores   │
-│  teams · session resources · custom tool HITL                           │
-│  mcp-proxy · outbound-proxy · internal API · Console SPA                │
-│  session.Registry + stream.Hub (SSE)                                    │
+│  teams · session resources · custom tool HITL · clawhub                 │
+│  workflows proxy (/api/workflows) · mcp-proxy · outbound-proxy          │
+│  internal API · Console SPA · session.Registry + stream.Hub (SSE)       │
 ├─────────────────────────────────────────────────────────────────────────┤
-│  Storage: SQLite (oma.db) + local filesystem                            │
+│  Storage: MySQL (DATABASE_URL) + local filesystem                       │
 │    sandboxes/ · skills/ · files/ · memory/ · session-outputs/           │
+│  Auth DB: SQLite (AUTH_DATABASE_PATH)                                   │
 └───────────────────────────────────┬─────────────────────────────────────┘
                                     │ POST /internal/turn
+                                    │ (workflows proxied to harness)
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  oma-harness (Python / FastAPI)                            :8090        │
 │  turn · tools · compaction · web_fetch · web_search · mcp_loader        │
 │  call_agent · custom tools · team_* · outcome supervisor                │
-│  Tools execute in $SANDBOX_WORKDIR/<session_id>/                        │
+│  pi_dynamic_workflows · workflow bootstrap / sub-agent runner           │
+│  Tools execute via sandbox provider (workdir or remote)                 │
 └─────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  oma-sdk (Python, optional client)                                      │
+│  oma-sdk (Python, sibling ../oma-sdk/)                                  │
 │  anthropic base_url + httpx OMA-only resources · cookbook helpers       │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -95,33 +100,36 @@ Self-hostable **Open Managed Agents (OMA)** stack: a Go platform runtime plus a 
 | Layer | Component | Responsibility |
 |-------|-----------|----------------|
 | **Platform (Go)** | `cmd/oma-server` | Process entrypoint; wires DB, workers, harness client, HTTP server. |
-| | `internal/api` | REST routes, auth, integrations, console stubs. |
-| | `internal/store` | SQLite persistence, migrations, repositories. |
+| | `internal/api` | REST routes, auth, integrations, workflows proxy, console stubs. |
+| | `internal/store` | MySQL persistence and repositories (`DATABASE_URL`). |
 | | `internal/session` | Turn state machine, per-session async queue, interrupt handling. |
 | | `internal/stream` | In-memory SSE pub/sub per session. |
-| | `internal/workdir` | Per-session sandbox directories. |
+| | `internal/sandbox` | Pluggable sandbox providers and environment binding. |
+| | `internal/workdir` | Per-session sandbox directories (local provider). |
 | | `internal/modelresolve` | Resolve agent model strings to model-card credentials. |
-| | `internal/harness` | HTTP client to the Python sidecar (or `FakeClient` in dev). |
+| | `internal/harness` | HTTP client to the Python sidecar, FakeClient, or managed OpenClaw/Hermes. |
 | | `internal/outbound` | Vault credential injection for sandbox HTTP. |
 | | `internal/eval` | Background eval-run worker. |
 | | `internal/dream` | Background dream worker. |
 | | `internal/memory` | Memory retention cron worker. |
 | | `internal/runtime` | Runtime room registry for ACP daemon. |
 | | `internal/integrations/*` | Linear, GitHub, Slack gateway handlers. |
+| | `workflows_proxy.go` | Reverse-proxy `/api/workflows*` to harness (REST + WebSocket). |
 | **Harness (Python)** | `harness/oma_adapter` | FastAPI adapter over piPy `create_agent_session`. |
 | | `turn.py` | Stateless turn: project events → run prompt → emit OMA events. |
 | | `tools.py` | Map OMA tool declarations to piPy builtin/extension names. |
 | | `custom_tools.py` | Custom tool execution and HITL `requires_action` flow. |
 | | `compaction.py` | Pre-turn context compaction. |
 | | `call_agent/` | Sub-agent delegation runtime. |
+| | `workflow_*.py` | OMA bootstrap + sub-agent runner for `pi_dynamic_workflows`. |
 | | `extensions/` | `web_fetch`, `web_search`, `mcp_loader`, `call_agent` piPy extensions. |
-| **SDK (Python)** | `sdk/oma_sdk` | `OMAClient` + resource classes; cookbook streaming helpers. |
+| **SDK (Python)** | `../oma-sdk/oma_sdk` | `OMAClient` + resource classes; cookbook streaming helpers. |
 
 ### Request flow (one user turn)
 
 1. Client `POST /v1/sessions/:id/events` with a `user.message` event.
 2. API validates event types, appends to `session_events`, and enqueues a turn on the session registry.
-3. Session machine loads history, ensures the session workdir, resolves the model card, and calls `POST /internal/turn` on the harness.
+3. Session machine loads history, ensures the session workdir / sandbox, resolves the model card, and calls `POST /internal/turn` on the harness.
 4. Harness projects persisted events into piPy messages, runs one in-memory agent session with `cwd=workdir`, and returns new OMA events.
 5. Platform persists harness output, updates session status, and publishes each event to SSE subscribers.
 6. Clients poll `GET /v1/sessions/:id/events` or tail `GET /v1/sessions/:id/events/stream`.
@@ -130,10 +138,10 @@ Turns are **stateless** on the harness side: every call carries the full event h
 
 ### Storage layout
 
-| Path | Purpose |
-|------|---------|
-| `DATABASE_PATH` (default `./data/oma.db`) | SQLite database |
-| `SANDBOX_WORKDIR` (default `./data/sandboxes`) | Per-session tool execution directories |
+| Path / variable | Purpose |
+|-----------------|---------|
+| `DATABASE_URL` | Platform MySQL DSN / URL (required) |
+| `SANDBOX_WORKDIR` (default `./data/sandboxes`) | Per-session tool execution directories (local provider) |
 | `SKILLS_DATA_DIR` (default `./data/skills`) | Skill file blobs |
 | `FILES_DATA_DIR` (default `./data/files`) | Uploaded file blobs |
 | `MEMORY_DATA_DIR` (default `./data/memory`) | Memory store large objects |
@@ -163,19 +171,30 @@ Turns are **stateless** on the harness side: every call carries the full event h
 | `GET` | `/v1/sessions/:id/pending` | Pending tool confirmations |
 | `GET` | `/v1/sessions/:id/trajectory` | Trajectory export |
 | `GET` | `/v1/sessions/:id/outputs` | Session output files |
+| `POST` | `/v1/sessions/:id/exec` | Sandbox exec |
 | `GET` / `POST` / `DELETE` | `/v1/sessions/:id/resources` | Session resource mount CRUD |
 | `GET` / `POST` | `/v1/sessions/:id/teams/*` | Agent team coordination |
+
+### Workflows (proxied to harness)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `*` | `/api/workflows/*` | CRUD, NL generate, validate, execute, traces, cancel; WebSocket `.../executions/:id/ws` |
 
 ### Platform resources
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` / `GET` | `/v1/environments` | Environments |
+| `POST` / `GET` | `/v1/environments` | Environments (optional sandbox binding) |
 | `POST` / `GET` | `/v1/model_cards` | Model cards |
 | `GET` | `/v1/models/list` | Provider model list |
+| `GET` | `/v1/config/harnesses` | Managed harness availability (OpenClaw / Hermes) |
 | `POST` / `GET` | `/v1/skills` | Skills |
+| `GET` / `POST` | `/v1/clawhub/*` | ClawHub skill search / import |
 | `POST` / `GET` | `/v1/files` | File blobs |
 | `POST` / `GET` | `/v1/vaults` | Vaults and credentials |
+| `GET` / `POST` | `/v1/oauth/*` | Vault OAuth flows |
+| `GET` / `POST` | `/v1/mcp-proxy/*` | MCP proxy |
 | `GET` | `/v1/stats` | Tenant stats |
 | `GET` | `/v1/me` | Current user / tenant |
 | `POST` / `GET` | `/v1/api_keys` | API keys |
@@ -190,10 +209,11 @@ Authenticated routes accept `x-api-key: $OMA_API_KEY`, `Authorization: Bearer $O
 
 ## Quick start (local)
 
-Prerequisites: workspace Go toolchain at `../.tools/go` (used by helper scripts), Python 3.11+ with [uv](https://docs.astral.sh/uv/) for the harness.
+Prerequisites: workspace Go toolchain at `../.tools/go` (used by helper scripts), Python 3.11+ with [uv](https://docs.astral.sh/uv/) for the harness, and a reachable MySQL instance (`DATABASE_URL` in `.env`).
 
 ```bash
 cp .env.example .env
+# Edit DATABASE_URL to your MySQL DSN / URL
 
 # Terminal 1 — harness (fake mode, no API key)
 ./start-harness.sh
@@ -220,11 +240,11 @@ Open http://localhost:8787
 
 ## Python SDK
 
-The SDK lives in `sdk/` and ships as `oma-sdk` v0.1.0 (local install only; not yet on PyPI).
+The SDK lives in sibling [`../oma-sdk/`](../oma-sdk/) as `oma-sdk` v0.1.0 (local install only; not yet on PyPI).
 
 ```bash
 # With platform running on :8787
-cd sdk
+cd ../oma-sdk
 uv sync
 export OMA_API_KEY=dev-key
 
@@ -243,7 +263,7 @@ agent = client.agents.create(name="hello", model={"id": "claude-sonnet-4-6"})
 session = client.sessions.create(agent=agent.id)
 ```
 
-See [sdk/SDK-PLAN.md](./sdk/SDK-PLAN.md) and [sdk/example/README.md](./sdk/example/README.md) for resource coverage and cookbook examples.
+See [oma-sdk/SDK-PLAN.md](../oma-sdk/SDK-PLAN.md) and [oma-sdk/example/README.md](../oma-sdk/example/README.md) for resource coverage and cookbook examples.
 
 ## Verification
 
@@ -256,7 +276,7 @@ See [sdk/SDK-PLAN.md](./sdk/SDK-PLAN.md) and [sdk/example/README.md](./sdk/examp
 # API-only, no harness / no LLM
 SMOKE_SKIP_LLM=1 ./scripts/e2e/smoke-test.sh
 
-# Full E2E suite (core + integrations + runtime + dreams)
+# Full E2E suite (core + integrations + runtime + dreams + team + sandbox, …)
 ./scripts/e2e/smoke-all.sh
 ```
 
@@ -273,11 +293,26 @@ Set `ANTHROPIC_API_KEY` in `.env` or configure piPy via `~/.pi/agent/{settings,m
 | `scripts/e2e/smoke-schedule-e2e.sh` | Schedule / cancel / list tools |
 | `scripts/e2e/smoke-resource-outcome-e2e.sh` | Resource mounter + outcome evaluator |
 | `scripts/e2e/smoke-dreams-e2e.sh` | Dreams API + dream worker |
-| `scripts/multi-agent/smoke-subagent-e2e.sh` | Sub-agent delegation E2E |
 | `scripts/e2e/smoke-runtime-e2e.sh` | Runtime / ACP daemon |
+| `scripts/e2e/smoke-opensandbox-e2e.sh` | OpenSandbox provider |
+| `scripts/e2e/smoke-litebox-sandbox-e2e.sh` | LiteBox sandbox |
+| `scripts/e2e/smoke-environment-sandbox-binding-e2e.sh` | Environment ↔ sandbox binding |
+| `scripts/e2e/smoke-promote-sandbox-e2e.sh` | Promote sandbox file API |
+| `scripts/e2e/smoke-openclaw-managed-e2e.sh` | Managed OpenClaw harness |
+| `scripts/e2e/smoke-hermes-managed-e2e.sh` | Managed Hermes harness |
+| `scripts/workflows/smoke-workflow-oma-live-e2e.sh` | Workflow → OMA session live E2E |
+| `scripts/workflows/smoke-workflow-console-e2e.sh` | Console workflows UI E2E |
+| `scripts/multi-agent/smoke-subagent-e2e.sh` | Sub-agent delegation E2E |
+| `scripts/multi-agent/smoke-subagent-live-e2e.sh` | Sub-agent live/LLM E2E |
+| `scripts/multi-agent/smoke-subagent-console-e2e.sh` | Sub-agent Console E2E |
+| `scripts/multi-agent/smoke-team-e2e.sh` | Agent team API E2E |
+| `scripts/multi-agent/smoke-team-live-e2e.sh` | Team live/LLM E2E |
+| `scripts/multi-agent/smoke-team-console-e2e.sh` | Team Console E2E |
 | `scripts/e2e/smoke-linear-webhook.sh` | Linear webhook dispatch |
 | `scripts/e2e/smoke-github-webhook.sh` | GitHub webhook dispatch |
-| `scripts/e2e/smoke-slack-webhook.sh` | Slack webhook dispatch |
+| `scripts/Integrations/smoke-slack-webhook.sh` | Slack webhook dispatch |
+
+Workflow smokes are separate from `smoke-all.sh` — run them under `scripts/workflows/` when validating dynamic workflows.
 
 ## Console UI
 
@@ -285,7 +320,7 @@ The OMA Console SPA in `console/` is served on the same port as the API when `CO
 
 **Docker:** `./deploy/docker.sh up` can mount `./console/dist` at `/app/console` when present. Build the console first (`./scripts/build-console.sh`), or set `CONSOLE_DIST` in compose.
 
-**Coverage:** Agents, sessions, environments, model cards, skills, vaults, files, integrations, evals, dreams, runtimes, and memory stores are wired to oma-platform APIs. Browser tools, `/v1/cap-cli/oauth` (Vault CLI tab), and some CF-only features remain deferred — see [MVP-MIGRATION-PLAN.md](./docs/api-migrate/MVP-MIGRATION-PLAN.md).
+**Coverage:** Agents, sessions, environments, model cards, skills, vaults, files, integrations, evals, dreams, runtimes, memory stores, and **dynamic workflows** (`/workflows`, plugin `console/src/plugins/dynamic-workflows/`) are wired to oma-platform APIs. Managed harness dropdown (OpenClaw / Hermes) follows `GET /v1/config/harnesses`. Browser tools, `/v1/cap-cli/oauth` (Vault CLI tab), and some CF-only features remain deferred — see [MVP-MIGRATION-PLAN.md](./docs/api-migrate/MVP-MIGRATION-PLAN.md).
 
 ## Docker
 
@@ -293,7 +328,7 @@ The OMA Console SPA in `console/` is served on the same port as the API when `CO
 ./deploy/docker.sh up
 ```
 
-Copy `.env.example` to `.env`. For remote Docker hosts set `PUBLIC_BASE_URL` to the browser-facing URL (e.g. `http://124.221.28.203:8787`) and set `BETTER_AUTH_SECRET`. For real model calls set `OMA_FAKE_HARNESS=0` and configure piPy via `~/.pi/agent/settings.json`, `models.json`, and `auth.json` (mounted into the harness container in compose).
+Copy `.env.example` to `.env`. Set `DATABASE_URL` to a reachable MySQL instance. For remote Docker hosts set `PUBLIC_BASE_URL` to the browser-facing URL (e.g. `http://124.221.28.203:8787`) and set `BETTER_AUTH_SECRET`. For real model calls set `OMA_FAKE_HARNESS=0` and configure piPy via `~/.pi/agent/settings.json`, `models.json`, and `auth.json` (mounted into the harness container in compose).
 
 Compose mounts a shared `/data` volume for `SESSION_OUTPUTS_DIR`, `FILES_DATA_DIR`, and other artifact paths so the platform and harness containers see the same files. If agent writes to `/mnt/session/outputs/` but `files.list(scope_id=session.id)` shows no `out:` files, the containers likely have mismatched data dirs — rerun `./deploy/docker.sh up --build`.
 
@@ -303,16 +338,22 @@ Compose mounts a shared `/data` volume for `SESSION_OUTPUTS_DIR`, `FILES_DATA_DI
 |----------|---------|-------------|
 | `OMA_LISTEN_ADDR` | `:8787` | Platform HTTP listen address |
 | `OMA_API_KEY` | — | API key for `x-api-key` / Bearer auth |
-| `DATABASE_PATH` | `./data/oma.db` | SQLite database path |
-| `SANDBOX_WORKDIR` | `./data/sandboxes` | Per-session sandbox root |
+| `DATABASE_URL` | — | Platform MySQL URL/DSN (required) |
+| `SANDBOX_WORKDIR` | `./data/sandboxes` | Per-session sandbox root (local provider) |
+| `SANDBOX_PROVIDER` | `local` | `local` \| `litebox` \| `boxrun` \| `e2b` \| `daytona` \| `opensandbox` |
 | `SKILLS_DATA_DIR` | `./data/skills` | Skill file storage |
 | `FILES_DATA_DIR` | `./data/files` | File blob storage |
 | `MEMORY_DATA_DIR` | `./data/memory` | Memory large-object storage |
 | `SESSION_OUTPUTS_DIR` | `./data/session-outputs` | Session output artifacts |
 | `HARNESS_URL` | `http://127.0.0.1:8090` | Harness sidecar base URL |
 | `OMA_FAKE_HARNESS` | — | `1` = in-process fake harness (no Python) |
+| `OMA_OPENCLAW_ENABLED` | — | Enable managed OpenClaw harness |
+| `OMA_OPENCLAW_GATEWAY_URL` / `OMA_OPENCLAW_TOKEN` | — | OpenClaw Gateway endpoint |
+| `OMA_HERMES_ENABLED` | — | Enable managed Hermes harness |
+| `OMA_HERMES_GATEWAY_URL` / `OMA_HERMES_API_KEY` | — | Hermes Agent endpoint |
 | `HARNESS_HTTP_TIMEOUT_SEC` | `600` | Platform → harness HTTP timeout |
 | `OMA_PUBLIC_URL` | `http://127.0.0.1:8787` | Public URL for MCP proxy and integrations |
+| `OMA_HARNESS_PLATFORM_BASE` | — | Harness → platform callback base |
 | `OMA_INTERNAL_SECRET` | — | Shared secret for `/v1/internal/*` and harness key fetch |
 | `OMA_OUTBOUND_PROXY_ADDR` | `:8790` | Vault outbound HTTP proxy listen address |
 | `OMA_EVAL_WORKER_DISABLED` | — | `1` = disable eval background worker |
@@ -325,31 +366,36 @@ Compose mounts a shared `/data` volume for `SESSION_OUTPUTS_DIR`, `FILES_DATA_DI
 | `PUBLIC_BASE_URL` | `http://127.0.0.1:8787` | Public origin for auth cookies |
 | `ANTHROPIC_API_KEY` | — | Fallback when no model card matches agent model |
 
-See `.env.example` for smoke-test and OAuth-related variables.
+See `.env.example` for sandbox provider credentials (OpenSandbox, LiteBox, E2B, Daytona), smoke-test, and OAuth-related variables.
 
 ## Design docs
 
 | Doc | Topic |
 |-----|-------|
-| [docs/design/streaming-turn-and-sse.md](./docs/design/streaming-turn-and-sse.md) | Turn lifecycle and SSE |
+| [docs/design/session/streaming-turn-and-sse.md](./docs/design/session/streaming-turn-and-sse.md) | Turn lifecycle and SSE |
 | [docs/design/loop-task-termination.md](./docs/design/loop-task-termination.md) | Custom tools, HITL, and interrupt |
-| [docs/design/subagent.md](./docs/design/subagent.md) | Sub-agent delegation |
-| [docs/design/agent-team.md](./docs/design/agent-team.md) | Agent team coordination |
-| [docs/design/session-threads.md](./docs/design/session-threads.md) | Session threads |
+| [docs/design/orch/subagent.md](./docs/design/orch/subagent.md) | Sub-agent delegation |
+| [docs/design/orch/agent-team.md](./docs/design/orch/agent-team.md) | Agent team coordination |
+| [docs/design/session/session-threads.md](./docs/design/session/session-threads.md) | Session threads |
 | [docs/design/mcp-architecture.md](./docs/design/mcp-architecture.md) | MCP proxy and loader |
-| [docs/design/vault-and-credentials.md](./docs/design/vault-and-credentials.md) | Vaults and outbound proxy |
-| [docs/design/resource-mounter-and-outcome-evaluator.md](./docs/design/resource-mounter-and-outcome-evaluator.md) | Resource mounter and outcome grading |
+| [docs/design/vault/vault-and-credentials.md](./docs/design/vault/vault-and-credentials.md) | Vaults and outbound proxy |
+| [docs/design/env/resource-mounter-and-outcome-evaluator.md](./docs/design/env/resource-mounter-and-outcome-evaluator.md) | Resource mounter and outcome grading |
+| [docs/design/env/sandbox.md](./docs/design/env/sandbox.md) | Sandbox providers |
+| [docs/design/env/opensandbox-environment.md](./docs/design/env/opensandbox-environment.md) | OpenSandbox |
+| [docs/design/environment-sandbox-binding.md](./docs/design/environment-sandbox-binding.md) | Environment ↔ sandbox binding |
+| [docs/design/memory/memory.md](./docs/design/memory/memory.md) | Memory stores |
 | [docs/design/runtime-architecture.md](./docs/design/runtime-architecture.md) | Runtimes and ACP daemon |
 | [docs/design/eval-run-background-worker.md](./docs/design/eval-run-background-worker.md) | Eval worker |
 | [docs/design/schedule-session-wakeup.md](./docs/design/schedule-session-wakeup.md) | Schedule tools and session wakeup |
+| [`../piPy-dynamic-workflows/`](../piPy-dynamic-workflows/) | Dynamic workflows extension |
 
 ## Tech stack
 
-- **Platform:** Go 1.22+, chi, modernc.org/sqlite (pure Go, no CGO)
-- **Harness:** Python 3.11+, FastAPI, piPy (`pi_coding_agent`)
-- **SDK:** Python 3.11+, anthropic SDK 0.111+ with custom `base_url`, httpx
-- **Deploy:** Single static Go binary + Python sidecar; Docker Compose for local/prod-like runs
+- **Platform:** Go 1.24+, chi, go-sql-driver/mysql
+- **Harness:** Python 3.11+, FastAPI, piPy (`pi_coding_agent`), `pi_dynamic_workflows`
+- **SDK:** Python 3.11+, anthropic SDK 0.111+ with custom `base_url`, httpx (sibling `oma-sdk/`)
+- **Deploy:** Single static Go binary + Python sidecar; Docker Compose for local/prod-like runs; MySQL for platform data
 
 ## Still deferred
 
-Cloudflare Workers / SessionDO, CF Container sandboxes, R2/FUSE memory, Analytics Engine billing, **browser tools** (T16), multi-region D1 sharding, **`/v1/cap-cli/oauth`**, integration install → vault dual-write, and **TypeScript SDK / `oma` CLI** packages remain out of scope or partial. The **Python SDK** (`oma-sdk` v0.1.0) is available locally in `sdk/` but not yet published to PyPI. See [MVP-MIGRATION-PLAN.md](./docs/api-migrate/MVP-MIGRATION-PLAN.md) for the full parity matrix and backlog.
+Cloudflare Workers / SessionDO, **CF Container** sandboxes (distinct from the pluggable local/OpenSandbox/E2B/… providers above), R2/FUSE memory, Analytics Engine billing, **browser tools** (T16), multi-region D1 sharding, **`/v1/cap-cli/oauth`**, integration install → vault dual-write, and **TypeScript SDK / `oma` CLI** packages remain out of scope or partial. The **Python SDK** (`oma-sdk` v0.1.0) is available locally in [`../oma-sdk/`](../oma-sdk/) but not yet published to PyPI. See [MVP-MIGRATION-PLAN.md](./docs/api-migrate/MVP-MIGRATION-PLAN.md) for the full parity matrix and backlog.

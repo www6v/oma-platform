@@ -138,7 +138,11 @@ export function mergeConsecutiveAgentEvents(events: Event[]): DisplayEvent[] {
 }
 
 /**
- * Combine text from merged events for the row snippet and detail pane.
+ * Combine text from merged consecutive agent.message events.
+ *
+ * These are typically streaming token fragments, so concatenate with no
+ * separator — inserting newlines would break Markdown (headers, tables,
+ * lists) that spans multiple fragments.
  */
 export function getMergedEventText(events: Event[]): string {
   return events
@@ -151,7 +155,7 @@ export function getMergedEventText(events: Event[]): string {
       return text;
     })
     .filter((t) => t.length > 0)
-    .join("\n\n");
+    .join("");
 }
 
 /**

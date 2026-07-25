@@ -30,6 +30,7 @@ import {
 } from "../../components/ai-elements/tool";
 import { formatEventIOValue, getEventIO } from "../../lib/event-io";
 import type { Event } from "../../lib/events";
+import { getMergedEventText } from "./EventRow";
 
 export interface EventDetailProps {
   event: Event;
@@ -62,11 +63,11 @@ export interface EventDetailProps {
    */
   onViewInDebug?: () => void;
   /**
-   * When this detail represents a group of merged consecutive events
-   * (e.g., multiple agent.message events in a row), pass all events
-   * here. The component will render each one as a separate Message
-   * block, separated by subtle dividers, so the operator sees the
-   * full conversation thread in the right pane.
+   * When this detail represents a group of merged consecutive
+   * agent.message events (streaming token fragments), pass all events
+   * here. The component concatenates their text into one continuous
+   * string and renders a single Markdown Message so headings, tables,
+   * and other Markdown syntax reconstruct correctly.
    */
   mergedEvents?: Event[];
 }
@@ -79,19 +80,23 @@ export function EventDetail({
   onViewInDebug,
   mergedEvents,
 }: EventDetailProps) {
-  // When multiple events are merged, render each as its own Message block
-  // with a subtle divider, so the operator sees the full thread.
-  const content =
-    mergedEvents && mergedEvents.length > 1
-      ? mergedEvents.map((e, idx) => (
-          <div
-            key={e.id ?? idx}
-            className={idx > 0 ? "border-t border-border/50 pt-3" : ""}
-          >
-            {renderEventContent(e, undefined, undefined, undefined)}
-          </div>
-        ))
-      : renderEventContent(event, pairedResult, pairedUse, modelErrorCause);
+  // Merged consecutive agent.message events are streaming fragments —
+  // concatenate into one Markdown message instead of stacking each
+  // fragment as its own bubble (which breaks Markdown and readability).
+  const allAgentMessages =
+    mergedEvents !== undefined &&
+    mergedEvents.length > 1 &&
+    mergedEvents.every((e) => e.type === "agent.message");
+
+  const content = allAgentMessages
+    ? (
+        <Message from="assistant" className="max-w-full">
+          <MessageContent className="w-full">
+            <Markdown>{getMergedEventText(mergedEvents)}</Markdown>
+          </MessageContent>
+        </Message>
+      )
+    : renderEventContent(event, pairedResult, pairedUse, modelErrorCause);
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-3">
@@ -110,7 +115,7 @@ export function EventDetail({
           )}
           {mergedEvents && mergedEvents.length > 1 && (
             <span className="ml-auto rounded-full bg-green-500/20 px-2 py-0.5 text-[10px] font-medium text-green-700">
-              {mergedEvents.length} merged messages
+              {mergedEvents.length} merged
             </span>
           )}
         </div>
@@ -239,7 +244,7 @@ function renderEventContent(
       return (
         <Message from="user" className="ml-0 max-w-full">
           <MessageContent className="w-full">
-            {text}
+            <Markdown>{text}</Markdown>
           </MessageContent>
         </Message>
       );
@@ -301,15 +306,22 @@ function renderEventContent(
       );
     }
 
-    case "session.error":
+    case "session.error": {
+      const errorText =
+        typeof event.error === "string"
+          ? event.error
+          : event.error
+            ? JSON.stringify(event.error)
+            : String(event.message ?? "");
+      // Prefer actionable upstream cause when present (billing / rate limit).
+      const primary =
+        modelErrorCause?.error?.trim()
+          ? modelErrorCause.error
+          : errorText;
       return (
-        <div className="w-full bg-danger-subtle rounded-lg px-4 py-2.5 text-sm text-danger">
-          <div>Error: {typeof event.error === "string"
-            ? event.error
-            : event.error
-              ? JSON.stringify(event.error)
-              : String(event.message ?? "")}</div>
-          {modelErrorCause && (
+        <div className="w-full rounded-lg bg-danger-subtle px-4 py-2.5 text-sm text-danger">
+          <div className="whitespace-pre-wrap break-words">{primary}</div>
+          {modelErrorCause && modelErrorCause.error !== primary && (
             <div className="mt-1.5 pt-1.5 text-[12px] opacity-90">
               <span className="font-medium">Cause</span>
               {modelErrorCause.model && (
@@ -322,6 +334,7 @@ function renderEventContent(
           )}
         </div>
       );
+    }
 
     case "session.warning":
       return (

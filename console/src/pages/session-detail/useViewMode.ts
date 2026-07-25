@@ -2,12 +2,15 @@
  * useViewMode — cross-tab state management for SessionDetail.
  *
  * Manages:
- * - activeTab: which tab is currently active
+ * - activeTab: which tab is currently active (viewMode-local; SessionDetail
+ *   also keeps a `view` state that drives rendering — callers of
+ *   scrollToDebugEvent must setView("debug") as well)
  * - selectedEventId: selected event in Transcript tab
  * - selectedDebugEventId: selected event in Debug tab (for cross-tab navigation)
  * - debugScrollRef: ref for Debug tab scroll container
  * - setActiveTab: switch tabs
- * - scrollToDebugEvent: switch to Debug tab and scroll to event
+ * - scrollToDebugEvent: select event + set activeTab to debug (host must
+ *   also flip its visible view to "debug")
  */
 
 import { useCallback, useRef, useState } from "react";
