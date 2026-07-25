@@ -68,9 +68,27 @@ def emit_oma_events(
                 "assistant_message_event"
             )
             if isinstance(ame, dict):
-                thinking_events = _emit_thinking_stream(ame, streaming_state)
-                if thinking_events:
-                    out.extend(thinking_events)
+                ame_type = ame.get("type")
+                if ame_type in {
+                    "thinking_start",
+                    "thinking_delta",
+                    "thinking_end",
+                }:
+                    out.extend(_emit_thinking_stream(ame, streaming_state))
+                    # Emit canonical agent.thinking as soon as the thinking
+                    # block closes (signature is already on the content by
+                    # then). Otherwise text deltas land first and Debug
+                    # shows agent.message before agent.thinking.
+                    if ame_type == "thinking_end":
+                        message = item.get("message")
+                        if isinstance(message, dict):
+                            out.extend(
+                                _emit_thinking_from_message(
+                                    message,
+                                    streaming_state,
+                                    only_index=ame.get("content_index"),
+                                )
+                            )
                     continue
             # Streaming text delta: message contains the accumulated
             # AssistantMessage so far. Emit only the new portion.
@@ -125,10 +143,11 @@ def emit_oma_events(
                 usage_span = _model_usage_span(message)
                 if usage_span is not None:
                     out.append(usage_span)
-            # Reset streaming tracker at message boundary.
+            # Reset per-message stream trackers. Keep emitted_thinking_ids
+            # until the next message_start so turn_end after message_end
+            # does not re-emit the same agent.thinking.
             streaming_state["last_emitted_len"] = 0
             streaming_state["live_thinking"] = set()
-            streaming_state["emitted_thinking_ids"] = set()
         elif kind in {"tool_use", "agent.tool_use", "tool_execution_start"}:
             tool_id = (
                 item.get("id")
@@ -265,15 +284,29 @@ def _emit_thinking_stream(
 def _emit_thinking_from_message(
     message: dict[str, Any],
     streaming_state: dict[str, Any],
+    *,
+    only_index: Any = None,
 ) -> list[dict[str, Any]]:
-    """Emit canonical agent.thinking (+ close any half-open streams)."""
+    """Emit canonical agent.thinking (+ close any half-open streams).
+
+    When only_index is set (thinking_end path), emit only that content
+    block so sibling in-progress thinking blocks are not finalized early.
+    """
     content = message.get("content")
     if not isinstance(content, list):
         return []
     live: set[str] = streaming_state["live_thinking"]
     emitted: set[str] = streaming_state["emitted_thinking_ids"]
     out: list[dict[str, Any]] = []
+    filter_index: int | None = None
+    if only_index is not None:
+        try:
+            filter_index = int(only_index)
+        except (TypeError, ValueError):
+            filter_index = 0
     for index, block in enumerate(content):
+        if filter_index is not None and index != filter_index:
+            continue
         if not isinstance(block, dict):
             continue
         if block.get("type") != "thinking":
@@ -301,6 +334,8 @@ def _emit_thinking_from_message(
             event["providerOptions"] = provider_options
         out.append(event)
         emitted.add(thinking_id)
+    if filter_index is not None:
+        return out
     # Close any live streams that never appeared as content blocks.
     for thinking_id in list(live):
         live.discard(thinking_id)

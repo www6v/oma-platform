@@ -169,11 +169,14 @@ function getEventSnippet(event: Event): string {
       return text.slice(0, 50) + (text.length > 50 ? "…" : "");
     }
     case "agent.thinking": {
-      const text = Array.isArray(event.content)
-        ? event.content[0]?.text ?? ""
-        : typeof event.content === "string"
-          ? event.content
-          : "";
+      const text =
+        typeof (event as { text?: unknown }).text === "string"
+          ? (event as { text: string }).text
+          : Array.isArray(event.content)
+            ? event.content[0]?.text ?? ""
+            : typeof event.content === "string"
+              ? event.content
+              : "";
       return `Thinking: ${text.slice(0, 40)}${text.length > 40 ? "…" : ""}`;
     }
     case "agent.tool_use":
