@@ -1,5 +1,8 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import type { PluggableList } from "unified";
 import { createLowlight } from "lowlight";
 import { toJsxRuntime } from "hast-util-to-jsx-runtime";
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
@@ -10,6 +13,7 @@ import python from "highlight.js/lib/languages/python";
 import typescript from "highlight.js/lib/languages/typescript";
 import javascript from "highlight.js/lib/languages/javascript";
 import plaintext from "highlight.js/lib/languages/plaintext";
+import "katex/dist/katex.min.css";
 
 /**
  * Hand-rolled syntax highlighting registry. Replaces rehype-highlight,
@@ -42,68 +46,97 @@ const lowlight = createLowlight({
 
 const jsxRuntime = { Fragment, jsx, jsxs } as Parameters<typeof toJsxRuntime>[1];
 
+/**
+ * Match Streamdown's math defaults: only $$...$$ so bare `$` (currency,
+ * prose) is not treated as inline math. remark-math treats same-line
+ * $$...$$ as inline; promote lone-line formulas to display blocks so
+ * agent answers render centered equations.
+ */
+const remarkPlugins: PluggableList = [
+  remarkGfm,
+  [remarkMath, { singleDollarTextMath: false }],
+];
+
+const rehypePlugins: PluggableList = [
+  [rehypeKatex, { throwOnError: false, errorColor: "var(--color-danger, #dc2626)" }],
+];
+
+/**
+ * Promote a whole-line `$$...$$` formula to a display-math fence.
+ * Leaves inline uses like `see $$x$$ here` untouched.
+ */
+export function normalizeDisplayMath(markdown: string): string {
+  return markdown.replace(
+    /(^|\n)\$\$([^\n]+?)\$\$(?=\n|$)/g,
+    (_match, prefix: string, body: string) => `${prefix}$$\n${body}\n$$`
+  );
+}
+
 export function Markdown({ children }: { children: string }) {
   return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      components={{
-        pre: ({ children }) => (
-          <pre className="bg-bg-surface border border-border rounded-md p-3 overflow-x-auto my-2 text-[13px]">
-            {children}
-          </pre>
-        ),
-        code: ({ className, children, ...props }) => {
-          const isInline = !className;
-          if (isInline) {
+    <div className="oma-markdown [&_.katex-display]:my-3 [&_.katex-display]:overflow-x-auto">
+      <ReactMarkdown
+        remarkPlugins={remarkPlugins}
+        rehypePlugins={rehypePlugins}
+        components={{
+          pre: ({ children }) => (
+            <pre className="bg-bg-surface border border-border rounded-md p-3 overflow-x-auto my-2 text-[13px]">
+              {children}
+            </pre>
+          ),
+          code: ({ className, children, ...props }) => {
+            const isInline = !className;
+            if (isInline) {
+              return (
+                <code className="bg-bg-surface px-1 py-0.5 rounded text-[0.85em] font-mono" {...props}>
+                  {children}
+                </code>
+              );
+            }
+            // Block code with a language hint — apply syntax highlighting if
+            // the language is in our registered set, otherwise render plain.
+            const langMatch = /language-([\w-]+)/.exec(className || "");
+            const lang = langMatch?.[1];
+            const codeText = typeof children === "string"
+              ? children
+              : Array.isArray(children) ? children.join("") : String(children ?? "");
+            if (lang && lowlight.registered(lang)) {
+              const tree = lowlight.highlight(lang, codeText.replace(/\n$/, ""));
+              return (
+                <code className={`${className} font-mono hljs`} {...props}>
+                  {toJsxRuntime(tree, jsxRuntime)}
+                </code>
+              );
+            }
             return (
-              <code className="bg-bg-surface px-1 py-0.5 rounded text-[0.85em] font-mono" {...props}>
+              <code className={`${className} font-mono`} {...props}>
                 {children}
               </code>
             );
-          }
-          // Block code with a language hint — apply syntax highlighting if
-          // the language is in our registered set, otherwise render plain.
-          const langMatch = /language-([\w-]+)/.exec(className || "");
-          const lang = langMatch?.[1];
-          const codeText = typeof children === "string"
-            ? children
-            : Array.isArray(children) ? children.join("") : String(children ?? "");
-          if (lang && lowlight.registered(lang)) {
-            const tree = lowlight.highlight(lang, codeText.replace(/\n$/, ""));
-            return (
-              <code className={`${className} font-mono hljs`} {...props}>
-                {toJsxRuntime(tree, jsxRuntime)}
-              </code>
-            );
-          }
-          return (
-            <code className={`${className} font-mono`} {...props}>
-              {children}
-            </code>
-          );
-        },
-        p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-        ul: ({ children }) => <ul className="list-disc pl-5 my-1">{children}</ul>,
-        ol: ({ children }) => <ol className="list-decimal pl-5 my-1">{children}</ol>,
-        li: ({ children }) => <li className="my-0.5">{children}</li>,
-        h1: ({ children }) => <h1 className="font-display text-lg font-semibold mt-3 mb-1 text-fg">{children}</h1>,
-        h2: ({ children }) => <h2 className="font-display text-base font-semibold mt-2 mb-1 text-fg">{children}</h2>,
-        h3: ({ children }) => <h3 className="font-semibold mt-2 mb-1 text-fg">{children}</h3>,
-        blockquote: ({ children }) => (
-          <blockquote className="border-l-2 border-border-strong pl-3 my-2 text-fg-muted">{children}</blockquote>
-        ),
-        table: ({ children }) => (
-          <table className="border-collapse my-2 text-sm w-full">{children}</table>
-        ),
-        th: ({ children }) => (
-          <th className="border border-border px-2 py-1 bg-bg-surface text-left text-fg">{children}</th>
-        ),
-        td: ({ children }) => (
-          <td className="border border-border px-2 py-1 text-fg">{children}</td>
-        ),
-      }}
-    >
-      {children}
-    </ReactMarkdown>
+          },
+          p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+          ul: ({ children }) => <ul className="list-disc pl-5 my-1">{children}</ul>,
+          ol: ({ children }) => <ol className="list-decimal pl-5 my-1">{children}</ol>,
+          li: ({ children }) => <li className="my-0.5">{children}</li>,
+          h1: ({ children }) => <h1 className="font-display text-lg font-semibold mt-3 mb-1 text-fg">{children}</h1>,
+          h2: ({ children }) => <h2 className="font-display text-base font-semibold mt-2 mb-1 text-fg">{children}</h2>,
+          h3: ({ children }) => <h3 className="font-semibold mt-2 mb-1 text-fg">{children}</h3>,
+          blockquote: ({ children }) => (
+            <blockquote className="border-l-2 border-border-strong pl-3 my-2 text-fg-muted">{children}</blockquote>
+          ),
+          table: ({ children }) => (
+            <table className="border-collapse my-2 text-sm w-full">{children}</table>
+          ),
+          th: ({ children }) => (
+            <th className="border border-border px-2 py-1 bg-bg-surface text-left text-fg">{children}</th>
+          ),
+          td: ({ children }) => (
+            <td className="border border-border px-2 py-1 text-fg">{children}</td>
+          ),
+        }}
+      >
+        {normalizeDisplayMath(children)}
+      </ReactMarkdown>
+    </div>
   );
 }
