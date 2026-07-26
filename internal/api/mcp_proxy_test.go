@@ -22,9 +22,22 @@ type stubSessionStore struct {
 
 func (s stubSessionStore) Get(
 	_ context.Context,
-	_, _ string,
+	tenantID, _ string,
 ) (*store.Session, error) {
 	if s.sess == nil {
+		return nil, store.ErrNotFound
+	}
+	if tenantID != "" && s.sess.TenantID != "" && tenantID != s.sess.TenantID {
+		return nil, store.ErrNotFound
+	}
+	return s.sess, nil
+}
+
+func (s stubSessionStore) GetByID(
+	_ context.Context,
+	id string,
+) (*store.Session, error) {
+	if s.sess == nil || s.sess.ID != id {
 		return nil, store.ErrNotFound
 	}
 	return s.sess, nil
@@ -304,5 +317,117 @@ func TestMcpProxyVaultIsolation(t *testing.T) {
 	}
 	if gotAuth != "Bearer token-a" {
 		t.Fatalf("Authorization=%q want Bearer token-a (not token-b)", gotAuth)
+	}
+}
+
+// Harness authenticates mcp-proxy with the process-wide OMA_API_KEY. Sessions
+// created via the console belong to real tenant ids (tn_*), not "default".
+// Regression: global key must resolve tenant from the session row.
+func TestMcpProxyGlobalAPIKeyUsesSessionTenant(t *testing.T) {
+	t.Parallel()
+
+	var gotAuth string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	const (
+		tenantID  = "tn_console_user_abc"
+		sessionID = "sess-non-default-tenant"
+	)
+	snapshot, _ := json.Marshal(map[string]any{
+		"mcp_servers": []map[string]string{
+			{
+				"name":                "github",
+				"url":                 upstream.URL,
+				"authorization_token": "github-pat",
+			},
+		},
+	})
+	sess := &store.Session{
+		ID:            sessionID,
+		TenantID:      tenantID,
+		AgentSnapshot: snapshot,
+	}
+	storeStub := stubSessionStore{sess: sess}
+
+	r := chi.NewRouter()
+	mountMcpProxyRoutes(r, mcpProxyDeps{
+		Resolver: &mcpproxy.Resolver{Sessions: storeStub},
+		Sessions: storeStub,
+		APIKey:   "dev-key",
+	})
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/v1/mcp-proxy/"+sessionID+"/github",
+		bytes.NewReader([]byte(
+			`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`,
+		)),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer dev-key")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if gotAuth != "Bearer github-pat" {
+		t.Fatalf("Authorization=%q want Bearer github-pat", gotAuth)
+	}
+}
+
+// Without session-tenant lookup, the global API key would resolve to
+// tenant "default" and miss the real session → 403.
+func TestMcpProxyGlobalAPIKeyWithoutSessionLookupForbidden(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{}}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	const (
+		tenantID  = "tn_console_user_abc"
+		sessionID = "sess-needs-lookup"
+	)
+	snapshot, _ := json.Marshal(map[string]any{
+		"mcp_servers": []map[string]string{
+			{
+				"name":                "github",
+				"url":                 upstream.URL,
+				"authorization_token": "tok",
+			},
+		},
+	})
+	storeStub := stubSessionStore{sess: &store.Session{
+		ID:            sessionID,
+		TenantID:      tenantID,
+		AgentSnapshot: snapshot,
+	}}
+
+	r := chi.NewRouter()
+	mountMcpProxyRoutes(r, mcpProxyDeps{
+		Resolver: &mcpproxy.Resolver{Sessions: storeStub},
+		// Sessions intentionally omitted — simulates pre-fix behavior.
+		APIKey: "dev-key",
+	})
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/v1/mcp-proxy/"+sessionID+"/github",
+		bytes.NewReader([]byte(`{"jsonrpc":"2.0","id":1}`)),
+	)
+	req.Header.Set("Authorization", "Bearer dev-key")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status=%d want 403 body=%s", rec.Code, rec.Body.String())
 	}
 }

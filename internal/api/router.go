@@ -181,8 +181,9 @@ func NewRouter(deps Deps) http.Handler {
 				Sessions:    deps.Sessions.sessions,
 				Credentials: deps.Credentials,
 			},
-			ApiKeys: deps.ApiKeys,
-			APIKey:  deps.APIKey,
+			Sessions: deps.Sessions.sessions,
+			ApiKeys:  deps.ApiKeys,
+			APIKey:   deps.APIKey,
 		})
 	}
 

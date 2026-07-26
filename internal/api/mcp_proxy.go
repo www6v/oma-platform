@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
@@ -18,8 +19,17 @@ import (
 
 const defaultTenantID = "default"
 
+// sessionTenantLookup resolves a session's tenant without a prior tenant id.
+// Used when the harness authenticates with the global OMA_API_KEY (not a
+// per-tenant key) — same idea as open-managed-agents MCP proxy RPC path,
+// where tenant comes from session context rather than a single default.
+type sessionTenantLookup interface {
+	GetByID(ctx context.Context, id string) (*store.Session, error)
+}
+
 type mcpProxyDeps struct {
 	Resolver *mcpproxy.Resolver
+	Sessions sessionTenantLookup
 	ApiKeys  *store.ApiKeyRepo
 	APIKey   string
 }
@@ -40,16 +50,16 @@ type mcpProxyHandler struct {
 }
 
 func (h *mcpProxyHandler) serve(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := h.resolveTenant(r)
-	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
 	sid := chi.URLParam(r, "sid")
 	serverName := chi.URLParam(r, "serverName")
 	if sid == "" || serverName == "" {
 		writeError(w, http.StatusBadRequest, "sid and server name required")
+		return
+	}
+
+	tenantID, ok := h.resolveTenant(r, sid)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -104,7 +114,10 @@ func (h *mcpProxyHandler) serve(w http.ResponseWriter, r *http.Request) {
 	_, _ = io.Copy(w, resp.Body)
 }
 
-func (h *mcpProxyHandler) resolveTenant(r *http.Request) (string, bool) {
+func (h *mcpProxyHandler) resolveTenant(
+	r *http.Request,
+	sid string,
+) (string, bool) {
 	if tid := auth.TenantFromContext(r.Context()); tid != "" {
 		return tid, true
 	}
@@ -119,6 +132,15 @@ func (h *mcpProxyHandler) resolveTenant(r *http.Request) (string, bool) {
 		return "", false
 	}
 	if h.deps.APIKey != "" && key == h.deps.APIKey {
+		// Harness turns always carry the process-wide OMA_API_KEY. Resolve
+		// tenant from the session id so multi-tenant console users work
+		// (previously hard-coded to "default" → 403 for real tenants).
+		if sid != "" && h.deps.Sessions != nil {
+			sess, err := h.deps.Sessions.GetByID(r.Context(), sid)
+			if err == nil && sess != nil && sess.TenantID != "" {
+				return sess.TenantID, true
+			}
+		}
 		return defaultTenantID, true
 	}
 	if h.deps.ApiKeys == nil {
