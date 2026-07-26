@@ -11,21 +11,37 @@ const listenAddr = process.env.AUTH_LISTEN_ADDR ?? "127.0.0.1:8788";
 const secret =
   process.env.BETTER_AUTH_SECRET ??
   randomBytes(32).toString("hex");
-const baseURL = process.env.PUBLIC_BASE_URL ?? "http://127.0.0.1:8787";
+
+// Better Auth matches Origin as an exact string (no trailing slash).
+// PUBLIC_BASE_URL / TRUSTED_ORIGINS often get a trailing "/" from paste —
+// normalize so http://host:8787/ still trusts browser Origin http://host:8787.
+function normalizeOrigin(raw) {
+  const s = String(raw ?? "").trim();
+  if (!s) return "";
+  return s.replace(/\/+$/, "");
+}
+
+const baseURL = normalizeOrigin(
+  process.env.PUBLIC_BASE_URL ?? "http://127.0.0.1:8787",
+);
 
 // Browser Origin may use either 127.0.0.1 or localhost interchangeably,
 // but Better Auth matches origins as exact strings. Trust both variants
 // (and any explicit PUBLIC_BASE_URL) so login works regardless of which
 // hostname the user typed in the address bar.
 const trustedOrigins = Array.from(
-  new Set([
-    baseURL,
-    "http://127.0.0.1:8787",
-    "http://localhost:8787",
-    ...(process.env.TRUSTED_ORIGINS
-      ? process.env.TRUSTED_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean)
-      : []),
-  ]),
+  new Set(
+    [
+      baseURL,
+      "http://127.0.0.1:8787",
+      "http://localhost:8787",
+      ...(process.env.TRUSTED_ORIGINS
+        ? process.env.TRUSTED_ORIGINS.split(",").map((s) =>
+            normalizeOrigin(s),
+          )
+        : []),
+    ].filter(Boolean),
+  ),
 );
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID ?? "";
@@ -91,6 +107,8 @@ const pool = createPool(mysqlConfig);
 console.log(
   `[auth-sidecar] mysql: ${mysqlConfig.user}@${mysqlConfig.host}:${mysqlConfig.port}/${mysqlConfig.database}`,
 );
+console.log(`[auth-sidecar] baseURL=${baseURL}`);
+console.log(`[auth-sidecar] trustedOrigins=${trustedOrigins.join(",")}`);
 
 // ---------------------------------------------------------------------------
 // Better Auth — pass the mysql2 pool directly; better-auth auto-detects it
