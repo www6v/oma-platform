@@ -57,6 +57,9 @@ services:
       HARNESS_URL: http://oma-harness:8090
       # Harness schedule/MCP tools call oma-server from the sidecar container.
       OMA_HARNESS_PLATFORM_BASE: http://oma-platform:8787
+      # Slack/GitHub OAuth redirect_uri host (open-managed-agents GATEWAY_ORIGIN).
+      # Prefer .env GATEWAY_ORIGIN / PUBLIC_BASE_URL; do not default to container
+      # localhost or Slack will reject redirect_uri.
       CONSOLE_DIR: /app/console
       AUTH_UPSTREAM_URL: http://oma-auth:8788
     volumes:

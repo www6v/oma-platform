@@ -353,6 +353,7 @@ Compose 会把 `SESSION_OUTPUTS_DIR`、`FILES_DATA_DIR` 等指向共享卷 `/dat
 | `OMA_HERMES_GATEWAY_URL` / `OMA_HERMES_API_KEY` | — | Hermes Agent 端点 |
 | `HARNESS_HTTP_TIMEOUT_SEC` | `600` | 平台 → harness HTTP 超时（秒） |
 | `OMA_PUBLIC_URL` | `http://127.0.0.1:8787` | MCP proxy 与集成的对外 URL |
+| `GATEWAY_ORIGIN` | （回退到 `PUBLIC_BASE_URL`） | Slack/GitHub OAuth `redirect_uri` 主机（与 open-managed-agents 一致） |
 | `OMA_HARNESS_PLATFORM_BASE` | — | Harness → 平台回调基础 URL |
 | `OMA_INTERNAL_SECRET` | — | `/v1/internal/*` 与 harness 取钥的共享密钥 |
 | `OMA_OUTBOUND_PROXY_ADDR` | `:8790` | Vault outbound HTTP 代理监听地址 |

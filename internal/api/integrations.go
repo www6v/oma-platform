@@ -892,11 +892,20 @@ func trimOptional(s *string) *string {
 }
 
 func integrationsGatewayOrigin() string {
-	if v := os.Getenv("INTEGRATIONS_GATEWAY_ORIGIN"); v != "" {
-		return strings.TrimRight(v, "/")
-	}
-	if v := os.Getenv("OMA_GATEWAY_ORIGIN"); v != "" {
-		return strings.TrimRight(v, "/")
+	// Match open-managed-agents/apps/main-node:
+	//   GATEWAY_ORIGIN ?? PUBLIC_BASE_URL ?? "http://localhost:8787"
+	// Also accept oma-platform aliases so existing .env / tests keep working.
+	// Slack OAuth redirect_uri and webhook URLs are built from this origin.
+	for _, key := range []string{
+		"GATEWAY_ORIGIN",
+		"INTEGRATIONS_GATEWAY_ORIGIN",
+		"OMA_GATEWAY_ORIGIN",
+		"OMA_PUBLIC_URL",
+		"PUBLIC_BASE_URL",
+	} {
+		if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+			return strings.TrimRight(v, "/")
+		}
 	}
 	return "http://127.0.0.1:8787"
 }

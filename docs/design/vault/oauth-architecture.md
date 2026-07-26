@@ -309,7 +309,7 @@ Slack OAuth URL 构建与默认 scopes 见 `internal/integrations/slack/oauth.go
 - 默认：`installbridge.New(repo, origin, OMA_INTERNAL_SECRET)` — 进程内 Bridge
 - 若设置 `INTEGRATIONS_INSTALL_PROXY_URL`：转发到外部 integrations worker（`installbridge.Proxy`）
 
-Gateway 对外 origin 由 `INTEGRATIONS_GATEWAY_ORIGIN` 或 `OMA_GATEWAY_ORIGIN` 决定（默认 `http://127.0.0.1:8787`）。
+Gateway 对外 origin 对齐 open-managed-agents：`GATEWAY_ORIGIN` →（别名 `INTEGRATIONS_GATEWAY_ORIGIN` / `OMA_GATEWAY_ORIGIN`）→ `OMA_PUBLIC_URL` → `PUBLIC_BASE_URL`（均未设置时默认 `http://127.0.0.1:8787`）。远程部署必须让该 origin 与 Slack App Redirect URLs 一致。
 
 ## Token 刷新
 
@@ -340,7 +340,7 @@ Integration 安装 token（Linear refresh、Slack bot token 等）的刷新由�
 |------|------|
 | `OMA_PUBLIC_URL` / `PublicURL` | OAuth callback 基址（`/v1/oauth/callback`） |
 | `OMA_INTERNAL_SECRET` | Integration HMAC state、Install Bridge、Linear Gateway |
-| `INTEGRATIONS_GATEWAY_ORIGIN` | Publication OAuth 回调 host |
+| `GATEWAY_ORIGIN` | Publication OAuth 回调 host（未设时回退 `PUBLIC_BASE_URL`；兼容 `INTEGRATIONS_GATEWAY_ORIGIN`） |
 | `INTEGRATIONS_INSTALL_PROXY_URL` | 可选，转发 install 请求到外部 worker |
 | `GITHUB_OAUTH_CLIENT_ID` / `_SECRET` | MCP OAuth preset（GitHub MCP issuer） |
 | `SLACK_OAUTH_CLIENT_ID` / `_SECRET` | MCP OAuth preset（Slack MCP issuer） |

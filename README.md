@@ -353,6 +353,7 @@ Compose mounts a shared `/data` volume for `SESSION_OUTPUTS_DIR`, `FILES_DATA_DI
 | `OMA_HERMES_GATEWAY_URL` / `OMA_HERMES_API_KEY` | — | Hermes Agent endpoint |
 | `HARNESS_HTTP_TIMEOUT_SEC` | `600` | Platform → harness HTTP timeout |
 | `OMA_PUBLIC_URL` | `http://127.0.0.1:8787` | Public URL for MCP proxy and integrations |
+| `GATEWAY_ORIGIN` | (falls back to `PUBLIC_BASE_URL`) | Slack/GitHub OAuth `redirect_uri` host (same as open-managed-agents) |
 | `OMA_HARNESS_PLATFORM_BASE` | — | Harness → platform callback base |
 | `OMA_INTERNAL_SECRET` | — | Shared secret for `/v1/internal/*` and harness key fetch |
 | `OMA_OUTBOUND_PROXY_ADDR` | `:8790` | Vault outbound HTTP proxy listen address |
