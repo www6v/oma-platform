@@ -8,6 +8,7 @@ import type {
 import { SecretInput, TextInput } from "../../components/Input";
 import { Combobox } from "../../components/Combobox";
 import { Field } from "../../components/Field";
+import { copyToClipboard } from "../../lib/utils";
 
 const api = new IntegrationsApi();
 
@@ -559,8 +560,9 @@ function InstallStep({ link }: { link: LinearPublicationInstallLink }) {
 function CopyRow({ label, value, secret = false }: { label: string; value: string; secret?: boolean }) {
   const [copied, setCopied] = useState(false);
   const [reveal, setReveal] = useState(!secret);
-  function copy() {
-    void navigator.clipboard.writeText(value);
+  async function copy() {
+    const ok = await copyToClipboard(value);
+    if (!ok) return;
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   }
@@ -576,6 +578,7 @@ function CopyRow({ label, value, secret = false }: { label: string; value: strin
       <div className="flex items-center gap-1 shrink-0">
         {secret && (
           <button
+            type="button"
             onClick={() => setReveal((r) => !r)}
             className="text-[11px] text-fg-muted hover:text-fg transition-colors duration-[var(--dur-quick)] ease-[var(--ease-soft)] px-1.5 py-0.5 rounded"
             title={reveal ? "Hide" : "Reveal"}
@@ -584,7 +587,8 @@ function CopyRow({ label, value, secret = false }: { label: string; value: strin
           </button>
         )}
         <button
-          onClick={copy}
+          type="button"
+          onClick={() => void copy()}
           className={`text-[11px] px-2 py-0.5 rounded transition-colors duration-[var(--dur-quick)] ease-[var(--ease-soft)] ${
             copied
               ? "text-success bg-success-subtle"
