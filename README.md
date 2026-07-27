@@ -4,6 +4,19 @@
 
 Self-hostable **Open Managed Agents (OMA)** stack: a Go platform runtime plus a Python piPy harness sidecar. The platform owns durability, concurrency, and the HTTP API; the harness owns the LLM loop and tool execution.
 
+## Contents
+
+- [Features](#features)
+- [Deploy](#deploy)
+- [Architecture](#architecture)
+- [API](#api)
+- [Python SDK](#python-sdk)
+- [Console UI](#console-ui)
+- [Configuration](#configuration)
+- [Design docs](#design-docs)
+- [Tech stack](#tech-stack)
+- [Still deferred](#still-deferred)
+- [License](#license)
 
 ## Features
 

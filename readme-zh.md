@@ -4,6 +4,19 @@
 
 可自托管的 **Open Managed Agents (OMA)** 栈：Go 平台运行时 + Python piPy 执行侧车（sidecar）。平台负责持久化、并发与 HTTP API；执行器负责 LLM 循环与工具调用。
 
+## 目录
+
+- [系统特性](#系统特性)
+- [部署](#部署)
+- [系统架构](#系统架构)
+- [API](#api)
+- [Python SDK](#python-sdk)
+- [Console 控制台](#console-控制台)
+- [配置项](#配置项)
+- [设计文档](#设计文档)
+- [技术栈](#技术栈)
+- [仍属延后范围](#仍属延后范围)
+- [许可证](#许可证)
 
 ## 系统特性
 
@@ -320,55 +333,6 @@ session = client.sessions.create(agent=agent.id)
 ```
 
 资源覆盖与 Cookbook 示例见 [oma-sdk/SDK-PLAN.md](../oma-sdk/SDK-PLAN.md) 与 [oma-sdk/example/README.md](../oma-sdk/example/README.md)。
-
-## 验收测试
-
-### 冒烟测试（完整 P1+P2 API + 可选真实 LLM）
-
-```bash
-# 需 platform + harness 运行（真实 LLM 时设 OMA_FAKE_HARNESS=0）
-./scripts/e2e/smoke-test.sh
-
-# 仅 API，无需 harness / LLM
-SMOKE_SKIP_LLM=1 ./scripts/e2e/smoke-test.sh
-
-# 全量 E2E 套件（core + integrations + runtime + dreams + team + sandbox 等）
-./scripts/e2e/smoke-all.sh
-```
-
-在 `.env` 中设置 `ANTHROPIC_API_KEY`，或通过 `~/.pi/agent/{settings,models,auth}.json` 配置 piPy，即可进行真实模型调用。
-
-### 其他脚本
-
-| 脚本 | 用途 |
-|------|------|
-| `scripts/e2e/smoke-all.sh` | 运行全部冒烟套件（core + noncore） |
-| `scripts/e2e/console-integration.sh` | Console 线型契约集成测试 |
-| `scripts/e2e/smoke-mcp-e2e.sh` | MCP proxy + harness MCP loader |
-| `scripts/e2e/smoke-web-search-e2e.sh` | web_search 工具（DDG / Tavily） |
-| `scripts/e2e/smoke-schedule-e2e.sh` | schedule / cancel / list 工具 |
-| `scripts/e2e/smoke-resource-outcome-e2e.sh` | Resource mounter + outcome evaluator |
-| `scripts/e2e/smoke-dreams-e2e.sh` | Dreams API + dream worker |
-| `scripts/e2e/smoke-runtime-e2e.sh` | Runtime / ACP daemon |
-| `scripts/e2e/smoke-opensandbox-e2e.sh` | OpenSandbox provider |
-| `scripts/e2e/smoke-litebox-sandbox-e2e.sh` | LiteBox 沙箱 |
-| `scripts/e2e/smoke-environment-sandbox-binding-e2e.sh` | 环境 ↔ 沙箱绑定 |
-| `scripts/e2e/smoke-promote-sandbox-e2e.sh` | 提升沙箱文件 API |
-| `scripts/e2e/smoke-openclaw-managed-e2e.sh` | Managed OpenClaw harness |
-| `scripts/e2e/smoke-hermes-managed-e2e.sh` | Managed Hermes harness |
-| `scripts/workflows/smoke-workflow-oma-live-e2e.sh` | Workflow → OMA Session 实机 E2E |
-| `scripts/workflows/smoke-workflow-console-e2e.sh` | Console 工作流 UI E2E |
-| `scripts/multi-agent/smoke-subagent-e2e.sh` | 子 Agent 委派 E2E |
-| `scripts/multi-agent/smoke-subagent-live-e2e.sh` | 子 Agent 实机 / LLM E2E |
-| `scripts/multi-agent/smoke-subagent-console-e2e.sh` | 子 Agent Console E2E |
-| `scripts/multi-agent/smoke-team-e2e.sh` | Agent Team API E2E |
-| `scripts/multi-agent/smoke-team-live-e2e.sh` | Team 实机 / LLM E2E |
-| `scripts/multi-agent/smoke-team-console-e2e.sh` | Team Console E2E |
-| `scripts/e2e/smoke-linear-webhook.sh` | Linear webhook 分发 |
-| `scripts/e2e/smoke-github-webhook.sh` | GitHub webhook 分发 |
-| `scripts/Integrations/smoke-slack-webhook.sh` | Slack webhook 分发 |
-
-工作流冒烟不在 `smoke-all.sh` 内，验证 dynamic workflows 时请单独运行 `scripts/workflows/` 下脚本。
 
 ## Console 控制台
 
