@@ -630,7 +630,7 @@ dependencies = [
 [[package]]
 name = "pi-dynamic-workflows"
 version = "1.0.0"
-source = { git = "https://gitee.com/www6v6v/pipy-dynamic-workflows.git?subdirectory=packages%2Fpi_dynamic_workflows&branch=v0.1.0#339a7cb49026c25020f2792f6352c7516b5199ab" }
+source = { git = "https://gitee.com/www6v6v/pipy-dynamic-workflows.git?subdirectory=packages%2Fpi_dynamic_workflows&branch=v0.1.0#87ba4d73e053525de58a1e82f87b8da1c6001bef" }
 dependencies = [
     { name = "aiosqlite" },
     { name = "fastapi" },
