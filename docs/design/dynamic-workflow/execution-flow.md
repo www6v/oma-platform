@@ -310,7 +310,10 @@ main.py
 
 ## 相关文档
 
+- 上游 JS 参考（生成与执行）：[`piPy-dynamic-workflows/docs/upstream-js-generation-and-execution.md`](../../../../piPy-dynamic-workflows/docs/upstream-js-generation-and-execution.md)
+- Orchestration 对照（piPy vs 上游）：[`piPy-dynamic-workflows/docs/orchestration-comparison.md`](../../../../piPy-dynamic-workflows/docs/orchestration-comparison.md)
 - 平台 README：`oma-platform/README.md`（Dynamic workflows 概述）
 - 扩展 README：`piPy-dynamic-workflows/README.md`
 - 扩展架构：`piPy-dynamic-workflows/v1/ARCHITECTURE.md`
+- 迁移设计：`piPy-dynamic-workflows/migrate/t-wangwei07-master-design-20260626-182600.md`
 - Console 插件说明：`console/src/plugins/dynamic-workflows/README.md`

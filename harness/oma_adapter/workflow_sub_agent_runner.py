@@ -32,6 +32,7 @@ from pi_dynamic_workflows.lib.sub_agent_types import (
     SubAgentOptions,
     SubAgentResult,
 )
+from oma_adapter.assistant_text import assemble_assistant_text
 from oma_adapter.workflow_bootstrap import (
     WORKFLOW_WORKER_SYSTEM,
     get_workflow_worker_map,
@@ -201,7 +202,7 @@ class OmaSubAgentRunner:
     ) -> SubAgentResult:
         opts = options or SubAgentOptions()
         try:
-            from pi_subagent.events import extract_assistant_text, new_thread_id
+            from pi_subagent.events import new_thread_id
             from pi_subagent.runtime import get_subagent_runtime
         except ImportError as exc:
             raise RuntimeError(
@@ -295,7 +296,8 @@ class OmaSubAgentRunner:
                 on_event=runtime.emit_event,
             )
 
-            text = extract_assistant_text(turn_result.events)
+            # OMA emit streams deltas as many agent.message events; join them.
+            text = assemble_assistant_text(turn_result.events)
             structured = None
             if opts.output_schema:
                 structured = extract_validated(text, opts.output_schema)
@@ -322,7 +324,7 @@ class OmaSubAgentRunner:
                         depth=runtime.depth + 1,
                         on_event=runtime.emit_event,
                     )
-                    text = extract_assistant_text(repair.events)
+                    text = assemble_assistant_text(repair.events)
                     structured = extract_validated(text, opts.output_schema)
 
                 if structured is None:
