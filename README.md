@@ -58,6 +58,51 @@ Self-hostable **Open Managed Agents (OMA)** stack: a Go platform runtime plus a 
 - **Fake harness mode** — `OMA_FAKE_HARNESS=1` for local dev and CI without LLM API keys.
 - **Smoke & integration scripts** — `scripts/e2e/smoke-all.sh` (full suite), workflows / team / sandbox / managed-harness smokes under `scripts/workflows/`, `scripts/multi-agent/`, and `scripts/e2e/`.
 
+## Deploy
+
+### Local
+
+Prerequisites: workspace Go toolchain at `../.tools/go` (used by helper scripts), Python 3.11+ with [uv](https://docs.astral.sh/uv/) for the harness, and a reachable MySQL instance (`DATABASE_URL` in `.env`).
+
+```bash
+cp .env.example .env
+# Edit DATABASE_URL to your MySQL DSN / URL
+
+# Terminal 1 — harness (fake mode, no API key)
+./start-harness.sh
+
+# Terminal 2 — platform (API only)
+source scripts/go-env.sh
+export OMA_FAKE_HARNESS=1
+export HARNESS_URL=http://127.0.0.1:8090
+export OMA_API_KEY=dev-key
+go run ./cmd/oma-server/
+```
+
+For Console + auth sidecar:
+
+```bash
+# Terminal 1
+./start-harness.sh
+
+# Terminal 2 — builds console dist if missing, starts auth sidecar
+./start-console.sh
+```
+
+Open http://localhost:8787
+
+### Docker
+
+```bash
+./deploy/docker.sh up
+```
+
+Copy `.env.example` to `.env`. Set `DATABASE_URL` to a reachable MySQL instance. For remote Docker hosts set `PUBLIC_BASE_URL` to the browser-facing URL (e.g. `http://124.221.28.203:8787`) and set `BETTER_AUTH_SECRET`. For real model calls set `OMA_FAKE_HARNESS=0` and configure piPy via `~/.pi/agent/settings.json`, `models.json`, and `auth.json` (mounted into the harness container in compose).
+
+Compose mounts a shared `/data` volume for `SESSION_OUTPUTS_DIR`, `FILES_DATA_DIR`, and other artifact paths so the platform and harness containers see the same files. If agent writes to `/mnt/session/outputs/` but `files.list(scope_id=session.id)` shows no `out:` files, the containers likely have mismatched data dirs — rerun `./deploy/docker.sh up --build`.
+
+`./deploy/docker.sh up` can mount `./console/dist` at `/app/console` when present. Build the console first (`./scripts/build-console.sh`), or set `CONSOLE_DIST` in compose.
+
 ## Architecture
 
 ```
@@ -148,95 +193,109 @@ Turns are **stateless** on the harness side: every call carries the full event h
 | `SESSION_OUTPUTS_DIR` (default `./data/session-outputs`) | Session output artifacts |
 | `AUTH_DATABASE_PATH` (default `./data/auth.db`) | better-auth SQLite database |
 
-## API overview
+## API
 
-### Core
+Compatible with the [Claude Managed Agents API](https://docs.anthropic.com/en/docs/agents/managed-agents). Same endpoints, same event types, works with existing SDKs.
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/health` | Liveness check |
-| `POST` | `/v1/agents` | Create agent |
-| `GET` | `/v1/agents` | List agents |
-| `GET` | `/v1/agents/:id` | Get agent |
-| `PATCH` | `/v1/agents/:id` | Update agent (new version) |
-| `POST` | `/v1/agents/:id/archive` | Archive agent |
-| `GET` | `/v1/agents/:id/versions` | List versions |
-| `POST` | `/v1/sessions` | Create session |
-| `GET` | `/v1/sessions` | List sessions |
-| `GET` | `/v1/sessions/:id` | Get session |
-| `POST` | `/v1/sessions/:id/events` | Append events / trigger turn |
-| `GET` | `/v1/sessions/:id/events` | List events (paginated) |
-| `GET` | `/v1/sessions/:id/events/stream` | SSE event stream |
-| `GET` | `/v1/sessions/:id/threads` | Session threads (sub-agents) |
-| `GET` | `/v1/sessions/:id/pending` | Pending tool confirmations |
-| `GET` | `/v1/sessions/:id/trajectory` | Trajectory export |
-| `GET` | `/v1/sessions/:id/outputs` | Session output files |
-| `POST` | `/v1/sessions/:id/exec` | Sandbox exec |
-| `GET` / `POST` / `DELETE` | `/v1/sessions/:id/resources` | Session resource mount CRUD |
-| `GET` / `POST` | `/v1/sessions/:id/teams/*` | Agent team coordination |
+<details>
+<summary><strong>Agents</strong> — Create and manage agent configurations</summary>
 
-### Workflows (proxied to harness)
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `*` | `/api/workflows/*` | CRUD, NL generate, validate, execute, traces, cancel; WebSocket `.../executions/:id/ws` |
-
-### Platform resources
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` / `GET` | `/v1/environments` | Environments (optional sandbox binding) |
-| `POST` / `GET` | `/v1/model_cards` | Model cards |
-| `GET` | `/v1/models/list` | Provider model list |
-| `GET` | `/v1/config/harnesses` | Managed harness availability (OpenClaw / Hermes) |
-| `POST` / `GET` | `/v1/skills` | Skills |
-| `GET` / `POST` | `/v1/clawhub/*` | ClawHub skill search / import |
-| `POST` / `GET` | `/v1/files` | File blobs |
-| `POST` / `GET` | `/v1/vaults` | Vaults and credentials |
-| `GET` / `POST` | `/v1/oauth/*` | Vault OAuth flows |
-| `GET` / `POST` | `/v1/mcp-proxy/*` | MCP proxy |
-| `GET` | `/v1/stats` | Tenant stats |
-| `GET` | `/v1/me` | Current user / tenant |
-| `POST` / `GET` | `/v1/api_keys` | API keys |
-| `POST` / `GET` | `/v1/runtimes` | Runtimes |
-| `POST` / `GET` | `/v1/memory_stores` | Memory stores |
-| `POST` / `GET` | `/v1/evals/runs` | Eval runs |
-| `POST` / `GET` | `/v1/dreams` | Dreams |
-| `GET` | `/v1/cost_report` | Usage and cost report |
-| `GET` | `/v1/integrations/*` | Integration publications |
-
-Authenticated routes accept `x-api-key: $OMA_API_KEY`, `Authorization: Bearer $OMA_API_KEY`, or a better-auth cookie session. Set `AUTH_DISABLED=1` only for API-key-free local dev (not production).
-
-## Quick start (local)
-
-Prerequisites: workspace Go toolchain at `../.tools/go` (used by helper scripts), Python 3.11+ with [uv](https://docs.astral.sh/uv/) for the harness, and a reachable MySQL instance (`DATABASE_URL` in `.env`).
-
-```bash
-cp .env.example .env
-# Edit DATABASE_URL to your MySQL DSN / URL
-
-# Terminal 1 — harness (fake mode, no API key)
-./start-harness.sh
-
-# Terminal 2 — platform (API only)
-source scripts/go-env.sh
-export OMA_FAKE_HARNESS=1
-export HARNESS_URL=http://127.0.0.1:8090
-export OMA_API_KEY=dev-key
-go run ./cmd/oma-server/
+```http
+POST   /v1/agents                          # Create agent
+GET    /v1/agents                          # List agents
+GET    /v1/agents/:id                      # Get agent
+PATCH  /v1/agents/:id                      # Update agent (new version)
+POST   /v1/agents/:id/archive              # Archive agent
+GET    /v1/agents/:id/versions             # Version history
 ```
 
-For Console + auth sidecar:
+</details>
 
-```bash
-# Terminal 1
-./start-harness.sh
+<details>
+<summary><strong>Environments</strong> — Sandbox execution environments</summary>
 
-# Terminal 2 — builds console dist if missing, starts auth sidecar
-./start-console.sh
+```http
+POST   /v1/environments                    # Create environment
+GET    /v1/environments                    # List environments
+GET    /v1/environments/:id                # Get environment
+PATCH  /v1/environments/:id                # Update environment
+DELETE /v1/environments/:id                # Delete environment
 ```
 
-Open http://localhost:8787
+</details>
+
+<details>
+<summary><strong>Sessions</strong> — Run agent conversations</summary>
+
+```http
+POST   /v1/sessions                        # Create session
+GET    /v1/sessions                        # List sessions
+GET    /v1/sessions/:id                    # Get session
+POST   /v1/sessions/:id/events             # Send events (user messages)
+GET    /v1/sessions/:id/events             # Get events (paginated)
+GET    /v1/sessions/:id/events/stream      # SSE stream
+GET    /v1/sessions/:id/threads            # Session threads (sub-agents)
+GET    /v1/sessions/:id/pending            # Pending tool confirmations
+GET    /v1/sessions/:id/trajectory         # Trajectory export
+GET    /v1/sessions/:id/outputs            # Session output files
+POST   /v1/sessions/:id/exec               # Sandbox exec
+GET    /v1/sessions/:id/resources          # List session resources
+POST   /v1/sessions/:id/resources          # Attach resource
+DELETE /v1/sessions/:id/resources/:resId   # Remove resource
+GET    /v1/sessions/:id/teams/*            # Agent team coordination
+POST   /v1/sessions/:id/teams/*            # Agent team coordination
+```
+
+</details>
+
+<details>
+<summary><strong>Vaults</strong> — Secure credential storage</summary>
+
+```http
+POST   /v1/vaults                          # Create vault
+GET    /v1/vaults                          # List vaults
+POST   /v1/vaults/:id/credentials          # Add credential
+GET    /v1/vaults/:id/credentials          # List (secrets stripped)
+GET    /v1/oauth/*                         # Vault OAuth flows
+POST   /v1/oauth/*                         # Vault OAuth flows
+```
+
+</details>
+
+<details>
+<summary><strong>Memory Stores</strong> — persistent storage; Claude Managed Agents Memory contract</summary>
+
+When attached to a session, each store is mounted into the sandbox at
+`/mnt/memory/<store_name>/`. The agent reads and writes it with the
+**standard file tools** (bash/read/write/edit/glob/grep) — there are no
+bespoke `memory_*` tools.
+
+```http
+POST   /v1/memory_stores                   # Create store
+GET    /v1/memory_stores                   # List stores
+GET    /v1/memory_stores/:id               # Retrieve store
+POST   /v1/memory_stores/:id/archive       # Archive (one-way)
+DELETE /v1/memory_stores/:id               # Delete store
+```
+
+</details>
+
+<details>
+<summary><strong>Files & Skills</strong></summary>
+
+```http
+POST   /v1/files                           # Upload file
+GET    /v1/files                           # List files
+GET    /v1/files/:id/content               # Download file
+POST   /v1/skills                          # Create skill
+GET    /v1/skills                          # List skills
+GET    /v1/clawhub/*                       # ClawHub skill search / import
+POST   /v1/clawhub/*                       # ClawHub skill search / import
+```
+
+</details>
+
+Also available: `GET /health`, model cards, managed harnesses (`GET /v1/config/harnesses`), MCP proxy, workflows (`/api/workflows/*`), evals, dreams, runtimes, cost report, and integrations. Authenticated routes accept `x-api-key: $OMA_API_KEY`, `Authorization: Bearer $OMA_API_KEY`, or a better-auth cookie session. Set `AUTH_DISABLED=1` only for API-key-free local dev (not production).
 
 ## Python SDK
 
@@ -265,72 +324,11 @@ session = client.sessions.create(agent=agent.id)
 
 See [oma-sdk/SDK-PLAN.md](../oma-sdk/SDK-PLAN.md) and [oma-sdk/example/README.md](../oma-sdk/example/README.md) for resource coverage and cookbook examples.
 
-## Verification
-
-### Smoke test (full P1+P2 API + optional real LLM)
-
-```bash
-# With platform + harness running (OMA_FAKE_HARNESS=0 for real LLM)
-./scripts/e2e/smoke-test.sh
-
-# API-only, no harness / no LLM
-SMOKE_SKIP_LLM=1 ./scripts/e2e/smoke-test.sh
-
-# Full E2E suite (core + integrations + runtime + dreams + team + sandbox, …)
-./scripts/e2e/smoke-all.sh
-```
-
-Set `ANTHROPIC_API_KEY` in `.env` or configure piPy via `~/.pi/agent/{settings,models,auth}.json` for real model calls.
-
-### Other scripts
-
-| Script | Purpose |
-|--------|---------|
-| `scripts/e2e/smoke-all.sh` | Run all smoke suites (core + noncore) |
-| `scripts/e2e/console-integration.sh` | Console wire-shape integration tests |
-| `scripts/e2e/smoke-mcp-e2e.sh` | MCP proxy + harness MCP loader |
-| `scripts/e2e/smoke-web-search-e2e.sh` | web_search tool (DDG / Tavily) |
-| `scripts/e2e/smoke-schedule-e2e.sh` | Schedule / cancel / list tools |
-| `scripts/e2e/smoke-resource-outcome-e2e.sh` | Resource mounter + outcome evaluator |
-| `scripts/e2e/smoke-dreams-e2e.sh` | Dreams API + dream worker |
-| `scripts/e2e/smoke-runtime-e2e.sh` | Runtime / ACP daemon |
-| `scripts/e2e/smoke-opensandbox-e2e.sh` | OpenSandbox provider |
-| `scripts/e2e/smoke-litebox-sandbox-e2e.sh` | LiteBox sandbox |
-| `scripts/e2e/smoke-environment-sandbox-binding-e2e.sh` | Environment ↔ sandbox binding |
-| `scripts/e2e/smoke-promote-sandbox-e2e.sh` | Promote sandbox file API |
-| `scripts/e2e/smoke-openclaw-managed-e2e.sh` | Managed OpenClaw harness |
-| `scripts/e2e/smoke-hermes-managed-e2e.sh` | Managed Hermes harness |
-| `scripts/workflows/smoke-workflow-oma-live-e2e.sh` | Workflow → OMA session live E2E |
-| `scripts/workflows/smoke-workflow-console-e2e.sh` | Console workflows UI E2E |
-| `scripts/multi-agent/smoke-subagent-e2e.sh` | Sub-agent delegation E2E |
-| `scripts/multi-agent/smoke-subagent-live-e2e.sh` | Sub-agent live/LLM E2E |
-| `scripts/multi-agent/smoke-subagent-console-e2e.sh` | Sub-agent Console E2E |
-| `scripts/multi-agent/smoke-team-e2e.sh` | Agent team API E2E |
-| `scripts/multi-agent/smoke-team-live-e2e.sh` | Team live/LLM E2E |
-| `scripts/multi-agent/smoke-team-console-e2e.sh` | Team Console E2E |
-| `scripts/e2e/smoke-linear-webhook.sh` | Linear webhook dispatch |
-| `scripts/e2e/smoke-github-webhook.sh` | GitHub webhook dispatch |
-| `scripts/Integrations/smoke-slack-webhook.sh` | Slack webhook dispatch |
-
-Workflow smokes are separate from `smoke-all.sh` — run them under `scripts/workflows/` when validating dynamic workflows.
-
 ## Console UI
 
 The OMA Console SPA in `console/` is served on the same port as the API when `CONSOLE_DIR` is set. `./start-console.sh` builds `console/dist/` if missing, starts the better-auth sidecar, and proxies `/auth/*` for email/password sign-in.
 
-**Docker:** `./deploy/docker.sh up` can mount `./console/dist` at `/app/console` when present. Build the console first (`./scripts/build-console.sh`), or set `CONSOLE_DIST` in compose.
-
 **Coverage:** Agents, sessions, environments, model cards, skills, vaults, files, integrations, evals, dreams, runtimes, memory stores, and **dynamic workflows** (`/workflows`, plugin `console/src/plugins/dynamic-workflows/`) are wired to oma-platform APIs. Managed harness dropdown (OpenClaw / Hermes) follows `GET /v1/config/harnesses`. Browser tools, `/v1/cap-cli/oauth` (Vault CLI tab), and some CF-only features remain deferred — see [MVP-MIGRATION-PLAN.md](./docs/api-migrate/MVP-MIGRATION-PLAN.md).
-
-## Docker
-
-```bash
-./deploy/docker.sh up
-```
-
-Copy `.env.example` to `.env`. Set `DATABASE_URL` to a reachable MySQL instance. For remote Docker hosts set `PUBLIC_BASE_URL` to the browser-facing URL (e.g. `http://124.221.28.203:8787`) and set `BETTER_AUTH_SECRET`. For real model calls set `OMA_FAKE_HARNESS=0` and configure piPy via `~/.pi/agent/settings.json`, `models.json`, and `auth.json` (mounted into the harness container in compose).
-
-Compose mounts a shared `/data` volume for `SESSION_OUTPUTS_DIR`, `FILES_DATA_DIR`, and other artifact paths so the platform and harness containers see the same files. If agent writes to `/mnt/session/outputs/` but `files.list(scope_id=session.id)` shows no `out:` files, the containers likely have mismatched data dirs — rerun `./deploy/docker.sh up --build`.
 
 ## Configuration
 
@@ -400,3 +398,7 @@ See `.env.example` for sandbox provider credentials (OpenSandbox, LiteBox, E2B, 
 ## Still deferred
 
 Cloudflare Workers / SessionDO, **CF Container** sandboxes (distinct from the pluggable local/OpenSandbox/E2B/… providers above), R2/FUSE memory, Analytics Engine billing, **browser tools** (T16), multi-region D1 sharding, **`/v1/cap-cli/oauth`**, integration install → vault dual-write, and **TypeScript SDK / `oma` CLI** packages remain out of scope or partial. The **Python SDK** (`oma-sdk` v0.1.0) is available locally in [`../oma-sdk/`](../oma-sdk/) but not yet published to PyPI. See [MVP-MIGRATION-PLAN.md](./docs/api-migrate/MVP-MIGRATION-PLAN.md) for the full parity matrix and backlog.
+
+## License
+
+[Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0)

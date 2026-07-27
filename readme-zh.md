@@ -58,6 +58,51 @@
 - **Fake Harness 模式** — `OMA_FAKE_HARNESS=1` 可在无 LLM API Key 时本地开发与 CI 运行。
 - **冒烟与集成脚本** — `scripts/e2e/smoke-all.sh`（全量套件），以及 `scripts/workflows/`、`scripts/multi-agent/`、`scripts/e2e/` 下的工作流 / Team / 沙箱 / managed harness 冒烟。
 
+## 部署
+
+### 本地
+
+前置条件：工作区 Go 工具链位于 `../.tools/go`（辅助脚本会自动使用）；Harness 需要 Python 3.11+ 与 [uv](https://docs.astral.sh/uv/)；平台需要可达的 MySQL（在 `.env` 中配置 `DATABASE_URL`）。
+
+```bash
+cp .env.example .env
+# 将 DATABASE_URL 改为你的 MySQL DSN / URL
+
+# 终端 1 — harness（假数据模式，无需 API Key）
+./start-harness.sh
+
+# 终端 2 — platform（仅 API）
+source scripts/go-env.sh
+export OMA_FAKE_HARNESS=1
+export HARNESS_URL=http://127.0.0.1:8090
+export OMA_API_KEY=dev-key
+go run ./cmd/oma-server/
+```
+
+需要 Console + auth 侧车：
+
+```bash
+# 终端 1
+./start-harness.sh
+
+# 终端 2 — 若缺少 dist 会自动构建 Console，并启动 auth 侧车
+./start-console.sh
+```
+
+浏览器打开 http://localhost:8787
+
+### Docker
+
+```bash
+./deploy/docker.sh up
+```
+
+复制 `.env.example` 为 `.env`，并将 `DATABASE_URL` 指向可达的 MySQL。远程部署时将 `PUBLIC_BASE_URL` 设为浏览器访问地址（如 `http://124.221.28.203:8787`），并设置 `BETTER_AUTH_SECRET`。真实模型调用请设置 `OMA_FAKE_HARNESS=0`，并通过 `~/.pi/agent/settings.json`、`models.json`、`auth.json` 配置 piPy（compose 会挂载到 harness 容器）。
+
+Compose 会把 `SESSION_OUTPUTS_DIR`、`FILES_DATA_DIR` 等指向共享卷 `/data/...`（见 `deploy/docker-compose.yml`）。若 agent 写入 `/mnt/session/outputs/` 后 `files.list(scope_id=session.id)` 看不到 `out:` 前缀文件，通常是 platform 与 harness 容器的数据目录未对齐——重新 `./deploy/docker.sh up --build` 即可。
+
+`./deploy/docker.sh up` 在存在构建产物时，可将 `./console/dist` 挂载到 `/app/console`。需先运行 `./scripts/build-console.sh`，或在 compose 中设置 `CONSOLE_DIST`。
+
 ## 系统架构
 
 ```
@@ -148,95 +193,106 @@ Harness 侧回合是**无状态**的：每次调用都携带完整事件历史�
 | `SESSION_OUTPUTS_DIR`（默认 `./data/session-outputs`） | Session 输出产物 |
 | `AUTH_DATABASE_PATH`（默认 `./data/auth.db`） | better-auth SQLite 库 |
 
-## API 概览
+## API
 
-### 核心
+与 [Claude Managed Agents API](https://docs.anthropic.com/en/docs/agents/managed-agents) 兼容。相同端点、相同事件类型，可与现有 SDK 一起使用。
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| `GET` | `/health` | 健康检查 |
-| `POST` | `/v1/agents` | 创建 Agent |
-| `GET` | `/v1/agents` | 列出 Agent |
-| `GET` | `/v1/agents/:id` | 获取 Agent |
-| `PATCH` | `/v1/agents/:id` | 更新 Agent（产生新版本） |
-| `POST` | `/v1/agents/:id/archive` | 归档 Agent |
-| `GET` | `/v1/agents/:id/versions` | 列出版本 |
-| `POST` | `/v1/sessions` | 创建 Session |
-| `GET` | `/v1/sessions` | 列出 Session |
-| `GET` | `/v1/sessions/:id` | 获取 Session |
-| `POST` | `/v1/sessions/:id/events` | 追加事件 / 触发回合 |
-| `GET` | `/v1/sessions/:id/events` | 分页列出事件 |
-| `GET` | `/v1/sessions/:id/events/stream` | SSE 事件流 |
-| `GET` | `/v1/sessions/:id/threads` | Session 线程（子 Agent） |
-| `GET` | `/v1/sessions/:id/pending` | 待确认工具 |
-| `GET` | `/v1/sessions/:id/trajectory` | 轨迹导出 |
-| `GET` | `/v1/sessions/:id/outputs` | Session 输出文件 |
-| `POST` | `/v1/sessions/:id/exec` | 沙箱 exec |
-| `GET` / `POST` / `DELETE` | `/v1/sessions/:id/resources` | Session 资源挂载 CRUD |
-| `GET` / `POST` | `/v1/sessions/:id/teams/*` | Agent Team 协作 |
+<details>
+<summary><strong>Agents</strong> — 创建和管理智能体配置</summary>
 
-### 工作流（代理到 harness）
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| `*` | `/api/workflows/*` | CRUD、自然语言生成、校验、执行、轨迹、取消；WebSocket `.../executions/:id/ws` |
-
-### 平台资源
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| `POST` / `GET` | `/v1/environments` | 运行环境（可选沙箱绑定） |
-| `POST` / `GET` | `/v1/model_cards` | 模型卡片 |
-| `GET` | `/v1/models/list` | 提供商模型列表 |
-| `GET` | `/v1/config/harnesses` | Managed harness 可用性（OpenClaw / Hermes） |
-| `POST` / `GET` | `/v1/skills` | Skills |
-| `GET` / `POST` | `/v1/clawhub/*` | ClawHub 技能搜索 / 导入 |
-| `POST` / `GET` | `/v1/files` | 文件 blob |
-| `POST` / `GET` | `/v1/vaults` | Vault 与凭据 |
-| `GET` / `POST` | `/v1/oauth/*` | Vault OAuth 流程 |
-| `GET` / `POST` | `/v1/mcp-proxy/*` | MCP proxy |
-| `GET` | `/v1/stats` | 租户统计 |
-| `GET` | `/v1/me` | 当前用户 / 租户 |
-| `POST` / `GET` | `/v1/api_keys` | API Key |
-| `POST` / `GET` | `/v1/runtimes` | Runtimes |
-| `POST` / `GET` | `/v1/memory_stores` | Memory stores |
-| `POST` / `GET` | `/v1/evals/runs` | Eval runs |
-| `POST` / `GET` | `/v1/dreams` | Dreams |
-| `GET` | `/v1/cost_report` | 用量与成本报告 |
-| `GET` | `/v1/integrations/*` | 集成 publication |
-
-受保护路由支持请求头 `x-api-key: $OMA_API_KEY`、`Authorization: Bearer $OMA_API_KEY` 或 better-auth Cookie 会话。仅本地开发可设 `AUTH_DISABLED=1`（勿用于生产）。
-
-## 本地快速开始
-
-前置条件：工作区 Go 工具链位于 `../.tools/go`（辅助脚本会自动使用）；Harness 需要 Python 3.11+ 与 [uv](https://docs.astral.sh/uv/)；平台需要可达的 MySQL（在 `.env` 中配置 `DATABASE_URL`）。
-
-```bash
-cp .env.example .env
-# 将 DATABASE_URL 改为你的 MySQL DSN / URL
-
-# 终端 1 — harness（假数据模式，无需 API Key）
-./start-harness.sh
-
-# 终端 2 — platform（仅 API）
-source scripts/go-env.sh
-export OMA_FAKE_HARNESS=1
-export HARNESS_URL=http://127.0.0.1:8090
-export OMA_API_KEY=dev-key
-go run ./cmd/oma-server/
+```http
+POST   /v1/agents                          # 创建 Agent
+GET    /v1/agents                          # 列出 Agent
+GET    /v1/agents/:id                      # 获取 Agent
+PATCH  /v1/agents/:id                      # 更新 Agent（产生新版本）
+POST   /v1/agents/:id/archive              # 归档 Agent
+GET    /v1/agents/:id/versions             # 版本历史
 ```
 
-需要 Console + auth 侧车：
+</details>
 
-```bash
-# 终端 1
-./start-harness.sh
+<details>
+<summary><strong>Environments</strong> — 沙箱执行环境</summary>
 
-# 终端 2 — 若缺少 dist 会自动构建 Console，并启动 auth 侧车
-./start-console.sh
+```http
+POST   /v1/environments                    # 创建环境
+GET    /v1/environments                    # 列出环境
+GET    /v1/environments/:id                # 获取环境
+PATCH  /v1/environments/:id                # 更新环境
+DELETE /v1/environments/:id                # 删除环境
 ```
 
-浏览器打开 http://localhost:8787
+</details>
+
+<details>
+<summary><strong>Sessions</strong> — 运行智能体对话</summary>
+
+```http
+POST   /v1/sessions                        # 创建 Session
+GET    /v1/sessions                        # 列出 Session
+GET    /v1/sessions/:id                    # 获取 Session
+POST   /v1/sessions/:id/events             # 发送事件（用户消息）
+GET    /v1/sessions/:id/events             # 分页获取事件
+GET    /v1/sessions/:id/events/stream      # SSE 流
+GET    /v1/sessions/:id/threads            # Session 线程（子 Agent）
+GET    /v1/sessions/:id/pending            # 待确认工具
+GET    /v1/sessions/:id/trajectory         # 轨迹导出
+GET    /v1/sessions/:id/outputs            # Session 输出文件
+POST   /v1/sessions/:id/exec               # 沙箱 exec
+GET    /v1/sessions/:id/resources          # 列出 Session 资源
+POST   /v1/sessions/:id/resources          # 附加资源
+DELETE /v1/sessions/:id/resources/:resId   # 移除资源
+GET    /v1/sessions/:id/teams/*            # Agent Team 协作
+POST   /v1/sessions/:id/teams/*            # Agent Team 协作
+```
+
+</details>
+
+<details>
+<summary><strong>Vaults</strong> — 安全凭据存储</summary>
+
+```http
+POST   /v1/vaults                          # 创建 Vault
+GET    /v1/vaults                          # 列出 Vault
+POST   /v1/vaults/:id/credentials          # 添加凭据
+GET    /v1/vaults/:id/credentials          # 列出（已脱敏密钥）
+GET    /v1/oauth/*                         # Vault OAuth 流程
+POST   /v1/oauth/*                         # Vault OAuth 流程
+```
+
+</details>
+
+<details>
+<summary><strong>Memory Stores</strong> — 持久化存储；Claude Managed Agents Memory 协议</summary>
+
+附加到 Session 时，每个存储会挂载到沙箱的 `/mnt/memory/<store_name>/`。智能体使用**标准文件工具**（bash/read/write/edit/glob/grep）读写，没有专门的 `memory_*` 工具。
+
+```http
+POST   /v1/memory_stores                   # 创建存储
+GET    /v1/memory_stores                   # 列出存储
+GET    /v1/memory_stores/:id               # 获取存储
+POST   /v1/memory_stores/:id/archive       # 归档（单向）
+DELETE /v1/memory_stores/:id               # 删除存储
+```
+
+</details>
+
+<details>
+<summary><strong>Files & Skills</strong></summary>
+
+```http
+POST   /v1/files                           # 上传文件
+GET    /v1/files                           # 列出文件
+GET    /v1/files/:id/content               # 下载文件
+POST   /v1/skills                          # 创建 Skill
+GET    /v1/skills                          # 列出 Skills
+GET    /v1/clawhub/*                       # ClawHub 技能搜索 / 导入
+POST   /v1/clawhub/*                       # ClawHub 技能搜索 / 导入
+```
+
+</details>
+
+此外还有：`GET /health`、模型卡片、managed harnesses（`GET /v1/config/harnesses`）、MCP proxy、工作流（`/api/workflows/*`）、evals、dreams、runtimes、cost report 与 integrations。受保护路由支持请求头 `x-api-key: $OMA_API_KEY`、`Authorization: Bearer $OMA_API_KEY` 或 better-auth Cookie 会话。仅本地开发可设 `AUTH_DISABLED=1`（勿用于生产）。
 
 ## Python SDK
 
@@ -318,19 +374,7 @@ SMOKE_SKIP_LLM=1 ./scripts/e2e/smoke-test.sh
 
 当设置 `CONSOLE_DIR` 时，本仓库 `console/` 下的 OMA Console SPA 与 API 同端口提供服务。`./start-console.sh` 会在缺少 `console/dist/` 时自动构建，启动 better-auth 侧车并代理 `/auth/*`，支持邮箱密码注册登录。
 
-**Docker：** `./deploy/docker.sh up` 在存在构建产物时，可将 `./console/dist` 挂载到 `/app/console`。需先运行 `./scripts/build-console.sh`，或在 compose 中设置 `CONSOLE_DIST`。
-
 **覆盖范围：** Agents、sessions、environments、model cards、skills、vaults、files、integrations、evals、dreams、runtimes、memory stores，以及 **dynamic workflows**（`/workflows`，插件 `console/src/plugins/dynamic-workflows/`）已对接 oma-platform API。Managed harness 下拉（OpenClaw / Hermes）跟随 `GET /v1/config/harnesses`。browser tools、`/v1/cap-cli/oauth`（Vault CLI tab）及部分 CF 专属能力仍延后 — 详见 [MVP-MIGRATION-PLAN.md](./docs/api-migrate/MVP-MIGRATION-PLAN.md)。
-
-## Docker
-
-```bash
-./deploy/docker.sh up
-```
-
-复制 `.env.example` 为 `.env`，并将 `DATABASE_URL` 指向可达的 MySQL。远程部署时将 `PUBLIC_BASE_URL` 设为浏览器访问地址（如 `http://124.221.28.203:8787`），并设置 `BETTER_AUTH_SECRET`。真实模型调用请设置 `OMA_FAKE_HARNESS=0`，并通过 `~/.pi/agent/settings.json`、`models.json`、`auth.json` 配置 piPy（compose 会挂载到 harness 容器）。
-
-Compose 会把 `SESSION_OUTPUTS_DIR`、`FILES_DATA_DIR` 等指向共享卷 `/data/...`（见 `deploy/docker-compose.yml`）。若 agent 写入 `/mnt/session/outputs/` 后 `files.list(scope_id=session.id)` 看不到 `out:` 前缀文件，通常是 platform 与 harness 容器的数据目录未对齐——重新 `./deploy/docker.sh up --build` 即可。
 
 ## 配置项
 
@@ -400,3 +444,7 @@ Compose 会把 `SESSION_OUTPUTS_DIR`、`FILES_DATA_DIR` 等指向共享卷 `/dat
 ## 仍属延后范围
 
 Cloudflare Workers / SessionDO、**CF Container** 沙箱（不同于上文已实现的 local/OpenSandbox/E2B 等可插拔沙箱）、R2/FUSE memory、Analytics Engine 计费、**browser tools**（T16）、多区域 D1 分片、**`/v1/cap-cli/oauth`**、Integration install → vault 双写，以及 **TypeScript SDK / `oma` CLI** 包仍在范围外或仅部分实现。**Python SDK**（`oma-sdk` v0.1.0）已在同级 [`../oma-sdk/`](../oma-sdk/) 本地可用，尚未发布到 PyPI。完整对齐矩阵与 backlog 见 [MVP-MIGRATION-PLAN.md](./docs/api-migrate/MVP-MIGRATION-PLAN.md)。
+
+## 许可证
+
+[Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0)
