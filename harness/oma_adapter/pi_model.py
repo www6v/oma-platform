@@ -16,10 +16,37 @@ PI_PROVIDER_BY_OMA: dict[str, str] = {
     "openai": "openai",
     "oai-compatible": "openai",
     "dashscope": "dashscope",
+    "litellm": "litellm",
     "faux": "faux",
 }
 
 _LEGACY_ANTHROPIC_PREFIX = "claude-"
+_OPENAI_NATIVE_PREFIXES = (
+    "gpt-",
+    "o1",
+    "o3",
+    "o4",
+    "chatgpt-",
+    "text-embedding-",
+    "whisper-",
+    "dall-e",
+    "tts-",
+)
+
+
+def _pi_settings_path() -> Path:
+    return Path.home() / ".pi" / "agent" / "settings.json"
+
+
+def _load_pi_settings() -> dict:
+    settings = _pi_settings_path()
+    if not settings.is_file():
+        return {}
+    try:
+        data = json.loads(settings.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 def harness_default_model() -> str:
@@ -27,16 +54,19 @@ def harness_default_model() -> str:
     explicit = os.environ.get("OMA_DEFAULT_MODEL", "").strip()
     if explicit:
         return explicit
-    settings = Path.home() / ".pi" / "agent" / "settings.json"
-    if settings.is_file():
-        try:
-            data = json.loads(settings.read_text(encoding="utf-8"))
-            name = (data.get("defaultModel") or "").strip()
-            if name:
-                return name
-        except (OSError, json.JSONDecodeError):
-            pass
+    name = (_load_pi_settings().get("defaultModel") or "").strip()
+    if name:
+        return name
     return "qwen3.7-plus"
+
+
+def harness_default_provider() -> str | None:
+    """piPy default provider: OMA_DEFAULT_PROVIDER, then settings.json."""
+    explicit = os.environ.get("OMA_DEFAULT_PROVIDER", "").strip()
+    if explicit:
+        return explicit
+    name = (_load_pi_settings().get("defaultProvider") or "").strip()
+    return name or None
 
 
 def is_legacy_anthropic_model(model_id: str) -> bool:
@@ -44,21 +74,45 @@ def is_legacy_anthropic_model(model_id: str) -> bool:
     return lower.startswith(_LEGACY_ANTHROPIC_PREFIX)
 
 
+def looks_like_openai_native_model(model_id: str) -> bool:
+    """True when the wire id is a first-party OpenAI model name."""
+    bare = (model_id or "").strip().lower()
+    if "/" in bare:
+        bare = bare.rsplit("/", 1)[-1]
+    return any(bare.startswith(prefix) for prefix in _OPENAI_NATIVE_PREFIXES)
+
+
 def apply_pipy_model_override(
     *,
     model: ModelConfig | None,
     agent_model: str,
 ) -> ModelConfig | None:
-    """Remap legacy Claude models to piPy default (dashscope + local auth)."""
+    """Remap legacy Claude / mis-tagged oai-compatible cards to pi defaults."""
     raw = (model.model if model is not None else agent_model).strip()
-    if not is_legacy_anthropic_model(raw):
-        return model
+    preferred = harness_default_provider() or "dashscope"
 
-    target = harness_default_model()
-    if is_legacy_anthropic_model(target):
-        return model
+    if is_legacy_anthropic_model(raw):
+        target = harness_default_model()
+        if is_legacy_anthropic_model(target):
+            return model
+        return ModelConfig(model=target, provider=preferred)
 
-    return ModelConfig(model=target, provider="dashscope")
+    if model is None:
+        return None
+
+    mapped = normalize_pi_provider(model.provider)
+    # OMA "oai-compatible" cards often wrap third-party models that live under a
+    # custom models.json provider (litellm, dashscope, …). Mapping them to
+    # openai makes piPy raise Unknown model: openai/<id>. Prefer ~/.pi default.
+    if (
+        mapped == "openai"
+        and not looks_like_openai_native_model(model.model)
+        and preferred
+        and preferred != "openai"
+    ):
+        return ModelConfig(model=model.model, provider=preferred)
+
+    return model
 
 
 def normalize_harness_models(
@@ -103,13 +157,19 @@ def resolve_session_model_pattern(
         return wire, None
 
     pi_provider = normalize_pi_provider(oma_provider)
+    preferred = harness_default_provider()
+    if pi_provider == "openai" and not looks_like_openai_native_model(wire):
+        if preferred and preferred != "openai":
+            return wire, preferred
     if pi_provider:
         return wire, pi_provider
     lower = wire.lower()
     if lower.startswith("qwen"):
-        return wire, "dashscope"
+        return wire, preferred or "dashscope"
     if lower.startswith("claude-"):
         return wire, "anthropic"
-    if lower.startswith("gpt-"):
+    if looks_like_openai_native_model(wire):
         return wire, "openai"
+    if preferred:
+        return wire, preferred
     return wire, None
