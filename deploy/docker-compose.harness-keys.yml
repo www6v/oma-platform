@@ -1,0 +1,19 @@
+# Optional override: distinct LiteLLM virtual keys per harness replica.
+# Usage:
+#   docker compose -f deploy/docker-compose.yml \
+#     -f deploy/docker-compose.harness-keys.yml up -d
+#
+# Set HARNESS_LITELLM_KEY_1 / HARNESS_LITELLM_KEY_2 in the environment or .env
+# before starting. Keys are injected as OPENAI_API_KEY / LITELLM_API_KEY so they
+# override a shared ~/.pi/agent auth.json mount for quota isolation.
+
+services:
+  oma-harness-1:
+    environment:
+      OPENAI_API_KEY: ${HARNESS_LITELLM_KEY_1}
+      LITELLM_API_KEY: ${HARNESS_LITELLM_KEY_1}
+
+  oma-harness-2:
+    environment:
+      OPENAI_API_KEY: ${HARNESS_LITELLM_KEY_2}
+      LITELLM_API_KEY: ${HARNESS_LITELLM_KEY_2}

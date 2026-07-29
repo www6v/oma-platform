@@ -57,27 +57,29 @@ piPy (oma-harness) 当前只支持单个 `ANTHROPIC_API_KEY`。用户流量上�
                                (key1 生效)      (key2 生效)      (key3 生效)
 ```
 
-## Architecture (Phase 2 — 未来，本次不做)
+## Architecture (Phase 2 — multi-piPy)
 
-当 piPy 单机 CPU 成为瓶颈时：
+Same-host multi-piPy behind external Nginx (session sticky) is documented in
+[`docs/HARNESS_LOAD_BALANCING.md`](../HARNESS_LOAD_BALANCING.md). Go still uses
+a single `HARNESS_URL` pointing at the LB; affinity uses `X-OMA-Session-ID`.
+MySQL is required for multi-replica; remote hosts remain cold standby (no NFS).
 
 ```
                          ┌──────────────────┐
                          │  Nginx (LB)      │
-                         │  round-robin     │
+                         │  hash session id │
                          └────────┬─────────┘
                     ┌─────────────┼─────────────┐
                     ▼             ▼             ▼
              ┌─────────┐   ┌─────────┐   ┌─────────┐
              │ piPy-1  │   │ piPy-2  │   │ piPy-N  │
-             │ (SQLite │   │ (SQLite │   │ (SQLite │
-             │ →MySQL) │   │ →MySQL) │   │ →MySQL) │
+             │ (MySQL) │   │ (MySQL) │   │ (MySQL) │
              └────┬────┘   └────┬────┘   └────┬────┘
                   └─────────────┼─────────────┘
                                 ▼
                          ┌──────────────────┐
                          │  LiteLLM Proxy   │
-                         │  (Phase 1 已部署) │
+                         │  (per virtual key)│
                          └──────────────────┘
 ```
 

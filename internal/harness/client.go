@@ -159,6 +159,18 @@ type HTTPClient struct {
 
 const harnessKeepaliveEventType = "harness.keepalive"
 
+// StickySessionHeader is set on harness HTTP calls so an external LB
+// (e.g. Nginx hash $http_x_oma_session_id consistent) can pin a session
+// to one piPy replica. Value is the OMA session id (or workflow sticky id).
+const StickySessionHeader = "X-OMA-Session-ID"
+
+// setHarnessStickyHeaders attaches the session affinity header when non-empty.
+func setHarnessStickyHeaders(req *http.Request, sessionID string) {
+	if id := strings.TrimSpace(sessionID); id != "" {
+		req.Header.Set(StickySessionHeader, id)
+	}
+}
+
 // streamingHTTPClient returns an HTTP client without Client.Timeout for
 // long-lived NDJSON turn streams. Client.Timeout counts from request start
 // and aborts mid-turn when LLM/bash gaps exceed the limit.
@@ -194,6 +206,7 @@ func (c *HTTPClient) RunTurn(
 		return TurnResponse{}, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
+	setHarnessStickyHeaders(httpReq, req.SessionID)
 
 	client := c.HTTP
 	if client == nil {
@@ -245,6 +258,7 @@ func (c *HTTPClient) RunTurnStream(
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "application/x-ndjson")
+	setHarnessStickyHeaders(httpReq, req.SessionID)
 
 	client := c.streamingHTTPClient()
 	resp, err := client.Do(httpReq)

@@ -1,3 +1,24 @@
+x-harness-common: &harness-common
+  build:
+    context: ..
+    dockerfile: deploy/Dockerfile.harness
+    args:
+      APT_MIRROR: ${APT_MIRROR:-mirrors.aliyun.com}
+      PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
+      UV_INDEX_URL: ${UV_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
+      PYPI_MIRROR_PACKAGES: ${PYPI_MIRROR_PACKAGES:-https://pypi.tuna.tsinghua.edu.cn/packages}
+  env_file:
+    - ../.env
+  volumes:
+    - ../data:/data
+    - ${HOME}/.pi/agent:/root/.pi/agent:ro
+  healthcheck:
+    test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health')"]
+    interval: 5s
+    timeout: 3s
+    retries: 5
+    start_period: 10s
+
 services:
   oma-auth:
     build:
@@ -54,7 +75,8 @@ services:
       FILES_DATA_DIR: /data/files
       SKILLS_DATA_DIR: /data/skills
       MEMORY_DATA_DIR: /data/memory
-      HARNESS_URL: http://oma-harness:8090
+      # In-network LB URL (do not inherit host .env HARNESS_URL=127.0.0.1).
+      HARNESS_URL: http://oma-harness-lb:8090
       # Harness schedule/MCP tools call oma-server from the sidecar container.
       OMA_HARNESS_PLATFORM_BASE: http://oma-platform:8787
       # Slack/GitHub OAuth redirect_uri host (open-managed-agents GATEWAY_ORIGIN).
@@ -68,31 +90,39 @@ services:
     depends_on:
       oma-auth:
         condition: service_healthy
-      oma-harness:
+      oma-harness-lb:
+        condition: service_started
+      oma-harness-1:
+        condition: service_healthy
+      oma-harness-2:
         condition: service_healthy
 
-  oma-harness:
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile.harness
-      args:
-        APT_MIRROR: ${APT_MIRROR:-mirrors.aliyun.com}
-        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
-        UV_INDEX_URL: ${UV_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
-        PYPI_MIRROR_PACKAGES: ${PYPI_MIRROR_PACKAGES:-https://pypi.tuna.tsinghua.edu.cn/packages}
-    env_file:
-      - ../.env
-    ports:
-      - "8090:8090"
+  # Same-host piPy replicas behind oma-harness-lb. Multi-replica requires
+  # DATABASE_URL (MySQL); shared OMA_DATABASE_PATH SQLite is unsafe.
+  # Per-replica LiteLLM virtual keys: use deploy/docker-compose.harness-keys.yml
+  # override (see docs/HARNESS_LOAD_BALANCING.md).
+  oma-harness-1:
+    <<: *harness-common
     environment:
       OMA_PLATFORM_URL: http://oma-platform:8787
       OMA_DATABASE_PATH: /data/oma.db
+
+  oma-harness-2:
+    <<: *harness-common
+    environment:
+      OMA_PLATFORM_URL: http://oma-platform:8787
+      OMA_DATABASE_PATH: /data/oma.db
+
+  # Dedicated harness LB on host :8090. Coexists with any existing Nginx on :80
+  # (e.g. notebooklm-nginx) — no port clash.
+  oma-harness-lb:
+    image: nginx:1.27-alpine
+    ports:
+      - "8090:8090"
     volumes:
-      - ../data:/data
-      - ${HOME}/.pi/agent:/root/.pi/agent:ro
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health')"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-      start_period: 10s
+      - ./nginx-harness.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      oma-harness-1:
+        condition: service_healthy
+      oma-harness-2:
+        condition: service_healthy
