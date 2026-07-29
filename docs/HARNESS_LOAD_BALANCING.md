@@ -60,10 +60,30 @@ read/send timeouts.
 
 ## Deploy (docker compose)
 
-From `oma-platform/`:
+From `oma-platform/deploy/`:
 
 ```bash
-docker compose -f deploy/docker-compose.yml up -d --build
+./docker.sh up
+# or:
+docker compose --env-file ../.env -f docker-compose.yml up -d --build --remove-orphans
+```
+
+### Port 8090 already allocated
+
+`oma-harness-lb` publishes host `:8090`. After migrating from a single
+`oma-harness` container, an **orphan** often still holds that port:
+
+```text
+Bind for 0.0.0.0:8090 failed: port is already allocated
+Found orphan containers ([deploy-oma-harness-1]) ...
+```
+
+Fix on the host:
+
+```bash
+docker ps -a --format '{{.Names}}\t{{.Ports}}' | grep 8090
+docker rm -f deploy-oma-harness-1   # or whatever still maps 8090
+./docker.sh up                      # uses --remove-orphans
 ```
 
 Services:
