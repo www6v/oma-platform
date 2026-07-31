@@ -106,15 +106,42 @@ Open http://localhost:8787
 
 ### Docker
 
+Copy `.env.example` to `.env` and set `DATABASE_URL` to a reachable MySQL instance. When Docker Desktop connects to MySQL running on the host, for example:
+
 ```bash
+DATABASE_URL=mysql+aiomysql://managed:managedAgent123@host.docker.internal:3306/managed_agent
+```
+
+Before the first Docker startup, initialize the new, empty database from the host. The Go service does not apply the MySQL schema automatically:
+
+```bash
+# The database and user must already exist. `-p` prompts for the password.
+mysql -h 127.0.0.1 -P 3306 -u managed -p managed_agent \
+  < scripts/sql/platform_mysql.sql
+
 ./deploy/docker.sh up
 ```
 
-Copy `.env.example` to `.env`. Set `DATABASE_URL` to a reachable MySQL instance. For remote Docker hosts set `PUBLIC_BASE_URL` to the browser-facing URL (e.g. `http://124.221.28.203:8787`) and set `BETTER_AUTH_SECRET`. For real model calls set `OMA_FAKE_HARNESS=0` and configure piPy via `~/.pi/agent/settings.json`, `models.json`, and `auth.json` (mounted into the harness container in compose).
+Import `platform_mysql.sql` only when bootstrapping a new database; it is not an every-start command. If the platform logs `Table 'managed_agent.environments' doesn't exist`, the schema has not been initialized. Use the host-reachable MySQL address (such as `127.0.0.1`) for the local `mysql` command, while containers use `host.docker.internal`.
+
+For remote Docker hosts set `PUBLIC_BASE_URL` to the browser-facing URL (e.g. `http://124.221.28.203:8787`) and set `BETTER_AUTH_SECRET`. For real model calls set `OMA_FAKE_HARNESS=0` and configure piPy via `~/.pi/agent/settings.json`, `models.json`, and `auth.json` (mounted into the harness container in compose).
 
 Compose mounts a shared `/data` volume for `SESSION_OUTPUTS_DIR`, `FILES_DATA_DIR`, and other artifact paths so the platform and harness containers see the same files. If agent writes to `/mnt/session/outputs/` but `files.list(scope_id=session.id)` shows no `out:` files, the containers likely have mismatched data dirs — rerun `./deploy/docker.sh up --build`.
 
 `./deploy/docker.sh up` can mount `./console/dist` at `/app/console` when present. Build the console first (`./scripts/build-console.sh`), or set `CONSOLE_DIST` in compose.
+
+#### Register a local CLI runtime
+
+After the Docker stack is healthy and http://127.0.0.1:8787 is accessible, register the local CLI bridge against the self-hosted server:
+
+```bash
+npx @openma/cli@beta bridge setup \
+  --server-url=http://127.0.0.1:8787 \
+  --browser-origin=http://127.0.0.1:8787 \
+  --force
+```
+
+Complete authentication in the local page opened by the command. Both URL flags are required for a self-hosted local server; otherwise the CLI defaults to `https://app.openma.dev/`. `--force` replaces any existing bridge registration.
 
 ## Architecture
 

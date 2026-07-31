@@ -131,7 +131,7 @@ func (room *Room) AttachHarness(
 		"daemon_online": daemonUp,
 	}
 	_ = room.writeJSON(conn, attached)
-	if hasReplay {
+	if hasReplay && req.URL.Query().Get("replay") != "0" {
 		_ = conn.WriteMessage(websocket.TextMessage, replay)
 	}
 

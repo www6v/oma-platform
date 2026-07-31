@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+
+# @openma/cli v0.3.0-beta.5 still launches `codex --acp`, but current Codex
+# CLI releases expose ACP through the standalone codex-acp adapter.
+if [ "${1:-}" = "--acp" ]; then
+	shift
+	exec /opt/homebrew/bin/codex-acp "$@"
+fi
+
+exec /opt/homebrew/bin/codex "$@"

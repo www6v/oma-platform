@@ -106,15 +106,42 @@ go run ./cmd/oma-server/
 
 ### Docker
 
+复制 `.env.example` 为 `.env`，并将 `DATABASE_URL` 指向可达的 MySQL。使用 Docker Desktop 访问宿主机上的 MySQL 时，例如：
+
 ```bash
+DATABASE_URL=mysql+aiomysql://managed:managedAgent123@host.docker.internal:3306/managed_agent
+```
+
+首次启动 Docker 前，需要在宿主机上初始化新的空数据库。Go 服务不会自动执行 MySQL 建表迁移：
+
+```bash
+# 数据库和用户需已创建；-p 会交互式提示输入密码
+mysql -h 127.0.0.1 -P 3306 -u managed -p managed_agent \
+  < scripts/sql/platform_mysql.sql
+
 ./deploy/docker.sh up
 ```
 
-复制 `.env.example` 为 `.env`，并将 `DATABASE_URL` 指向可达的 MySQL。远程部署时将 `PUBLIC_BASE_URL` 设为浏览器访问地址（如 `http://124.221.28.203:8787`），并设置 `BETTER_AUTH_SECRET`。真实模型调用请设置 `OMA_FAKE_HARNESS=0`，并通过 `~/.pi/agent/settings.json`、`models.json`、`auth.json` 配置 piPy（compose 会挂载到 harness 容器）。
+`platform_mysql.sql` 只用于初始化新数据库，不需要每次启动都执行。如果 platform 日志出现 `Table 'managed_agent.environments' doesn't exist`，说明数据库还没有完成初始化。本地执行 `mysql` 命令时使用宿主机可达的地址（如 `127.0.0.1`），容器内的 `DATABASE_URL` 则使用 `host.docker.internal`。
+
+远程部署时将 `PUBLIC_BASE_URL` 设为浏览器访问地址（如 `http://124.221.28.203:8787`），并设置 `BETTER_AUTH_SECRET`。真实模型调用请设置 `OMA_FAKE_HARNESS=0`，并通过 `~/.pi/agent/settings.json`、`models.json`、`auth.json` 配置 piPy（compose 会挂载到 harness 容器）。
 
 Compose 会把 `SESSION_OUTPUTS_DIR`、`FILES_DATA_DIR` 等指向共享卷 `/data/...`（见 `deploy/docker-compose.yml`）。若 agent 写入 `/mnt/session/outputs/` 后 `files.list(scope_id=session.id)` 看不到 `out:` 前缀文件，通常是 platform 与 harness 容器的数据目录未对齐——重新 `./deploy/docker.sh up --build` 即可。
 
 `./deploy/docker.sh up` 在存在构建产物时，可将 `./console/dist` 挂载到 `/app/console`。需先运行 `./scripts/build-console.sh`，或在 compose 中设置 `CONSOLE_DIST`。
+
+#### 注册本地 CLI Runtime
+
+Docker 服务健康且 http://127.0.0.1:8787 可以访问后，将本地 CLI bridge 注册到自托管服务端：
+
+```bash
+npx @openma/cli@beta bridge setup \
+  --server-url=http://127.0.0.1:8787 \
+  --browser-origin=http://127.0.0.1:8787 \
+  --force
+```
+
+在命令打开的本地页面完成认证。连接自托管本地服务时两个 URL 参数都需要设置，否则 CLI 会默认跳转到 `https://app.openma.dev/`。`--force` 会覆盖已有的 bridge 注册。
 
 ## 系统架构
 

@@ -15,11 +15,21 @@ const (
 	// KindDefaultLoop is the pipy HTTP sidecar. The legacy alias "pipy" is
 	// accepted on input and normalized to KindDefaultLoop.
 	KindDefaultLoop Kind = "default-loop"
+	// KindAcpProxy delegates turns to an ACP agent running on a registered
+	// user runtime.
+	KindAcpProxy Kind = "acp-proxy"
 	// KindManaged is the platform-hosted per-tenant daemon pool (see §10).
 	KindManaged Kind = "managed"
 	// KindFake is the test stub. OMA_FAKE_HARNESS env var resolves here.
 	KindFake Kind = "fake"
 )
+
+// AcpBinding is the parsed form of AgentConfig.RuntimeBinding when
+// harness=acp-proxy.
+type AcpBinding struct {
+	RuntimeID  string `json:"runtime_id"`
+	AcpAgentID string `json:"acp_agent_id"`
+}
 
 // ManagedBinding is the parsed form of AgentConfig.RuntimeBinding when
 // harness=managed.
@@ -162,10 +172,11 @@ func NewManagedFactory(oc OpenClawConfig, hc HermesConfig) func(ManagedBinding) 
 // `_oma.harness` metadata. One Registry is constructed at process start
 // and threaded through every session.Machine.
 type Registry struct {
-	defaultClient Client
+	defaultClient  Client
+	acpFactory     func(AcpBinding) (Client, error)
 	managedFactory func(ManagedBinding) (Client, error)
-	fakeClient    Client
-	forceClient   Client // if non-nil, returned for every agent (env-var override)
+	fakeClient     Client
+	forceClient    Client // if non-nil, returned for every agent (env-var override)
 }
 
 // RegistryConfig holds the per-kind client factories.
@@ -173,6 +184,8 @@ type RegistryConfig struct {
 	// Default is the client returned for KindDefaultLoop (and for agents
 	// with no _oma.harness set, since "" normalizes to default-loop).
 	Default Client
+	// AcpFactory builds a RuntimeClient for an acp-proxy binding.
+	AcpFactory func(AcpBinding) (Client, error)
 	// ManagedFactory builds a Client for a given ManagedBinding. Invoked
 	// per-turn so the factory may hand out pooled / per-tenant clients.
 	ManagedFactory func(ManagedBinding) (Client, error)
@@ -200,6 +213,7 @@ func NewRegistry(cfg RegistryConfig) *Registry {
 	}
 	return &Registry{
 		defaultClient:  cfg.Default,
+		acpFactory:     cfg.AcpFactory,
 		managedFactory: managedFactory,
 		fakeClient:     fake,
 		forceClient:    cfg.Force,
@@ -238,6 +252,15 @@ func (r *Registry) ClientFor(agent store.AgentConfig) (Client, error) {
 			return nil, fmt.Errorf("harness registry: default-loop client not configured")
 		}
 		return r.defaultClient, nil
+	case KindAcpProxy:
+		if r.acpFactory == nil {
+			return nil, fmt.Errorf("harness registry: acp-proxy client not configured")
+		}
+		b, err := ParseAcpBinding(agent.RuntimeBinding)
+		if err != nil {
+			return nil, err
+		}
+		return r.acpFactory(b)
 	case KindManaged:
 		b, err := ParseManagedBinding(agent.RuntimeBinding)
 		if err != nil {
@@ -249,6 +272,30 @@ func (r *Registry) ClientFor(agent store.AgentConfig) (Client, error) {
 	default:
 		return nil, fmt.Errorf("harness registry: unknown kind %q", kind)
 	}
+}
+
+// ParseAcpBinding parses AgentConfig.RuntimeBinding for harness=acp-proxy.
+func ParseAcpBinding(raw json.RawMessage) (AcpBinding, error) {
+	if len(raw) == 0 {
+		return AcpBinding{}, fmt.Errorf(
+			"acp-proxy harness requires runtime_binding",
+		)
+	}
+	var b AcpBinding
+	if err := json.Unmarshal(raw, &b); err != nil {
+		return AcpBinding{}, fmt.Errorf("parse acp-proxy runtime_binding: %w", err)
+	}
+	if b.RuntimeID == "" {
+		return AcpBinding{}, fmt.Errorf(
+			"acp-proxy harness requires runtime_binding.runtime_id",
+		)
+	}
+	if b.AcpAgentID == "" {
+		return AcpBinding{}, fmt.Errorf(
+			"acp-proxy harness requires runtime_binding.acp_agent_id",
+		)
+	}
+	return b, nil
 }
 
 // ParseManagedBinding parses AgentConfig.RuntimeBinding for harness=managed.
