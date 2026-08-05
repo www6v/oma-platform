@@ -477,7 +477,15 @@ func mountSessionRoutes(
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
+
+		// Subscribe before writing the response body so clients that
+		// send a turn immediately after seeing HTTP 200 cannot race
+		// past the hub and miss early events.
+		ch, unsub := h.hub.Subscribe(id)
+		defer unsub()
+
 		w.WriteHeader(http.StatusOK)
+		flusher.Flush()
 
 		if req.URL.Query().Get("replay") == "1" {
 			events, err := h.events.ListEvents(req.Context(), id, 0, 10000, true)
@@ -488,9 +496,6 @@ func mountSessionRoutes(
 				flusher.Flush()
 			}
 		}
-
-		ch, unsub := h.hub.Subscribe(id)
-		defer unsub()
 
 		ctx := req.Context()
 		ticker := time.NewTicker(15 * time.Second)
@@ -515,6 +520,16 @@ func mountSessionRoutes(
 }
 
 func writeSSE(w http.ResponseWriter, seq int, payload json.RawMessage) {
+	// Anthropic's Python SDK filters SSE frames by the `event:` field
+	// (see anthropic._streaming.Stream.__stream__). Without it, every
+	// frame is silently dropped and clients hang with an empty iterator
+	// while the session itself progresses normally (Console / list OK).
+	var meta struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(payload, &meta); err == nil && meta.Type != "" {
+		fmt.Fprintf(w, "event: %s\n", meta.Type)
+	}
 	fmt.Fprintf(w, "id: %d\n", seq)
 	fmt.Fprintf(w, "data: %s\n\n", payload)
 }

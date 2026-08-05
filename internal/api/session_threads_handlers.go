@@ -160,7 +160,13 @@ func (h *sessionHandlers) handleSessionThreadStream(
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
+
+	// Subscribe before HTTP 200 so early turn events are not lost.
+	ch, unsub := h.hub.Subscribe(sess.ID)
+	defer unsub()
+
 	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
 
 	if req.URL.Query().Get("replay") == "1" {
 		events, err := h.events.ListEvents(req.Context(), sess.ID, 0, 10000, true)
@@ -171,9 +177,6 @@ func (h *sessionHandlers) handleSessionThreadStream(
 			flusher.Flush()
 		}
 	}
-
-	ch, unsub := h.hub.Subscribe(sess.ID)
-	defer unsub()
 
 	ctx := req.Context()
 	ticker := time.NewTicker(15 * time.Second)
