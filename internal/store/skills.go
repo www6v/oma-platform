@@ -449,7 +449,7 @@ func (r *SkillRepo) ListVersionSummaries(
 		SELECT version, files_json, created_at
 		FROM skill_versions
 		WHERE skill_id = ? AND tenant_id = ?
-		ORDER BY CAST(version AS INTEGER) DESC`,
+		ORDER BY CAST(version AS UNSIGNED) DESC`,
 		skillID, tenantOrDefault(tenantID),
 	)
 	if err != nil {
