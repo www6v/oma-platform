@@ -179,29 +179,35 @@ func main() {
 		Token:      os.Getenv("OMA_HERMES_API_KEY"),
 		Disabled:   envDisabled("OMA_HERMES_ENABLED"),
 	}
+	publicURL := envOrDefault(
+		"OMA_PUBLIC_URL",
+		envOrDefault("PUBLIC_BASE_URL", "http://127.0.0.1:8787"),
+	)
+	// Harness-side tools (schedule, MCP proxy) and the ACP runtime client call
+	// back into oma-server. In Docker, use the in-compose service name.
+	harnessPlatformBase := envOrDefault(
+		"OMA_HARNESS_PLATFORM_BASE",
+		publicURL,
+	)
+	internalSecret := os.Getenv("OMA_INTERNAL_SECRET")
 	harnessRegistry := harness.NewRegistry(harness.RegistryConfig{
 		Default:        harnessClient,
 		Force:          harnessForceOverride,
 		ManagedFactory: harness.NewManagedFactory(openclawCfg, hermesCfg),
+		AcpFactory: func(binding harness.AcpBinding) (harness.Client, error) {
+			return &harness.RuntimeClient{
+				PlatformBase:   harnessPlatformBase,
+				InternalSecret: internalSecret,
+				Binding:        binding,
+			}, nil
+		},
 	})
 	effectiveHarness := harnessClient
 	if harnessForceOverride != nil {
 		effectiveHarness = harnessForceOverride
 	}
 
-	publicURL := envOrDefault(
-		"OMA_PUBLIC_URL",
-		envOrDefault("PUBLIC_BASE_URL", "http://127.0.0.1:8787"),
-	)
-	// Harness-side tools (schedule, MCP proxy) call back into oma-server over
-	// HTTP. In Docker the sidecar cannot reach localhost on the host; use the
-	// in-compose service name (see deploy/docker-compose.yml).
-	harnessPlatformBase := envOrDefault(
-		"OMA_HARNESS_PLATFORM_BASE",
-		publicURL,
-	)
 	outboundAddr := envOrDefault("OMA_OUTBOUND_PROXY_ADDR", ":8790")
-	internalSecret := os.Getenv("OMA_INTERNAL_SECRET")
 	resourceResolver := &harness.ResourceResolver{
 		Files:        files,
 		FileBlobs:    fileBlobs,

@@ -404,9 +404,8 @@ func (r *RuntimeRepo) UpsertRuntimeTenant(
 		INSERT INTO runtime_tenants (
 			runtime_id, tenant_id, agent_api_key_id, created_at, revoked_at
 		) VALUES (?, ?, ?, ?, NULL)
-		ON CONFLICT (runtime_id, tenant_id)
-		DO UPDATE SET
-			agent_api_key_id = excluded.agent_api_key_id,
+		ON DUPLICATE KEY UPDATE
+			agent_api_key_id = VALUES(agent_api_key_id),
 			revoked_at = NULL`,
 		runtimeID, tenantOrDefault(tenantID), apiKeyID, createdAt,
 	)
@@ -466,7 +465,7 @@ func (r *RuntimeRepo) ListRuntimeTenantsForMe(
 	runtimeID, userID string,
 ) ([]RuntimeTenantInfo, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT rt.tenant_id, t.name, m."role"
+		SELECT rt.tenant_id, t.name, m.role
 		FROM runtime_tenants rt
 		LEFT JOIN tenant t ON t.id = rt.tenant_id
 		LEFT JOIN membership m

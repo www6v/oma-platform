@@ -51,6 +51,45 @@ func TestClientFor_DefaultLoop_PipyAlias(t *testing.T) {
 	}
 }
 
+func TestClientFor_AcpProxy_CallsFactory(t *testing.T) {
+	var captured AcpBinding
+	acp := &stubClient{name: "acp"}
+	factory := func(b AcpBinding) (Client, error) {
+		captured = b
+		return acp, nil
+	}
+	r := NewRegistry(RegistryConfig{AcpFactory: factory})
+	raw := json.RawMessage(
+		`{"runtime_id":"rt-local","acp_agent_id":"codex-cli"}`,
+	)
+	got, err := r.ClientFor(store.AgentConfig{
+		Harness:        "acp-proxy",
+		RuntimeBinding: raw,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != acp {
+		t.Fatalf("expected ACP client, got %T", got)
+	}
+	if captured.RuntimeID != "rt-local" ||
+		captured.AcpAgentID != "codex-cli" {
+		t.Fatalf("unexpected binding: %+v", captured)
+	}
+}
+
+func TestClientFor_AcpProxy_MissingBinding(t *testing.T) {
+	r := NewRegistry(RegistryConfig{
+		AcpFactory: func(AcpBinding) (Client, error) {
+			return &stubClient{}, nil
+		},
+	})
+	_, err := r.ClientFor(store.AgentConfig{Harness: "acp-proxy"})
+	if err == nil {
+		t.Fatal("expected error for missing runtime_binding")
+	}
+}
+
 func TestClientFor_Managed_CallsFactory(t *testing.T) {
 	var captured ManagedBinding
 	factory := func(b ManagedBinding) (Client, error) {

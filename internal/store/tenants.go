@@ -22,6 +22,10 @@ type TenantRepo struct {
 	db *sql.DB
 }
 
+const insertOwnerMembershipSQL = "INSERT IGNORE INTO membership " +
+	"(user_id, tenant_id, `role`, created_at) " +
+	"VALUES (?, ?, 'owner', ?)"
+
 // NewTenantRepo returns a tenant membership store.
 func NewTenantRepo(db *sql.DB) *TenantRepo {
 	return &TenantRepo{db: db}
@@ -103,16 +107,14 @@ func (r *TenantRepo) EnsureTenant(
 	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO tenant (id, name, "createdAt", "updatedAt")
+		INSERT INTO tenant (id, name, createdAt, updatedAt)
 		VALUES (?, ?, ?, ?)
 	`, tenantID, tenantName, now, now); err != nil {
 		return "", fmt.Errorf("insert tenant: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO membership (user_id, tenant_id, "role", created_at)
-		VALUES (?, ?, 'owner', ?)
-		ON CONFLICT (user_id, tenant_id) DO NOTHING
-	`, userID, tenantID, now); err != nil {
+	if _, err := tx.ExecContext(
+		ctx, insertOwnerMembershipSQL, userID, tenantID, now,
+	); err != nil {
 		return "", fmt.Errorf("insert membership: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -156,16 +158,14 @@ func (r *TenantRepo) CreateTenant(
 	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO tenant (id, name, "createdAt", "updatedAt")
+		INSERT INTO tenant (id, name, createdAt, updatedAt)
 		VALUES (?, ?, ?, ?)
 	`, tenantID, display, now, now); err != nil {
 		return TenantMembership{}, fmt.Errorf("insert tenant: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO membership (user_id, tenant_id, "role", created_at)
-		VALUES (?, ?, 'owner', ?)
-		ON CONFLICT (user_id, tenant_id) DO NOTHING
-	`, userID, tenantID, now); err != nil {
+	if _, err := tx.ExecContext(
+		ctx, insertOwnerMembershipSQL, userID, tenantID, now,
+	); err != nil {
 		return TenantMembership{}, fmt.Errorf("insert membership: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -185,7 +185,7 @@ func (r *TenantRepo) ListForUser(
 	userID string,
 ) ([]TenantMembership, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT m.tenant_id, t.name, m."role"
+		SELECT m.tenant_id, t.name, m.role
 		FROM membership m
 		JOIN tenant t ON t.id = m.tenant_id
 		WHERE m.user_id = ?
