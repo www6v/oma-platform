@@ -34,13 +34,25 @@ func MemoryStoreBindings(resources []json.RawMessage) []MemoryStoreBinding {
 		}
 		storeID, _ := res["store_id"].(string)
 		if storeID == "" {
+			// Unresolved session resources use Anthropic wire name.
+			storeID, _ = res["memory_store_id"].(string)
+		}
+		if storeID == "" {
 			continue
 		}
 		storeName, _ := res["store_name"].(string)
 		if storeName == "" {
+			storeName, _ = res["name"].(string)
+		}
+		if storeName == "" {
 			storeName = storeID
 		}
 		readOnly, _ := res["read_only"].(bool)
+		if !readOnly {
+			if access, _ := res["access"].(string); access == "read_only" {
+				readOnly = true
+			}
+		}
 		out = append(out, MemoryStoreBinding{
 			StoreID:   storeID,
 			StoreName: storeName,
@@ -92,14 +104,23 @@ func syncMemoryTree(
 	if !info.IsDir() {
 		return nil
 	}
-	return filepath.WalkDir(root, func(path string, d os.DirEntry, walkErr error) error {
+	// workdir .mnt/memory/<store_name> is a symlink to data/memory/<store_id>.
+	// filepath.WalkDir uses Lstat and will not descend into symlink roots, so
+	// resolve before walking (production mount layout).
+	walkRoot := root
+	if resolved, evalErr := filepath.EvalSymlinks(root); evalErr == nil {
+		walkRoot = resolved
+	} else if !os.IsNotExist(evalErr) {
+		return fmt.Errorf("eval memory mount %s: %w", root, evalErr)
+	}
+	return filepath.WalkDir(walkRoot, func(path string, d os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
 		if d.IsDir() {
 			return nil
 		}
-		rel, err := filepath.Rel(root, path)
+		rel, err := filepath.Rel(walkRoot, path)
 		if err != nil {
 			return err
 		}

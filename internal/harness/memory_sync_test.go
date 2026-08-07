@@ -71,6 +71,93 @@ func TestSyncMemoryStoresFromWorkdir(t *testing.T) {
 	}
 }
 
+func TestSyncMemoryStoresFromWorkdirSymlinkMount(t *testing.T) {
+	t.Parallel()
+	db, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close(db) })
+
+	blobs := memoryblob.NewStore(t.TempDir())
+	repo := store.NewMemoryStoreRepo(db, blobs)
+	ctx := context.Background()
+	row, err := repo.CreateStore(ctx, "default", "user-preferences", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Production layout: .mnt/memory/<name> → data/memory/<store_id>.
+	canonical := t.TempDir()
+	memFile := filepath.Join(canonical, "preferences", "formatting.md")
+	if err := os.MkdirAll(filepath.Dir(memFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	content := "User prefers bullet points via symlink mount."
+	if err := os.WriteFile(memFile, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	workdir := t.TempDir()
+	linkParent := filepath.Join(workdir, ".mnt", "memory")
+	if err := os.MkdirAll(linkParent, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	linkPath := filepath.Join(linkParent, "user-preferences")
+	if err := os.Symlink(canonical, linkPath); err != nil {
+		t.Fatal(err)
+	}
+
+	raw, _ := json.Marshal(map[string]any{
+		"type":       "memory_store",
+		"store_id":   row.ID,
+		"store_name": row.Name,
+		"read_only":  false,
+	})
+	bindings := harness.MemoryStoreBindings([]json.RawMessage{raw})
+	if err := harness.SyncMemoryStoresFromWorkdir(
+		ctx, workdir, "default", "sess_mem_symlink",
+		bindings, repo,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := repo.ListMemories(ctx, "default", row.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("memories=%d want 1 (symlink mount must sync)", len(rows))
+	}
+	got, err := repo.GetMemory(ctx, "default", row.ID, rows[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Content != content {
+		t.Fatalf("content=%q want %q", got.Content, content)
+	}
+}
+
+func TestMemoryStoreBindingsAcceptsWireMemoryStoreID(t *testing.T) {
+	t.Parallel()
+	raw, _ := json.Marshal(map[string]any{
+		"type":            "memory_store",
+		"memory_store_id": "mst_wire",
+		"name":            "prefs",
+		"access":          "read_write",
+	})
+	bindings := harness.MemoryStoreBindings([]json.RawMessage{raw})
+	if len(bindings) != 1 {
+		t.Fatalf("bindings=%d want 1", len(bindings))
+	}
+	if bindings[0].StoreID != "mst_wire" || bindings[0].StoreName != "prefs" {
+		t.Fatalf("binding=%+v", bindings[0])
+	}
+	if bindings[0].ReadOnly {
+		t.Fatal("expected read_write")
+	}
+}
+
 func TestMemoryContentAtPath(t *testing.T) {
 	t.Parallel()
 	raw, _ := json.Marshal(map[string]any{
