@@ -18,7 +18,7 @@
 
 | 组件 | 位置 | 状态 |
 |------|------|------|
-| Files upload/list/download | `internal/api/files.go`, `oma_sdk/resources/files.py` | ✅ |
+| Files upload/list/download | `internal/api/files.go`, `oma_sdk/api/files.py` | ✅ |
 | ResourceResolver（file_id→content_base64） | `internal/harness/resources.go` | ✅ 仅读 **environment snapshot** |
 | Resource mounter | `harness/oma_adapter/resource_mounter.py` | ✅ |
 | Session outputs store | `internal/sessionoutputs/store.go` | ✅ 读 `SESSION_OUTPUTS_DIR/{tenant}/{session_id}/` |
@@ -176,7 +176,7 @@ Cookbook 依赖预装 pandas/plotly。OMA 存 config，harness **无 pip install
 `data_analyst_agent.py` 混了 parity demo、本地 fallback、错误处理。建议拆分：
 
 - `example/example1/data_analyst_agent.py` — cookbook 1:1（失败即暴露 gap）
-- `oma_sdk/api/data_analyst.py` — `DataAnalystExamples.run_cookbook_flow()` 供 E2E 调用
+- `oma_sdk/examples/data_analyst.py` — `DataAnalystExamples.run_cookbook_flow()` 供 E2E 调用
 
 ### 2B — SDK-PLAN 与 Go 实现漂移 [P2] (confidence: 9/10)
 
@@ -259,7 +259,7 @@ Lane C (tests, after T3+T5):
 | **T3** | P0 | 统一 outputs 路径 + turn 后 sync | `sandbox_paths.py`, `resource_mounter.py`, `machine.go` post-turn | ✅ | `workdir/sync_test.go`, `session_outputs_api_test.go` |
 | **T4** | P0 | Go integration test 复刻 cookbook §3–6 | `test/integration/data_analyst_cookbook_test.go`, `internal/integrationtest/` | ✅ | CI `TestDataAnalystCookbook` |
 | **T5** | P0 | 重写 `data_analyst_agent.py` 为 cookbook 1:1 | `sdk/example/example1/data_analyst_agent.py` | ✅ | 零 fallback 跑通（`OMA_DEV_FALLBACK` 默认 off） |
-| **T6** | P1 | `DataAnalystExamples` helper + E2E | `oma_sdk/api/data_analyst.py`, `tests/test_data_analyst.py` | ⏸️ deferred | — |
+| **T6** | P1 | `DataAnalystExamples` helper + E2E | `oma_sdk/examples/data_analyst.py`, `tests/test_data_analyst.py` | ⏸️ deferred | — |
 | **T7** | P1 | 更新 SDK-PLAN gap 状态 | `sdk/SDK-PLAN.md` | ✅ | doc review |
 
 ---

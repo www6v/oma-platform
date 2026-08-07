@@ -18,7 +18,7 @@ Create a per-user vault and `static_bearer` credential for GitHub MCP, bind `vau
 |----|------|--------|----------|
 | **OP1** | `vault_ids` column + session create/list wire | ✅ | migration `021_sessions_vault_ids.sql`, `sessions.go` |
 | **OP2** | Vault-scoped MCP `FindActiveByMcpURLInVaults` + fallback | ✅ | `credentials.go`, `mcpproxy/target.go` |
-| **OP3** | SDK `sessions.create(vault_ids=...)` | ✅ | `oma_sdk/api/sessions.py`, `test_sessions.py` |
+| **OP3** | SDK `sessions.create(vault_ids=...)` | ✅ | `oma_sdk/examples/sessions.py`, `test_sessions.py` |
 | **OP4** | Go CI: vault MCP auth + two-vault isolation | ✅ | `TestMcpProxyVault*`, `TestOperateCookbook*` |
 | **OP5** | example10 + pytest | ✅ | `example10/operate_in_production.py` |
 | **OP6** | Webhooks (`beta.webhooks` / `session.status_idled`) | defer | SSE `wait_for_idle_status` — see below |
