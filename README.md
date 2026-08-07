@@ -4,8 +4,15 @@
 
 Self-hostable **Open Managed Agents (OMA)** stack: a Go platform runtime plus a Python piPy harness sidecar. The platform owns durability, concurrency, and the HTTP API; the harness owns the LLM loop and tool execution.
 
+## Live Demo
+
+> **Try it now:** [http://www.managed-agent.cloud:8787](http://www.managed-agent.cloud:8787)
+>
+> **Account:** `demo@126.com` &nbsp;/&nbsp; `12345678`
+
 ## Contents
 
+- [Live Demo](#live-demo)
 - [Features](#features)
 - [Deploy](#deploy)
 - [Architecture](#architecture)
@@ -56,20 +63,6 @@ Self-hostable **Open Managed Agents (OMA)** stack: a Go platform runtime plus a 
 - **Runtimes** — ACP daemon connect/exchange for local IDE attach ([design doc](./docs/design/runtime-architecture.md)).
 - **Memory stores** — Large-object storage with retention worker ([design doc](./docs/design/memory/memory.md)).
 - **Managed harnesses** — Optional OpenClaw / Hermes backends via agent `_oma.harness: "managed"`; availability at `GET /v1/config/harnesses` (`OMA_OPENCLAW_*` / `OMA_HERMES_*`).
-
-### Python SDK
-
-- **`oma-sdk` v0.1.0** — Python client in sibling [`../oma-sdk/`](../oma-sdk/) using `anthropic` SDK with custom `base_url` for managed-agents resources plus `httpx` for OMA-only endpoints.
-- **Cookbook parity** — Managed Agents Cookbook examples 1–9 under `oma-sdk/example/` with shared helpers in `oma_sdk.cookbook`.
-- **E2E tests** — pytest suite in `oma-sdk/tests/` validates the full API surface against a running server.
-
-### Operations
-
-- **Console UI** — SPA in `console/`, same origin as the API (includes Workflows Quickstart/Editor).
-- **Auth** — API key (`x-api-key` / `Authorization: Bearer`) or better-auth cookie session.
-- **Docker Compose** — Three-service stack (`oma-platform` + `oma-auth` + `oma-harness`) with health checks.
-- **Fake harness mode** — `OMA_FAKE_HARNESS=1` for local dev and CI without LLM API keys.
-- **Smoke & integration scripts** — `scripts/e2e/smoke-all.sh` (full suite), workflows / team / sandbox / managed-harness smokes under `scripts/workflows/`, `scripts/multi-agent/`, and `scripts/e2e/`.
 
 ## Deploy
 
@@ -148,7 +141,7 @@ Compose mounts a shared `/data` volume for `SESSION_OUTPUTS_DIR`, `FILES_DATA_DI
 └─────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  oma-sdk (Python, sibling ../oma-sdk/)                                  │
+│  oma-sdk (Python) — https://github.com/www6v/oma-sdk                    │
 │  anthropic base_url + httpx OMA-only resources · cookbook helpers       │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -181,7 +174,7 @@ Compose mounts a shared `/data` volume for `SESSION_OUTPUTS_DIR`, `FILES_DATA_DI
 | | `call_agent/` | Sub-agent delegation runtime. |
 | | `workflow_*.py` | OMA bootstrap + sub-agent runner for `pi_dynamic_workflows`. |
 | | `extensions/` | `web_fetch`, `web_search`, `mcp_loader`, `call_agent` piPy extensions. |
-| **SDK (Python)** | `../oma-sdk/oma_sdk` | `OMAClient` + resource classes; cookbook streaming helpers. |
+| **SDK (Python)** | [oma-sdk](https://github.com/www6v/oma-sdk) | `OMAClient` + resource classes; cookbook streaming helpers. |
 
 ### Request flow (one user turn)
 
@@ -312,11 +305,12 @@ Also available: `GET /health`, model cards, managed harnesses (`GET /v1/config/h
 
 ## Python SDK
 
-The SDK lives in sibling [`../oma-sdk/`](../oma-sdk/) as `oma-sdk` v0.1.0 (local install only; not yet on PyPI).
+The SDK is at [`https://github.com/www6v/oma-sdk`](https://github.com/www6v/oma-sdk) as `oma-sdk` v0.1.0 (local install only; not yet on PyPI).
 
 ```bash
 # With platform running on :8787
-cd ../oma-sdk
+git clone https://github.com/www6v/oma-sdk.git
+cd oma-sdk
 uv sync
 export OMA_API_KEY=dev-key
 
@@ -335,7 +329,7 @@ agent = client.agents.create(name="hello", model={"id": "claude-sonnet-4-6"})
 session = client.sessions.create(agent=agent.id)
 ```
 
-See [oma-sdk/SDK-PLAN.md](../oma-sdk/SDK-PLAN.md) and [oma-sdk/example/README.md](../oma-sdk/example/README.md) for resource coverage and cookbook examples.
+See [SDK-PLAN.md](https://github.com/www6v/oma-sdk/blob/master/SDK-PLAN.md) and [example/README.md](https://github.com/www6v/oma-sdk/blob/master/example/README.md) for resource coverage and cookbook examples.
 
 ## Console UI
 
@@ -405,12 +399,12 @@ See `.env.example` for sandbox provider credentials (OpenSandbox, LiteBox, E2B, 
 
 - **Platform:** Go 1.24+, chi, go-sql-driver/mysql
 - **Harness:** Python 3.11+, FastAPI, piPy (`pi_coding_agent`), `pi_dynamic_workflows`
-- **SDK:** Python 3.11+, anthropic SDK 0.111+ with custom `base_url`, httpx (sibling `oma-sdk/`)
+- **SDK:** Python 3.11+, anthropic SDK 0.111+ with custom `base_url`, httpx ([oma-sdk](https://github.com/www6v/oma-sdk))
 - **Deploy:** Single static Go binary + Python sidecar; Docker Compose for local/prod-like runs; MySQL for platform data
 
 ## Still deferred
 
-Cloudflare Workers / SessionDO, **CF Container** sandboxes (distinct from the pluggable local/OpenSandbox/E2B/… providers above), R2/FUSE memory, Analytics Engine billing, **browser tools** (T16), multi-region D1 sharding, **`/v1/cap-cli/oauth`**, integration install → vault dual-write, and **TypeScript SDK / `oma` CLI** packages remain out of scope or partial. The **Python SDK** (`oma-sdk` v0.1.0) is available locally in [`../oma-sdk/`](../oma-sdk/) but not yet published to PyPI. See [MVP-MIGRATION-PLAN.md](./docs/api-migrate/MVP-MIGRATION-PLAN.md) for the full parity matrix and backlog.
+Cloudflare Workers / SessionDO, **CF Container** sandboxes (distinct from the pluggable local/OpenSandbox/E2B/… providers above), R2/FUSE memory, Analytics Engine billing, **browser tools** (T16), multi-region D1 sharding, **`/v1/cap-cli/oauth`**, integration install → vault dual-write, and **TypeScript SDK / `oma` CLI** packages remain out of scope or partial. The **Python SDK** (`oma-sdk` v0.1.0) is available at [`https://github.com/www6v/oma-sdk`](https://github.com/www6v/oma-sdk) but not yet published to PyPI. See [MVP-MIGRATION-PLAN.md](./docs/api-migrate/MVP-MIGRATION-PLAN.md) for the full parity matrix and backlog.
 
 ## License
 

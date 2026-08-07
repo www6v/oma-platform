@@ -4,8 +4,15 @@
 
 可自托管的 **Open Managed Agents (OMA)** 栈：Go 平台运行时 + Python piPy 执行侧车（sidecar）。平台负责持久化、并发与 HTTP API；执行器负责 LLM 循环与工具调用。
 
+## 在线 Demo
+
+> **立即体验：** [http://www.managed-agent.cloud:8787](http://www.managed-agent.cloud:8787)
+>
+> **账号密码：** `demo@126.com` &nbsp;/&nbsp; `12345678`
+
 ## 目录
 
+- [在线 Demo](#在线-demo)
 - [系统特性](#系统特性)
 - [部署](#部署)
 - [系统架构](#系统架构)
@@ -56,20 +63,6 @@
 - **Runtimes** — ACP daemon connect/exchange，供本地 IDE 挂载（[设计文档](./docs/design/runtime-architecture.md)）。
 - **Memory stores** — 大对象存储 + retention worker（[设计文档](./docs/design/memory/memory.md)）。
 - **Managed harnesses** — 可选 OpenClaw / Hermes 后端（Agent `_oma.harness: "managed"`）；可用性见 `GET /v1/config/harnesses`（`OMA_OPENCLAW_*` / `OMA_HERMES_*`）。
-
-### Python SDK
-
-- **`oma-sdk` v0.1.0** — 同级目录 [`../oma-sdk/`](../oma-sdk/) 下的 Python 客户端，managed-agents 资源经 `anthropic` SDK 自定义 `base_url` 路由，OMA 专属端点经 `httpx` 调用。
-- **Cookbook 对齐** — Managed Agents Cookbook example1–9 位于 `oma-sdk/example/`，共享辅助函数在 `oma_sdk.cookbook`。
-- **E2E 测试** — `oma-sdk/tests/` 下 pytest 套件对运行中服务器验证完整 API 面。
-
-### 运维与开发
-
-- **Console 控制台** — 本仓库 `console/` 下的 SPA，与 API 同端口（含 Workflows Quickstart/Editor）。
-- **认证** — API Key（`x-api-key` / `Authorization: Bearer`）或 better-auth Cookie 会话。
-- **Docker Compose** — 三服务栈（`oma-platform` + `oma-auth` + `oma-harness`），含健康检查。
-- **Fake Harness 模式** — `OMA_FAKE_HARNESS=1` 可在无 LLM API Key 时本地开发与 CI 运行。
-- **冒烟与集成脚本** — `scripts/e2e/smoke-all.sh`（全量套件），以及 `scripts/workflows/`、`scripts/multi-agent/`、`scripts/e2e/` 下的工作流 / Team / 沙箱 / managed harness 冒烟。
 
 ## 部署
 
@@ -148,7 +141,7 @@ Compose 会把 `SESSION_OUTPUTS_DIR`、`FILES_DATA_DIR` 等指向共享卷 `/dat
 └─────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  oma-sdk（Python，同级 ../oma-sdk/）                                     │
+│  oma-sdk（Python）— https://github.com/www6v/oma-sdk                    │
 │  anthropic base_url + httpx OMA-only 资源 · cookbook 辅助函数            │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -181,7 +174,7 @@ Compose 会把 `SESSION_OUTPUTS_DIR`、`FILES_DATA_DIR` 等指向共享卷 `/dat
 | | `call_agent/` | 子 Agent 委派运行时。 |
 | | `workflow_*.py` | 对接 `pi_dynamic_workflows` 的 OMA bootstrap 与子 Agent runner。 |
 | | `extensions/` | `web_fetch`、`web_search`、`mcp_loader`、`call_agent` 等 piPy 扩展。 |
-| **SDK（Python）** | `../oma-sdk/oma_sdk` | `OMAClient` + 资源类；cookbook 流式辅助函数。 |
+| **SDK（Python）** | [oma-sdk](https://github.com/www6v/oma-sdk) | `OMAClient` + 资源类；cookbook 流式辅助函数。 |
 
 ### 一次用户回合的请求流程
 
@@ -309,11 +302,12 @@ POST   /v1/clawhub/*                       # ClawHub 技能搜索 / 导入
 
 ## Python SDK
 
-SDK 位于同级 [`../oma-sdk/`](../oma-sdk/)，版本 `oma-sdk` v0.1.0（仅本地安装，尚未发布到 PyPI）。
+SDK 位于 [`https://github.com/www6v/oma-sdk`](https://github.com/www6v/oma-sdk)，版本 `oma-sdk` v0.1.0（仅本地安装，尚未发布到 PyPI）。
 
 ```bash
 # 需 platform 在 :8787 运行
-cd ../oma-sdk
+git clone https://github.com/www6v/oma-sdk.git
+cd oma-sdk
 uv sync
 export OMA_API_KEY=dev-key
 
@@ -332,7 +326,7 @@ agent = client.agents.create(name="hello", model={"id": "claude-sonnet-4-6"})
 session = client.sessions.create(agent=agent.id)
 ```
 
-资源覆盖与 Cookbook 示例见 [oma-sdk/SDK-PLAN.md](../oma-sdk/SDK-PLAN.md) 与 [oma-sdk/example/README.md](../oma-sdk/example/README.md)。
+资源覆盖与 Cookbook 示例见 [SDK-PLAN.md](https://github.com/www6v/oma-sdk/blob/master/SDK-PLAN.md) 与 [example/README.md](https://github.com/www6v/oma-sdk/blob/master/example/README.md)。
 
 ## Console 控制台
 
@@ -402,12 +396,12 @@ session = client.sessions.create(agent=agent.id)
 
 - **平台：** Go 1.24+、chi、go-sql-driver/mysql
 - **执行器：** Python 3.11+、FastAPI、piPy（`pi_coding_agent`）、`pi_dynamic_workflows`
-- **SDK：** Python 3.11+、anthropic SDK 0.111+ 自定义 `base_url`、httpx（同级 `oma-sdk/`）
+- **SDK：** Python 3.11+、anthropic SDK 0.111+ 自定义 `base_url`、httpx（[oma-sdk](https://github.com/www6v/oma-sdk)）
 - **部署：** 单个 Go 静态二进制 + Python 侧车；Docker Compose 用于本地/类生产运行；平台数据使用 MySQL
 
 ## 仍属延后范围
 
-Cloudflare Workers / SessionDO、**CF Container** 沙箱（不同于上文已实现的 local/OpenSandbox/E2B 等可插拔沙箱）、R2/FUSE memory、Analytics Engine 计费、**browser tools**（T16）、多区域 D1 分片、**`/v1/cap-cli/oauth`**、Integration install → vault 双写，以及 **TypeScript SDK / `oma` CLI** 包仍在范围外或仅部分实现。**Python SDK**（`oma-sdk` v0.1.0）已在同级 [`../oma-sdk/`](../oma-sdk/) 本地可用，尚未发布到 PyPI。完整对齐矩阵与 backlog 见 [MVP-MIGRATION-PLAN.md](./docs/api-migrate/MVP-MIGRATION-PLAN.md)。
+Cloudflare Workers / SessionDO、**CF Container** 沙箱（不同于上文已实现的 local/OpenSandbox/E2B 等可插拔沙箱）、R2/FUSE memory、Analytics Engine 计费、**browser tools**（T16）、多区域 D1 分片、**`/v1/cap-cli/oauth`**、Integration install → vault 双写，以及 **TypeScript SDK / `oma` CLI** 包仍在范围外或仅部分实现。**Python SDK**（`oma-sdk` v0.1.0）见 [`https://github.com/www6v/oma-sdk`](https://github.com/www6v/oma-sdk)，尚未发布到 PyPI。完整对齐矩阵与 backlog 见 [MVP-MIGRATION-PLAN.md](./docs/api-migrate/MVP-MIGRATION-PLAN.md)。
 
 ## 许可证
 
