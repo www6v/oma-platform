@@ -362,6 +362,9 @@ func parseMemoryStoreListParams(
 	if req.URL.Query().Get("include_archived") == "true" {
 		opts.IncludeArchived = true
 	}
+	if req.URL.Query().Get("include_builtin") == "true" {
+		opts.IncludeBuiltin = true
+	}
 	if raw := req.URL.Query().Get("created_after"); raw != "" {
 		ms, err := parseISOToMs(raw)
 		if err != nil {
@@ -450,6 +453,7 @@ func serializeMemoryStore(row *store.MemoryStoreRow) map[string]any {
 		"type":       "memory_store",
 		"id":         row.ID,
 		"name":       row.Name,
+		"kind":       row.Kind,
 		"created_at": msToISO(row.CreatedAt),
 	}
 	if row.Description.Valid {

@@ -31,6 +31,7 @@ type MemoryStoreRow struct {
 	TenantID    string
 	Name        string
 	Description sql.NullString
+	Kind        string
 	CreatedAt   int64
 	UpdatedAt   sql.NullInt64
 	ArchivedAt  sql.NullInt64
@@ -70,6 +71,7 @@ type MemoryVersionRow struct {
 type MemoryStoreListOptions struct {
 	Status        string
 	IncludeArchived bool
+	IncludeBuiltin  bool
 	CreatedAfter  *int64
 	CreatedBefore *int64
 }
@@ -104,13 +106,42 @@ func (r *MemoryStoreRepo) CreateStore(
 	}
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO memory_stores (
-			id, tenant_id, name, description, created_at
-		) VALUES (?, ?, ?, ?, ?)
+			id, tenant_id, name, description, kind, created_at
+		) VALUES (?, ?, ?, ?, 'standard', ?)
 	`, id, tenantID, name, nullSQLString(desc), now)
 	if err != nil {
 		return nil, err
 	}
 	return r.GetStore(ctx, tenantID, id)
+}
+
+// EnsureStoreWithID idempotently creates a store with a deterministic ID.
+// Used for agent built-in memory stores (kind "agent_builtin").
+func (r *MemoryStoreRepo) EnsureStoreWithID(
+	ctx context.Context,
+	tenantID, storeID, name, kind string,
+) (*MemoryStoreRow, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, errors.New("name is required")
+	}
+	if storeID == "" {
+		return nil, errors.New("store id is required")
+	}
+	if kind == "" {
+		kind = "standard"
+	}
+	tenantID = tenantOrDefault(tenantID)
+	now := time.Now().UnixMilli()
+	_, err := r.db.ExecContext(ctx, `
+		INSERT IGNORE INTO memory_stores (
+			id, tenant_id, name, kind, created_at
+		) VALUES (?, ?, ?, ?, ?)
+	`, storeID, tenantID, name, kind, now)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetStore(ctx, tenantID, storeID)
 }
 
 // GetStore returns one store or nil.
@@ -119,7 +150,7 @@ func (r *MemoryStoreRepo) GetStore(
 	tenantID, storeID string,
 ) (*MemoryStoreRow, error) {
 	row := r.db.QueryRowContext(ctx, `
-		SELECT id, tenant_id, name, description, created_at, updated_at, archived_at
+		SELECT id, tenant_id, name, description, kind, created_at, updated_at, archived_at
 		FROM memory_stores
 		WHERE tenant_id = ? AND id = ?
 	`, tenantOrDefault(tenantID), storeID)
@@ -141,11 +172,14 @@ func (r *MemoryStoreRepo) ListStores(
 		}
 	}
 	query := `
-		SELECT id, tenant_id, name, description, created_at, updated_at, archived_at
+		SELECT id, tenant_id, name, description, kind, created_at, updated_at, archived_at
 		FROM memory_stores
 		WHERE tenant_id = ?
 	`
 	args := []any{tenantOrDefault(tenantID)}
+	if !opts.IncludeBuiltin {
+		query += " AND kind = 'standard'"
+	}
 	switch status {
 	case "active":
 		query += " AND archived_at IS NULL"
@@ -627,6 +661,24 @@ func (r *MemoryStoreRepo) getMemoryByPath(
 	return mem, err
 }
 
+// GetMemoryByPath returns the hydrated memory at path, or nil when absent.
+func (r *MemoryStoreRepo) GetMemoryByPath(
+	ctx context.Context,
+	tenantID, storeID, path string,
+) (*MemoryRow, error) {
+	if err := r.requireStore(ctx, tenantID, storeID); err != nil {
+		return nil, err
+	}
+	mem, err := r.getMemoryByPath(ctx, storeID, path)
+	if err != nil || mem == nil {
+		return mem, err
+	}
+	if err := r.hydrateMemory(mem); err != nil {
+		return nil, err
+	}
+	return mem, nil
+}
+
 func (r *MemoryStoreRepo) insertMemory(
 	ctx context.Context,
 	tenantID, storeID, path, content, actorType, actorID, operation string,
@@ -791,7 +843,7 @@ func nullInt64Ptr(n *int64) sql.NullInt64 {
 func scanMemoryStore(row *sql.Row) (*MemoryStoreRow, error) {
 	var s MemoryStoreRow
 	err := row.Scan(
-		&s.ID, &s.TenantID, &s.Name, &s.Description,
+		&s.ID, &s.TenantID, &s.Name, &s.Description, &s.Kind,
 		&s.CreatedAt, &s.UpdatedAt, &s.ArchivedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -806,7 +858,7 @@ func scanMemoryStore(row *sql.Row) (*MemoryStoreRow, error) {
 func scanMemoryStoreRows(rows *sql.Rows) (*MemoryStoreRow, error) {
 	var s MemoryStoreRow
 	err := rows.Scan(
-		&s.ID, &s.TenantID, &s.Name, &s.Description,
+		&s.ID, &s.TenantID, &s.Name, &s.Description, &s.Kind,
 		&s.CreatedAt, &s.UpdatedAt, &s.ArchivedAt,
 	)
 	if err != nil {

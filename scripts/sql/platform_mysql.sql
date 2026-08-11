@@ -502,12 +502,14 @@ CREATE TABLE memory_stores (
   tenant_id VARCHAR(64) NOT NULL,
   name VARCHAR(255) NOT NULL,
   description TEXT,
+  kind VARCHAR(32) NOT NULL DEFAULT 'standard',
   created_at BIGINT NOT NULL,
   updated_at BIGINT,
   archived_at BIGINT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE INDEX idx_memory_stores_tenant ON memory_stores(tenant_id, created_at);
+CREATE INDEX idx_memory_stores_kind ON memory_stores(tenant_id, kind);
 
 -- ============================================================================
 -- 28. memories（合并 010 + 013 blob_key）

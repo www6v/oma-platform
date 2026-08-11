@@ -14,6 +14,7 @@ from oma_adapter.compaction import (
     should_compact,
 )
 from oma_adapter.env_packages import ensure_environment_packages
+from oma_adapter import memory_bridge
 from oma_adapter.subagent_bridge import build_subagent_runtime
 from oma_adapter.team_bridge import build_team_runtime
 from pi_subagent.resolve import enrich_parent_for_delegation, resolve_sub_agents
@@ -508,6 +509,16 @@ async def _run_turn_core(
                 outbound_proxy_api_key=outbound_proxy_api_key,
             ),
         )
+        memory_runtime = memory_bridge.build_memory_runtime(
+            session_id=session_id,
+            tenant_id=tenant_id,
+            agent_id=agent.id,
+            workdir=workdir,
+            platform_base=platform_base,
+            internal_secret=internal_secret,
+            events=working_events,
+        )
+        memory_runtime_token = memory_bridge.configure_runtime(memory_runtime)
         mcp_servers = mcp_servers_from_agent(agent)
         mcp_runtime = await discover_mcp_tools(
             mcp_servers=mcp_servers,
@@ -699,6 +710,8 @@ async def _run_turn_core(
                     return_exceptions=True,
                 )
 
+            await memory_bridge.drain_memory_background_tasks(memory_runtime)
+
             pending_ids = pending_custom_tool_ids(oma_events)
             return TurnResponse(
                 events=oma_events,
@@ -714,6 +727,7 @@ async def _run_turn_core(
             clear_mcp_runtime()
             clear_custom_tools_runtime()
             clear_subagent_runtime()
+            memory_bridge.reset_runtime(memory_runtime_token)
             if team_runtime_token is not None:
                 active_team = get_team_runtime()
                 if active_team is not None and active_team.session_id:

@@ -69,6 +69,9 @@ SUBAGENT_EXTENSION_PATH = (
 CUSTOM_TOOLS_EXTENSION_PATH = (
     Path(__file__).resolve().parent / "extensions" / "custom_tools.py"
 )
+MEMORY_EXTENSION_PATH = (
+    Path(__file__).resolve().parent / "extensions" / "memory_extension.py"
+)
 
 
 def resolve_subagent_extension_path() -> Path:
@@ -110,6 +113,27 @@ def resolve_teams_extension_path() -> Path:
         / "piPy-teams"
         / "extensions"
         / "team_extension.py"
+    )
+
+
+def resolve_memory_extension_path() -> Path:
+    """Resolve piPy memory extension path.
+
+    Search order:
+    1. PIPY_MEMORY_EXTENSION env var (explicit override)
+    2. Bundled copy inside oma_adapter/extensions/ (Docker / installed)
+    3. Sibling repo piPy-hermes-memory/extensions/ (local dev)
+    """
+    explicit = os.environ.get("PIPY_MEMORY_EXTENSION")
+    if explicit:
+        return Path(explicit)
+    if MEMORY_EXTENSION_PATH.is_file():
+        return MEMORY_EXTENSION_PATH
+    return (
+        Path(__file__).resolve().parents[3]
+        / "piPy-hermes-memory"
+        / "extensions"
+        / "memory_extension.py"
     )
 
 TEAM_TOOL_NAMES = frozenset(
@@ -193,6 +217,12 @@ def _extension_paths_for_agent(agent: AgentSnapshot) -> list[str]:
     )
     if needs_team and team_ext_path.is_file():
         paths.append(str(team_ext_path))
+    from oma_adapter import memory_bridge
+
+    if memory_bridge.memory_enabled():
+        memory_ext_path = resolve_memory_extension_path()
+        if memory_ext_path.is_file():
+            paths.append(str(memory_ext_path))
     from oma_adapter.custom_tools import custom_tools_from_agent
 
     if custom_tools_from_agent(agent) and CUSTOM_TOOLS_EXTENSION_PATH.is_file():

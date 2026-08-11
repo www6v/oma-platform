@@ -304,6 +304,7 @@ func NewRouter(deps Deps) http.Handler {
 		GitHubGateway: deps.GitHubGateway,
 		SlackGateway:  deps.SlackGateway,
 		RuntimeRooms:  deps.RuntimeRooms,
+		MemoryStores:  deps.MemoryStores,
 	})
 
 	mountOmaAliasRoutes(r, deps)

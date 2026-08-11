@@ -29,6 +29,7 @@ type internalDeps struct {
 	GitHubGateway *github.Handler
 	SlackGateway  *slack.Handler
 	RuntimeRooms  *runtime.Registry
+	MemoryStores  *store.MemoryStoreRepo
 }
 
 func mountInternalRoutes(r chi.Router, deps internalDeps) {
@@ -38,7 +39,8 @@ func mountInternalRoutes(r chi.Router, deps internalDeps) {
 		deps.LinearGateway != nil ||
 		deps.GitHubGateway != nil ||
 		deps.SlackGateway != nil ||
-		deps.RuntimeRooms != nil
+		deps.RuntimeRooms != nil ||
+		deps.MemoryStores != nil
 	if !hasRoutes {
 		return
 	}
@@ -87,6 +89,10 @@ func mountInternalRoutes(r chi.Router, deps internalDeps) {
 				"/runtimes/{id}/attach-harness",
 				handleInternalRuntimeAttachHarness(deps),
 			)
+		}
+		if deps.MemoryStores != nil {
+			r.Get("/agent_memory", handleInternalAgentMemoryGet(deps))
+			r.Post("/agent_memory/write", handleInternalAgentMemoryWrite(deps))
 		}
 	})
 }
