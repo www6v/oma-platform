@@ -106,6 +106,8 @@ services:
       dockerfile: deploy/Dockerfile.openviking
       args:
         PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
+    ports:
+      - "1933:1933"
     volumes:
       - ./openviking.conf.json:/etc/openviking/ov.conf:ro
       - ov-data:/var/lib/openviking
