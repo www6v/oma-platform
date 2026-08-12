@@ -547,6 +547,7 @@ dependencies = [
     { name = "pi-ai" },
     { name = "pi-coding-agent" },
     { name = "pi-dynamic-workflows" },
+    { name = "pi-memory" },
     { name = "pi-subagent" },
     { name = "pi-team" },
     { name = "pymysql" },
@@ -570,6 +571,7 @@ requires-dist = [
     { name = "pi-ai", git = "https://gitee.com/www6v6v/piPy.git?subdirectory=packages%2Fpi_ai&branch=v0.3.0" },
     { name = "pi-coding-agent", git = "https://gitee.com/www6v6v/piPy.git?subdirectory=packages%2Fpi_coding_agent&branch=v0.3.0" },
     { name = "pi-dynamic-workflows", git = "https://gitee.com/www6v6v/pipy-dynamic-workflows.git?subdirectory=packages%2Fpi_dynamic_workflows&branch=v0.1.0" },
+    { name = "pi-memory", git = "https://gitee.com/www6v6v/piPy-hermes-memory.git?subdirectory=packages%2Fpi_memory&branch=master" },
     { name = "pi-subagent", git = "https://gitee.com/www6v6v/pipy-subagent.git?subdirectory=packages%2Fpi_subagent&branch=v0.1.0" },
     { name = "pi-team", git = "https://gitee.com/www6v6v/pipy-teams.git?subdirectory=packages%2Fpi_team&branch=v0.1.0" },
     { name = "pymysql", specifier = ">=1.1.0" },
@@ -642,6 +644,16 @@ dependencies = [
     { name = "pymysql" },
     { name = "pyyaml" },
     { name = "uuid-utils" },
+]
+
+[[package]]
+name = "pi-memory"
+version = "0.0.1"
+source = { git = "https://gitee.com/www6v6v/piPy-hermes-memory.git?subdirectory=packages%2Fpi_memory&branch=master#0f9491b738af9dc1a3726c3ecfdb2e640198695b" }
+dependencies = [
+    { name = "httpx" },
+    { name = "pi-agent" },
+    { name = "pi-ai" },
 ]
 
 [[package]]

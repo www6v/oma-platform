@@ -194,5 +194,5 @@ piPy-hermes-memory/
 ### 待办 / 后续
 
 - [x] E2E：真实 OpenViking 实例（2026-08-11 通过，记录见上）
-- [ ] `piPy-hermes-memory` 发布到 gitee 后，harness 依赖由本地 path 切换为 git pin
+- [x] `piPy-hermes-memory` 已发布到 gitee（www6v6v/piPy-hermes-memory），harness 依赖已切换为 git pin（branch master）
 - [ ] （可选）`oma_adapter/extensions/memory_extension.py` bundled 副本，供 Docker/生产部署（与 subagent/teams 同构）
