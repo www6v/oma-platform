@@ -1,0 +1,23 @@
+{
+  "default_account": "default",
+  "default_user": "default",
+  "storage": {
+    "workspace": "/var/lib/openviking"
+  },
+  "vlm": {
+    "provider": "openai",
+    "model": "qwen3.7-plus",
+    "api_key": "YOUR_DASHSCOPE_API_KEY",
+    "api_base": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "timeout": 120.0
+  },
+  "embedding": {
+    "dense": {
+      "provider": "dashscope",
+      "model": "text-embedding-v4",
+      "api_key": "YOUR_DASHSCOPE_API_KEY",
+      "dimension": 1024,
+      "input": "text"
+    }
+  }
+}

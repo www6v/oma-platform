@@ -167,6 +167,17 @@ env `OMA_MEMORY_PROVIDER` = `builtin`（默认）| `openviking`；非法值降�
 - `on_memory_write` → `POST /api/v1/content/write` 把整篇文档镜像到
   `viking://user/{tenant_id}/memories/{target}.md`。
 
+### 部署形态
+
+- 本地开发：OV server 独立进程（`openviking-server --config ... --port 1933`），
+  harness 经 `OPENVIKING_ENDPOINT` 连接。
+- 容器部署：`deploy/Dockerfile.openviking` + compose 服务 `oma-openviking`，
+  配置模板 `deploy/openviking.conf.example.json`（真实 key 填进 gitignored 的
+  `deploy/openviking.conf.json`）；harness 副本经 compose `environment` 注入
+  `OMA_MEMORY_PROVIDER=openviking` 与 in-network endpoint。
+- DashScope 文本模型（如 `text-embedding-v4`）必须设 `embedding.dense.input = "text"`，
+  默认 `multimodal` 会命中 multimodal-embedding 端点导致 400。
+
 ### Provider 工具（4 个，`ProviderToolAdapter` 统一路由）
 
 | 工具 | 后端端点 |

@@ -97,6 +97,26 @@ services:
       oma-harness-2:
         condition: service_healthy
 
+  # OpenViking context database (external memory provider).
+  # Create deploy/openviking.conf.json from openviking.conf.example.json
+  # (fill in the DashScope API key) before `docker compose up`.
+  oma-openviking:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.openviking
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
+    volumes:
+      - ./openviking.conf.json:/etc/openviking/ov.conf:ro
+      - ov-data:/var/lib/openviking
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:1933/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
   # Same-host piPy replicas behind oma-harness-lb. Multi-replica requires
   # DATABASE_URL (MySQL); shared OMA_DATABASE_PATH SQLite is unsafe.
   # Per-replica LiteLLM virtual keys: use deploy/docker-compose.harness-keys.yml
@@ -106,12 +126,26 @@ services:
     environment:
       OMA_PLATFORM_URL: http://oma-platform:8787
       OMA_DATABASE_PATH: /data/oma.db
+      # External memory: OpenViking provider (built-in memory still runs;
+      # OV adds tenant-level cross-session/cross-agent recall).
+      OMA_MEMORY_PROVIDER: openviking
+      OPENVIKING_ENDPOINT: http://oma-openviking:1933
+      OPENVIKING_AGENT: oma
+    depends_on:
+      oma-openviking:
+        condition: service_healthy
 
   oma-harness-2:
     <<: *harness-common
     environment:
       OMA_PLATFORM_URL: http://oma-platform:8787
       OMA_DATABASE_PATH: /data/oma.db
+      OMA_MEMORY_PROVIDER: openviking
+      OPENVIKING_ENDPOINT: http://oma-openviking:1933
+      OPENVIKING_AGENT: oma
+    depends_on:
+      oma-openviking:
+        condition: service_healthy
 
   # Dedicated harness LB on host :8090. Coexists with any existing Nginx on :80
   # (e.g. notebooklm-nginx) — no port clash.
@@ -126,3 +160,6 @@ services:
         condition: service_healthy
       oma-harness-2:
         condition: service_healthy
+
+volumes:
+  ov-data:

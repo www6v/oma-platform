@@ -13,3 +13,4 @@ scripts/node_modules/
 scripts/sandbox/node_modules/
 console/node_modules/
 console/dist/
+deploy/openviking.conf.json
