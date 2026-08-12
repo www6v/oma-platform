@@ -41,7 +41,7 @@ Memory 解决的是「**跨 Session、跨 Agent 仍要保留的结构化上下�
 | **更新 / 删除单条** | API 客户端 | `PATCH .../memories/{id}`、`DELETE ...` | ✅ |
 | **删除整个 store** | API 客户端 | `DELETE /v1/memory_stores/{id}`（级联 memories + blob） | ✅ |
 | **Agent 回合内编辑挂载文件** | piPy 工具（写 workdir） | `resource_mounter` 仅 **回合开始** 从 store → workdir | ❌（仅 Session 沙箱内有效） |
-| **Agent 专用 memory 工具** | — | 未实现 | ❌（规划中） |
+| **Agent 专用 memory 工具** | piPy memory extension | `memory` 工具 → `POST /v1/internal/agent_memory/write` | ✅（见 [Agent 内置记忆设计](./agent-memory.md)） |
 
 每次成功 create / update / delete 都会在 `memory_versions` 追加一条审计记录（actor 为 `user/{id}` 或 `api_key/api`）。
 
