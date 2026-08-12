@@ -232,7 +232,9 @@ def test_resolve_memory_extension_path_default() -> None:
     path = resolve_memory_extension_path()
     assert path.name == "memory_extension.py"
     assert path.is_file()
-    assert "piPy-hermes-memory" in str(path)
+    # The bundled copy ships inside the harness image (Docker / installed);
+    # the sibling piPy-hermes-memory checkout is only the local-dev fallback.
+    assert "oma_adapter" in str(path) and "extensions" in str(path)
 
 
 def test_resolve_memory_extension_path_env_override(

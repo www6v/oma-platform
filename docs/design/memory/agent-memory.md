@@ -268,7 +268,7 @@ sequenceDiagram
 - `register()` 先于 prompt 解析、APPEND_SYSTEM.md 追加行为依赖 piPy v0.3.0，
   升级 piPy 时需回归这两点；
 - 其他 harness（ACP/managed）暂不获得 memory 能力（v1 仅 piPy）；
-- 可选：`oma_adapter/extensions/memory_extension.py` bundled 副本（Docker/生产部署）。
+- bundled 副本 `harness/oma_adapter/extensions/memory_extension.py` 已随镜像交付（Docker/生产部署必需，容器内无兄弟仓库可回退）；源仓库为 `piPy-hermes-memory/extensions/memory_extension.py`，升级扩展时需同步两处。
 
 ## 相关文档
 
