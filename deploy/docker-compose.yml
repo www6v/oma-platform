@@ -143,6 +143,8 @@ services:
       OMA_MEMORY_PROVIDER: openviking
       OPENVIKING_ENDPOINT: http://oma-openviking:1933
       OPENVIKING_AGENT: oma
+      # Must match server.root_api_key in deploy/openviking.conf.json (trusted mode).
+      OPENVIKING_API_KEY: ${OPENVIKING_API_KEY:-oma-ov-internal-dev}
     depends_on:
       oma-openviking:
         condition: service_healthy

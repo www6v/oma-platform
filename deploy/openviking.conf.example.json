@@ -19,5 +19,9 @@
       "dimension": 1024,
       "input": "text"
     }
+  },
+  "server": {
+    "auth_mode": "trusted",
+    "root_api_key": "oma-ov-internal-dev"
   }
 }

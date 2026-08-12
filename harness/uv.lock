@@ -649,7 +649,7 @@ dependencies = [
 [[package]]
 name = "pi-memory"
 version = "0.0.1"
-source = { git = "https://gitee.com/www6v6v/piPy-hermes-memory.git?subdirectory=packages%2Fpi_memory&branch=master#0f9491b738af9dc1a3726c3ecfdb2e640198695b" }
+source = { git = "https://gitee.com/www6v6v/piPy-hermes-memory.git?subdirectory=packages%2Fpi_memory&branch=master#956665532f506852d9d8c2d3993830ef57b95931" }
 dependencies = [
     { name = "httpx" },
     { name = "pi-agent" },

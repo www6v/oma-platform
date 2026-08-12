@@ -177,6 +177,11 @@ env `OMA_MEMORY_PROVIDER` = `builtin`（默认）| `openviking`；非法值降�
   `OMA_MEMORY_PROVIDER=openviking` 与 in-network endpoint。
 - DashScope 文本模型（如 `text-embedding-v4`）必须设 `embedding.dense.input = "text"`，
   默认 `multimodal` 会命中 multimodal-embedding 端点导致 400。
+- 容器内 OV 必须绑 `0.0.0.0`，而 `auth_mode=dev` 禁止非 localhost 绑定；采用
+  `auth_mode=trusted` + `server.root_api_key`：信任 `X-OpenViking-Account/User`
+  头（保留 tenant 命名空间）并校验共享 key；harness 经 `OPENVIKING_API_KEY` 携带
+  （provider 需同时发送 key 与 identity 头，见 piPy-hermes-memory 9566655）。
+  `api_key` 模式不可用：root key 仅限管理路径，且忽略 identity 头。
 
 ### Provider 工具（4 个，`ProviderToolAdapter` 统一路由）
 
