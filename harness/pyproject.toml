@@ -29,8 +29,7 @@ pi-coding-agent = { git = "https://gitee.com/www6v6v/piPy.git", branch = "v0.3.0
 pi-ai = { git = "https://gitee.com/www6v6v/piPy.git", branch = "v0.3.0", subdirectory = "packages/pi_ai" }
 pi-subagent = { git = "https://gitee.com/www6v6v/pipy-subagent.git", branch = "v0.1.0", subdirectory = "packages/pi_subagent" }
 pi-team = { git = "https://gitee.com/www6v6v/pipy-teams.git", branch = "v0.1.0", subdirectory = "packages/pi_team" }
-# Local dev: switch to a gitee pin once piPy-hermes-memory is published.
-pi-memory = { path = "../../piPy-hermes-memory/packages/pi_memory", editable = true }
+pi-memory = { git = "https://gitee.com/www6v6v/piPy-hermes-memory.git", branch = "master", subdirectory = "packages/pi_memory" }
 pi-dynamic-workflows = { git = "https://gitee.com/www6v6v/pipy-dynamic-workflows.git", branch = "v0.1.0", subdirectory = "packages/pi_dynamic_workflows" }
 oma-sdk = { git = "https://gitee.com/www6v6v/oma-sdk.git", branch = "master" }
 
