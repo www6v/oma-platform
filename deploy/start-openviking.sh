@@ -12,6 +12,7 @@
 #   OPENVIKING_PORT      bind port     (default 1933)
 #   OPENVIKING_VENV      venv dir      (default: reuse /tmp/ov-e2e-venv, else deploy/.openviking-venv)
 #   OPENVIKING_VERSION   package pin   (default 0.4.13)
+#   OPENVIKING_WEB_STUDIO_DIR  pre-built studio dist (default: auto overlay)
 #   DASHSCOPE_API_KEY    fills the placeholder when the config is generated
 set -euo pipefail
 
@@ -24,6 +25,8 @@ PORT="${OPENVIKING_PORT:-1933}"
 LOG="${OPENVIKING_LOG:-/tmp/openviking-server.log}"
 PID_FILE="${OPENVIKING_PID_FILE:-/tmp/openviking-server.pid}"
 OV_VERSION="${OPENVIKING_VERSION:-0.4.13}"
+STUDIO_OVERLAY="$SCRIPT_DIR/.openviking-studio-dist"
+INJECT_JS="$SCRIPT_DIR/openviking-studio-inject.js"
 
 if [ -n "${OPENVIKING_VENV:-}" ]; then
   VENV="$OPENVIKING_VENV"
@@ -59,6 +62,47 @@ ensure_config() {
     echo "[ov] ERROR: $CONFIG contains placeholder keys — set DASHSCOPE_API_KEY and delete it, or edit by hand." >&2
     exit 1
   fi
+}
+
+ensure_studio_overlay() {
+  # Serve a patched copy of the bundled Web Studio so deep links can assert a
+  # tenant identity (ov_user/ov_account query params -> ov_console_connection).
+  # The stock studio only ever shows the tree of its own asserted user, while
+  # OMA memories live under viking://user/<tenant>/.
+  if [ -n "${OPENVIKING_WEB_STUDIO_DIR:-}" ]; then
+    return 0
+  fi
+  [ -f "$INJECT_JS" ] || return 0
+  local src src_hash marker
+  src="$("$VENV/bin/python" -c 'import pathlib, openviking; print(pathlib.Path(openviking.__file__).parent / "web_studio" / "dist")' 2>/dev/null)" || src=""
+  if [ -z "$src" ] || [ ! -f "$src/index.html" ]; then
+    return 0
+  fi
+  src_hash="$(md5 -q "$src/index.html" 2>/dev/null || md5sum "$src/index.html" | cut -d" " -f1)"
+  marker="$STUDIO_OVERLAY/.source"
+  if [ -f "$marker" ] && [ "$(cat "$marker")" = "$src#$src_hash" ] && [ -f "$STUDIO_OVERLAY/index.html" ]; then
+    export OPENVIKING_WEB_STUDIO_DIR="$STUDIO_OVERLAY"
+    return 0
+  fi
+  echo "[ov] building studio overlay at $STUDIO_OVERLAY"
+  rm -rf "$STUDIO_OVERLAY"
+  mkdir -p "$STUDIO_OVERLAY"
+  cp -R "$src/." "$STUDIO_OVERLAY/"
+  "$VENV/bin/python" - "$STUDIO_OVERLAY/index.html" "$INJECT_JS" <<'PYINJECT'
+import sys
+
+index_path, inject_path = sys.argv[1], sys.argv[2]
+html = open(index_path, encoding="utf-8").read()
+if "oma-studio" not in html:
+    script = open(inject_path, encoding="utf-8").read()
+    marker = '<script type="module"'
+    if marker not in html:
+        raise SystemExit("[ov] ERROR: module script tag not found in studio index.html")
+    html = html.replace(marker, "<script>\n" + script + "\n</script>\n    " + marker, 1)
+    open(index_path, "w", encoding="utf-8").write(html)
+PYINJECT
+  printf '%s' "$src#$src_hash" > "$marker"
+  export OPENVIKING_WEB_STUDIO_DIR="$STUDIO_OVERLAY"
 }
 
 running_pid() {
@@ -102,7 +146,8 @@ cmd_start() {
   fi
   ensure_venv
   ensure_config
-  echo "[ov] starting (venv=$VENV config=$CONFIG log=$LOG)"
+  ensure_studio_overlay
+  echo "[ov] starting (venv=$VENV config=$CONFIG log=$LOG studio=${OPENVIKING_WEB_STUDIO_DIR:-bundled})"
   # double-fork + setsid: fully detach so the server survives shell/session exit
   python3 - "$VENV/bin/openviking-server" "$CONFIG" "$HOST" "$PORT" "$LOG" "$PID_FILE" << 'PYLAUNCH'
 import os, sys

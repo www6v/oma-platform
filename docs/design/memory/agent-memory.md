@@ -183,6 +183,27 @@ env `OMA_MEMORY_PROVIDER` = `builtin`（默认）| `openviking`；非法值降�
   （provider 需同时发送 key 与 identity 头，见 piPy-hermes-memory 9566655）。
   `api_key` 模式不可用：root key 仅限管理路径，且忽略 identity 头。
 
+### Studio 可见性与身份深链（ov_user）
+
+- 现象：memory 已写入 `viking://user/{tenant_id}/memories/...`（`content/read`
+  可读出），但 OV Studio（`/studio/playground`）文件树只显示 `user/default`。
+- 根因：Studio 仅显示**其所断言身份**的 user 空间。trusted 模式下 Studio 把
+  localStorage `ov_console_connection` 里的 `accountId/userId` 作为
+  `X-OpenViking-Account/User` 头发送；默认连接为 `default/default`，而
+  `/api/v1/fs/tree?uri=viking://user` 按所断言 user 限定作用域（admin 角色也
+  不能越权浏览其他 user），因此看不到 tenant 的目录。
+- 修复：OV server 支持 `OPENVIKING_WEB_STUDIO_DIR` 指定 Studio 静态目录。
+  部署侧生成一份 overlay（`deploy/.openviking-studio-dist`，gitignored），在
+  `index.html` 的 app bundle 之前注入 `deploy/openviking-studio-inject.js`：
+  读取查询参数 `ov_user` / `ov_account` / `ov_api_key`，写入
+  `ov_console_connection`（同时把 `baseUrl` 指向当前 origin），随后剥离这些
+  参数避免覆盖后续手动切换。容器部署经 `deploy/docker-entrypoint-openviking.sh`
+  在启动时做同样的 overlay 构建。
+- 用法：想让 Studio 看到哪个 tenant，就用深链打开，例如
+  `http://127.0.0.1:1933/studio/playground?ov_user=tn_xxx&uri=viking://user/memories/`；
+  之后同浏览器内 Studio 会记住该身份，普通打开 `/studio/` 也保持。
+- 手动切换（不用深链）：Studio 连接设置 → 身份与凭证 → `User` 字段填 tenant id。
+
 ### Provider 工具（4 个，`ProviderToolAdapter` 统一路由）
 
 | 工具 | 后端端点 |

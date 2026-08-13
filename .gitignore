@@ -16,3 +16,4 @@ console/dist/
 deploy/openviking.conf.json
 deploy/.openviking-venv
 bin/
+deploy/.openviking-studio-dist
