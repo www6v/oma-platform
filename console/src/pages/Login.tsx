@@ -5,6 +5,7 @@ import { useAuth } from "../lib/auth";
 import { toast } from "sonner";
 import { Turnstile } from "../components/Turnstile";
 import { Logo } from "../components/Logo";
+import { GitHubIcon } from "../components/icons";
 import { setActiveTenantId } from "../lib/api";
 import { useApiQuery } from "../lib/useApiQuery";
 
@@ -356,7 +357,46 @@ export function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-bg p-4">
+    <div className="relative min-h-screen flex items-center justify-center bg-bg p-4">
+      {/* Top-right external links */}
+      <nav
+        aria-label="Project links"
+        className="absolute top-10 right-10 sm:top-12 sm:right-12 flex items-center gap-1 sm:gap-2"
+      >
+        <a
+          href="https://github.com/www6v/oma-platform"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="oma-platform on GitHub"
+          aria-label="oma-platform on GitHub"
+          className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-fg-muted hover:text-fg hover:bg-bg-surface transition-colors duration-[var(--dur-quick)] ease-[var(--ease-soft)]"
+        >
+          <GitHubIcon className="w-4 h-4 shrink-0" />
+          <span className="hidden sm:inline">oma-platform</span>
+        </a>
+        <a
+          href="https://github.com/www6v/oma-sdk"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="oma-sdk on GitHub"
+          aria-label="oma-sdk on GitHub"
+          className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-fg-muted hover:text-fg hover:bg-bg-surface transition-colors duration-[var(--dur-quick)] ease-[var(--ease-soft)]"
+        >
+          <GitHubIcon className="w-4 h-4 shrink-0" />
+          <span className="hidden sm:inline">oma-sdk</span>
+        </a>
+        <a
+          href="https://platform.claude.com/"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Claude Platform"
+          aria-label="Claude Platform"
+          className="inline-flex items-center rounded-md px-2 py-1.5 text-xs text-fg-muted hover:text-fg hover:bg-bg-surface transition-colors duration-[var(--dur-quick)] ease-[var(--ease-soft)]"
+        >
+          Claude
+        </a>
+      </nav>
+
       <div className="w-full max-w-sm space-y-6">
         {/* Header */}
         <div className="text-center">
