@@ -59,6 +59,16 @@
   factory 接线不变。已对 `124.221.28.203:8642` 做 E2E 验证：一次工具
   调用产生 `tool_use{name:terminal}` → `tool_result` → 5 条递增
   `agent.message` → `span.model_request_end`。
+- DeepSeek harness（dsh web 网关）接入 + Docker 部署。已落到 `harness`
+  分支（2026-08-20）。`DeepSeekClient`（`internal/harness/deepseek_client.go`）
+  通过 dsh RPC（`session.create` / `session.prompt`）+ WebSocket
+  `/api/events.mux` 驱动 DeepSeek harness，发射统一的 oma session event
+  词汇（`agent.message` / `agent.tool_use` / `agent.tool_result` /
+  `span.model_request_end`）。前端 `getMergedEventText` 修复了累积式流式
+  事件的 prefix 检测，解决 dedup 截断和内容重复。Docker 部署含
+  `Dockerfile.dsh`（3 阶段 pnpm 构建）、`docker-compose.yml` 新增
+  `oma-deepseek` 服务、`start-deepseek.sh` 本地启动脚本。
+  `OMA_DEEPSEEK_ENABLED` 控制 console 选项显隐。
 
 **延期（保留在方案中作为设计参考，从活动架构图 §3 和 §10.13 中移除）：**
 
