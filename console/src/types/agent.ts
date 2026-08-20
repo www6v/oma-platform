@@ -29,14 +29,21 @@ export interface AgentRecord {
    *  selection, harness binding, appendable prompt presets. Not on the
    *  wire-format AgentConfig (those fields live in OMA-private storage).
    *
-   *  `runtime_binding` has two shapes depending on `harness`:
-   *    - "acp-proxy" → `{ runtime_id, acp_agent_id, local_skill_blocklist? }`
-   *      (user-registered daemon on their own machine)
-   *    - "managed"   → `{ agent }` (platform-hosted hermes/openclaw gateway)
+   *  Flat harness kinds (2026-08 flattening): "hermes" | "openclaw" |
+   *  "deepseek" select a gateway harness with no runtime_binding.
+   *  "acp-proxy" keeps `runtime_binding.runtime_id + acp_agent_id`.
+   *  Legacy rows may still carry `harness: "managed"` +
+   *  `runtime_binding.agent` — normalized by the server at dispatch.
    */
   _oma?: {
     aux_model?: { id: string; speed?: string };
-    harness?: "acp-proxy" | "managed" | (string & {});
+    harness?:
+      | "acp-proxy"
+      | "managed"
+      | "hermes"
+      | "openclaw"
+      | "deepseek"
+      | (string & {});
     runtime_binding?:
       | { runtime_id: string; acp_agent_id: string; local_skill_blocklist?: string[] }
       | { agent: string };

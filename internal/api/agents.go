@@ -109,7 +109,7 @@ func buildCreateAgentInput(
 			input.AuxModelSpeed = auxSpeed
 		}
 	}
-	if msg := validateManagedBinding(input.Harness, input.RuntimeBinding); msg != "" {
+	if msg := validateHarnessBinding(input.Harness, input.RuntimeBinding); msg != "" {
 		return store.CreateAgentInput{}, msg
 	}
 	return input, ""
@@ -199,22 +199,43 @@ func buildUpdateAgentInput(body agentPatchBody) (store.UpdateAgentInput, string)
 			}
 		}
 	}
-	if patch.Harness != nil && *patch.Harness == "managed" {
-		if msg := validateManagedBinding(*patch.Harness, patch.RuntimeBinding); msg != "" {
+	if patch.Harness != nil {
+		if msg := validateHarnessBinding(*patch.Harness, patch.RuntimeBinding); msg != "" {
 			return store.UpdateAgentInput{}, msg
 		}
 	}
 	return patch, ""
 }
 
-// validateManagedBinding returns a non-empty error string if harness is
-// "managed" (or the legacy "pipy"-aliased default-loop is not the kind)
-// and runtime_binding fails harness.ParseManagedBinding or names an agent
-// outside harness.KnownAgents. Empty string means OK.
-//
-// Phase 3 of pluggable-harness: catch misconfigured managed agents at
-// write time instead of at first-turn dispatch.
-func validateManagedBinding(harnessKind string, runtimeBinding json.RawMessage) string {
+// flatHarnessKinds lists the one-level harness kinds the Agent API
+// accepts on write. Must stay in sync with harness.normalizeKind.
+var flatHarnessKinds = map[string]bool{
+	"default-loop": true,
+	"pipy":         true, // legacy alias, normalized at dispatch
+	"hermes":       true,
+	"openclaw":     true,
+	"deepseek":     true,
+	"fake":         true,
+	"acp-proxy":    true, // ACP overlay path — validation lives elsewhere
+	"managed":      true, // legacy two-layer form, validated below
+}
+
+// validateHarnessBinding returns a non-empty error string when the
+// harness kind is unknown, or a "managed" kind carries an invalid
+// runtime_binding. Empty string means OK. Accepts both the flat forms
+// (harness="hermes") and the legacy two-layer form
+// (harness="managed" + runtime_binding.agent) so pre-flattening data
+// and external writers keep working.
+func validateHarnessBinding(
+	harnessKind string,
+	runtimeBinding json.RawMessage,
+) string {
+	if harnessKind == "" {
+		return ""
+	}
+	if !flatHarnessKinds[harnessKind] {
+		return "unknown harness kind " + harnessKind
+	}
 	if harnessKind != "managed" {
 		return ""
 	}

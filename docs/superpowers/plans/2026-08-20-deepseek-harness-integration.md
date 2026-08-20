@@ -1143,9 +1143,10 @@ Expected: PASS。
 
 启动后端与 console（`./start-console.sh` 或既有流程），验证：
 
-1. 创建 hermes agent（新格式）→ 保存成功，详情页回显正确
-2. 既有 managed+hermes agent（若库中有）编辑回显不丢 harness
-3. `curl http://127.0.0.1:8787/v1/config/harnesses`（带鉴权头）返回 `{openclaw, hermes, deepseek}` 三字段
+1. 创建 **DeepSeek** agent（新格式）→ 保存成功，详情页回显正确
+2. 创建 hermes / openclaw agent → 不受影响，正常创建
+3. 既有 managed+hermes agent（若库中有）编辑回显不丢 harness
+4. `curl http://127.0.0.1:8787/v1/config/harnesses`（带鉴权头）返回 `{openclaw, hermes, deepseek}` 三字段
 
 记录结果；全部通过则扁平化阶段关闭。
 

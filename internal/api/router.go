@@ -66,10 +66,10 @@ type Deps struct {
 	RateLimit           *ratelimit.Gates
 	OAuthState          *oauthflow.StateStore
 	PublicURL           string
-	// ManagedHarness describes which platform-hosted harnesses (OpenClaw,
-	// Hermes) are enabled. Surfaced to the console UI so the Harness
-	// dropdown can grey out disabled backends.
-	ManagedHarness harness.ManagedHarnessState
+	// ManagedHarness describes which gateway harnesses (OpenClaw,
+	// Hermes, DeepSeek) are enabled. Surfaced to the console UI so the
+	// Harness dropdown can grey out disabled backends.
+	ManagedHarness harness.HarnessState
 	// InstallBridgeHTTP overrides outbound HTTP for install/OAuth (tests).
 	InstallBridgeHTTP *http.Client
 }

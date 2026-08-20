@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"os"
 	"testing"
+
+	"github.com/open-ma/oma-building/internal/store"
 )
 
 // Integration tests that hit the real OpenClaw Gateway. Skipped unless
@@ -98,13 +100,19 @@ func TestIntegration_OpenClawClient_RunTurnStream(t *testing.T) {
 	t.Logf("stream events: %d, final: %q", len(events), events[len(events)-1])
 }
 
-func TestIntegration_NewOpenClawFactory(t *testing.T) {
+func TestIntegration_OpenClawViaRegistry(t *testing.T) {
 	cfg := integrationConfig(t)
-	factory := NewOpenClawFactory(cfg)
+	r := NewRegistry(RegistryConfig{
+		OpenClaw: &OpenClawClient{
+			GatewayURL: cfg.GatewayURL,
+			Token:      cfg.Token,
+			Agent:      OpenclawModel("openclaw"),
+		},
+	})
 
-	c, err := factory(ManagedBinding{Agent: "openclaw"})
+	c, err := r.ClientFor(store.AgentConfig{Harness: "openclaw"})
 	if err != nil {
-		t.Fatalf("factory: %v", err)
+		t.Fatalf("registry: %v", err)
 	}
 	oc, ok := c.(*OpenClawClient)
 	if !ok {

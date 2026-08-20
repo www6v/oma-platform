@@ -52,27 +52,21 @@ func TestClientFor_DefaultLoop_PipyAlias(t *testing.T) {
 }
 
 func TestClientFor_Managed_CallsFactory(t *testing.T) {
-	var captured ManagedBinding
-	factory := func(b ManagedBinding) (Client, error) {
-		captured = b
-		return &stubClient{name: "managed"}, nil
-	}
-	r := NewRegistry(RegistryConfig{ManagedFactory: factory})
+	// Legacy managed+hermes dispatches to HermesClient via normalizeKind.
+	hc := &stubClient{name: "hermes"}
+	r := NewRegistry(RegistryConfig{Default: &stubClient{}, Hermes: hc})
 	raw := json.RawMessage(`{"agent":"hermes"}`)
-	_, err := r.ClientFor(store.AgentConfig{Harness: "managed", RuntimeBinding: raw})
+	got, err := r.ClientFor(store.AgentConfig{Harness: "managed", RuntimeBinding: raw})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if captured.Agent != "hermes" {
-		t.Fatalf("factory should see agent=hermes, got %q", captured.Agent)
+	if got != hc {
+		t.Fatalf("expected hermes client for managed+hermes")
 	}
 }
 
 func TestClientFor_Managed_MissingBinding(t *testing.T) {
-	factory := func(ManagedBinding) (Client, error) {
-		return &stubClient{}, nil
-	}
-	r := NewRegistry(RegistryConfig{ManagedFactory: factory})
+	r := NewRegistry(RegistryConfig{Default: &stubClient{}, Hermes: &stubClient{}})
 	_, err := r.ClientFor(store.AgentConfig{Harness: "managed"})
 	if err == nil {
 		t.Fatalf("expected error for missing runtime_binding")
@@ -80,10 +74,7 @@ func TestClientFor_Managed_MissingBinding(t *testing.T) {
 }
 
 func TestClientFor_Managed_MissingAgentField(t *testing.T) {
-	factory := func(ManagedBinding) (Client, error) {
-		return &stubClient{}, nil
-	}
-	r := NewRegistry(RegistryConfig{ManagedFactory: factory})
+	r := NewRegistry(RegistryConfig{Default: &stubClient{}, OpenClaw: &stubClient{}})
 	_, err := r.ClientFor(store.AgentConfig{
 		Harness:        "managed",
 		RuntimeBinding: json.RawMessage(`{}`),
@@ -166,7 +157,7 @@ func TestClientFor_Force_OverridesEverything(t *testing.T) {
 	def := &stubClient{name: "default"}
 	force := &stubClient{name: "force"}
 	r := NewRegistry(RegistryConfig{Default: def, Force: force})
-	for _, kind := range []string{"", "default-loop", "pipy", "managed", "fake", "nonsense"} {
+	for _, kind := range []string{"", "default-loop", "pipy", "managed", "hermes", "openclaw", "fake", "nonsense"} {
 		got, err := r.ClientFor(store.AgentConfig{
 			Harness:        kind,
 			RuntimeBinding: json.RawMessage(`{"agent":"hermes"}`),
@@ -238,203 +229,158 @@ func TestParseManagedBinding(t *testing.T) {
 	})
 }
 
-func TestNewOpenClawFactory_EmptyGatewayURL_ReturnsStub(t *testing.T) {
-	factory := NewOpenClawFactory(OpenClawConfig{})
-	client, err := factory(ManagedBinding{Agent: "openclaw"})
+func TestClientFor_DeepSeekKind(t *testing.T) {
+	ds := &stubClient{name: "deepseek"}
+	r := NewRegistry(RegistryConfig{Default: &stubClient{}, DeepSeek: ds})
+	got, err := r.ClientFor(store.AgentConfig{Harness: "deepseek"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if _, ok := client.(ManagedClient); !ok {
-		t.Fatalf("expected ManagedClient stub, got %T", client)
+	if got != ds {
+		t.Fatalf("expected deepseek client")
 	}
 }
 
-func TestNewOpenClawFactory_ReturnsOpenClawClient(t *testing.T) {
-	factory := NewOpenClawFactory(OpenClawConfig{
-		GatewayURL: "http://localhost:17772",
-		Token:      "tok",
-	})
-	client, err := factory(ManagedBinding{Agent: "openclaw"})
+func TestClientFor_DeepSeekKind_NotConfigured_ReturnsStub(t *testing.T) {
+	r := NewRegistry(RegistryConfig{Default: &stubClient{}})
+	got, err := r.ClientFor(store.AgentConfig{Harness: "deepseek"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	oc, ok := client.(*OpenClawClient)
-	if !ok {
-		t.Fatalf("expected *OpenClawClient, got %T", client)
-	}
-	if oc.Agent != "openclaw/default" {
-		t.Errorf("agent=%q want openclaw/default", oc.Agent)
-	}
-	if oc.GatewayURL != "http://localhost:17772" {
-		t.Errorf("GatewayURL=%q", oc.GatewayURL)
-	}
-	if oc.Token != "tok" {
-		t.Errorf("Token=%q", oc.Token)
+	if _, ok := got.(ManagedClient); !ok {
+		t.Fatalf("expected ManagedClient stub, got %T", got)
 	}
 }
 
-func TestNewOpenClawFactory_NonOpenclawAgent_PassThrough(t *testing.T) {
-	factory := NewOpenClawFactory(OpenClawConfig{
-		GatewayURL: "http://localhost:17772",
-		Token:      "tok",
-	})
-	for _, tc := range []struct{ binding, wantModel string }{
-		{"hermes", "openclaw/hermes"},
-		{"claude-acp", "openclaw/claude-acp"},
-		{"coding", "openclaw/coding"},
-	} {
-		client, err := factory(ManagedBinding{Agent: tc.binding})
-		if err != nil {
-			t.Fatalf("agent=%q: %v", tc.binding, err)
-		}
-		oc := client.(*OpenClawClient)
-		if oc.Agent != tc.wantModel {
-			t.Errorf("agent=%q: model=%q want %q", tc.binding, oc.Agent, tc.wantModel)
-		}
+func TestClientFor_HermesKind_Flat(t *testing.T) {
+	hc := &stubClient{name: "hermes"}
+	r := NewRegistry(RegistryConfig{Default: &stubClient{}, Hermes: hc})
+	got, err := r.ClientFor(store.AgentConfig{Harness: "hermes"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != hc {
+		t.Fatalf("expected hermes client")
 	}
 }
 
-func TestRegistry_WithOpenClawFactory(t *testing.T) {
-	factory := NewOpenClawFactory(OpenClawConfig{
-		GatewayURL: "http://localhost:17772",
-		Token:      "tok",
+func TestClientFor_OpenClawKind_Flat(t *testing.T) {
+	oc := &stubClient{name: "openclaw"}
+	r := NewRegistry(RegistryConfig{Default: &stubClient{}, OpenClaw: oc})
+	got, err := r.ClientFor(store.AgentConfig{Harness: "openclaw"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != oc {
+		t.Fatalf("expected openclaw client")
+	}
+}
+
+func TestClientFor_LegacyManaged_Hermes(t *testing.T) {
+	hc := &stubClient{name: "hermes"}
+	r := NewRegistry(RegistryConfig{Default: &stubClient{}, Hermes: hc})
+	got, err := r.ClientFor(store.AgentConfig{
+		Harness:        "managed",
+		RuntimeBinding: json.RawMessage(`{"agent":"hermes"}`),
 	})
-	r := NewRegistry(RegistryConfig{
-		Default:        &stubClient{name: "default"},
-		ManagedFactory: factory,
-	})
-	client, err := r.ClientFor(store.AgentConfig{
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != hc {
+		t.Fatalf("managed+hermes must normalize to hermes client")
+	}
+}
+
+func TestClientFor_LegacyManaged_OpenClaw(t *testing.T) {
+	oc := &stubClient{name: "openclaw"}
+	r := NewRegistry(RegistryConfig{Default: &stubClient{}, OpenClaw: oc})
+	got, err := r.ClientFor(store.AgentConfig{
 		Harness:        "managed",
 		RuntimeBinding: json.RawMessage(`{"agent":"openclaw"}`),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	oc, ok := client.(*OpenClawClient)
-	if !ok {
-		t.Fatalf("expected *OpenClawClient, got %T", client)
-	}
-	if oc.Agent != "openclaw/default" {
-		t.Errorf("agent=%q want openclaw/default", oc.Agent)
+	if got != oc {
+		t.Fatalf("managed+openclaw must normalize to openclaw client")
 	}
 }
 
-func TestNewHermesFactory_EmptyGatewayURL_ReturnsStub(t *testing.T) {
-	factory := NewHermesFactory(HermesConfig{})
-	client, err := factory(ManagedBinding{Agent: "hermes"})
+func TestClientFor_HermesKind_NotConfigured_ReturnsStub(t *testing.T) {
+	r := NewRegistry(RegistryConfig{Default: &stubClient{}})
+	got, err := r.ClientFor(store.AgentConfig{Harness: "hermes"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if _, ok := client.(ManagedClient); !ok {
-		t.Fatalf("expected ManagedClient stub, got %T", client)
+	if _, ok := got.(ManagedClient); !ok {
+		t.Fatalf("expected ManagedClient stub, got %T", got)
 	}
 }
 
-func TestNewHermesFactory_ReturnsHermesClient(t *testing.T) {
-	factory := NewHermesFactory(HermesConfig{
-		GatewayURL: "http://localhost:8642",
-		Token:      "hermes-key",
-	})
-	client, err := factory(ManagedBinding{Agent: "hermes"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+func TestNormalizeKind(t *testing.T) {
+	cases := []struct {
+		harness string
+		binding json.RawMessage
+		want    Kind
+	}{
+		{"", nil, KindDefaultLoop},
+		{"pipy", nil, KindDefaultLoop},
+		{"default-loop", nil, KindDefaultLoop},
+		{"hermes", nil, KindHermes},
+		{"openclaw", nil, KindOpenClaw},
+		{"deepseek", nil, KindDeepSeek},
+		{"fake", nil, KindFake},
+		{"managed", json.RawMessage(`{"agent":"hermes"}`), KindHermes},
+		{"managed", json.RawMessage(`{"agent":"openclaw"}`), KindOpenClaw},
+		{"managed", json.RawMessage(`{"agent":"claude-acp"}`), KindOpenClaw},
 	}
-	hc, ok := client.(*HermesClient)
-	if !ok {
-		t.Fatalf("expected *HermesClient, got %T", client)
-	}
-	if hc.Model != "hermes-agent" {
-		t.Errorf("model=%q want hermes-agent", hc.Model)
-	}
-	if hc.GatewayURL != "http://localhost:8642" {
-		t.Errorf("GatewayURL=%q", hc.GatewayURL)
-	}
-	if hc.Token != "hermes-key" {
-		t.Errorf("Token=%q", hc.Token)
-	}
-}
-
-func TestNewManagedFactory_DispatchesByAgent(t *testing.T) {
-	factory := NewManagedFactory(
-		OpenClawConfig{GatewayURL: "http://oc:17772", Token: "oc-tok"},
-		HermesConfig{GatewayURL: "http://hc:8642", Token: "hc-tok"},
-	)
-	// hermes → HermesClient
-	c, err := factory(ManagedBinding{Agent: "hermes"})
-	if err != nil {
-		t.Fatalf("hermes: %v", err)
-	}
-	if _, ok := c.(*HermesClient); !ok {
-		t.Errorf("hermes: expected *HermesClient, got %T", c)
-	}
-	// openclaw → OpenClawClient
-	c, err = factory(ManagedBinding{Agent: "openclaw"})
-	if err != nil {
-		t.Fatalf("openclaw: %v", err)
-	}
-	if _, ok := c.(*OpenClawClient); !ok {
-		t.Errorf("openclaw: expected *OpenClawClient, got %T", c)
-	}
-	// unknown → defaults to OpenClawClient (OpenClaw pass-through)
-	c, err = factory(ManagedBinding{Agent: "claude-acp"})
-	if err != nil {
-		t.Fatalf("claude-acp: %v", err)
-	}
-	if _, ok := c.(*OpenClawClient); !ok {
-		t.Errorf("claude-acp: expected *OpenClawClient (pass-through), got %T", c)
-	}
-}
-
-func TestNewManagedFactory_BothEmpty_ReturnsStub(t *testing.T) {
-	factory := NewManagedFactory(OpenClawConfig{}, HermesConfig{})
-	for _, agent := range []string{"hermes", "openclaw"} {
-		c, err := factory(ManagedBinding{Agent: agent})
+	for _, c := range cases {
+		got, err := normalizeKind(
+			store.AgentConfig{Harness: c.harness, RuntimeBinding: c.binding},
+		)
 		if err != nil {
-			t.Fatalf("%s: %v", agent, err)
+			t.Fatalf("%q: unexpected error: %v", c.harness, err)
 		}
-		if _, ok := c.(ManagedClient); !ok {
-			t.Errorf("%s: expected ManagedClient stub, got %T", agent, c)
-		}
-	}
-}
-
-func TestNewManagedFactory_Disabled_OverridesURL(t *testing.T) {
-	// GatewayURLs configured but explicit Disabled=true must force the
-	// stub client — this is the "switch off" path the env toggle drives.
-	factory := NewManagedFactory(
-		OpenClawConfig{GatewayURL: "http://oc:17772", Token: "oc-tok", Disabled: true},
-		HermesConfig{GatewayURL: "http://hc:8642", Token: "hc-tok", Disabled: true},
-	)
-	for _, agent := range []string{"hermes", "openclaw", "claude-acp"} {
-		c, err := factory(ManagedBinding{Agent: agent})
-		if err != nil {
-			t.Fatalf("%s: %v", agent, err)
-		}
-		if _, ok := c.(ManagedClient); !ok {
-			t.Errorf("%s: disabled must return ManagedClient stub, got %T", agent, c)
+		if got != c.want {
+			t.Errorf("%q+%s: got %q want %q",
+				c.harness, string(c.binding), got, c.want)
 		}
 	}
 }
 
-func TestNewManagedFactory_OneDisabled_RoutesCorrectly(t *testing.T) {
-	// Only OpenClaw disabled — Hermes should still route to a real client.
-	factory := NewManagedFactory(
-		OpenClawConfig{GatewayURL: "http://oc:17772", Token: "oc-tok", Disabled: true},
-		HermesConfig{GatewayURL: "http://hc:8642", Token: "hc-tok"},
-	)
-	hermesClient, err := factory(ManagedBinding{Agent: "hermes"})
-	if err != nil {
-		t.Fatalf("hermes: %v", err)
+func TestNormalizeKind_Managed_Errors(t *testing.T) {
+	cases := []struct {
+		name    string
+		binding json.RawMessage
+	}{
+		{"missing binding", nil},
+		{"empty object", json.RawMessage(`{}`)},
+		{"malformed json", json.RawMessage(`{not json`)},
 	}
-	if _, ok := hermesClient.(*HermesClient); !ok {
-		t.Errorf("hermes: expected *HermesClient, got %T", hermesClient)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := normalizeKind(store.AgentConfig{
+				Harness:        "managed",
+				RuntimeBinding: c.binding,
+			})
+			if err == nil {
+				t.Fatalf("expected error")
+			}
+		})
 	}
+}
 
-	ocClient, err := factory(ManagedBinding{Agent: "openclaw"})
-	if err != nil {
-		t.Fatalf("openclaw: %v", err)
+func TestOpenclawModel(t *testing.T) {
+	cases := []struct{ binding, want string }{
+		{"openclaw", "openclaw/default"},
+		{"hermes", "openclaw/hermes"},
+		{"claude-acp", "openclaw/claude-acp"},
+		{"coding", "openclaw/coding"},
 	}
-	if _, ok := ocClient.(ManagedClient); !ok {
-		t.Errorf("openclaw: expected ManagedClient stub, got %T", ocClient)
+	for _, c := range cases {
+		if got := OpenclawModel(c.binding); got != c.want {
+			t.Errorf("OpenclawModel(%q) = %q, want %q",
+				c.binding, got, c.want)
+		}
 	}
 }

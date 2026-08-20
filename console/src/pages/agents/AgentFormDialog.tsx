@@ -111,11 +111,11 @@ const INITIAL_FORM = {
   /** Local skill ids to HIDE from this agent's ACP child. Empty = all
    *  detected local skills are visible (the daemon's default). */
   localSkillBlocklist: [] as string[],
-  // When set, agent uses harness:"managed" — its loop runs on the
-  // platform's shared OpenClaw/Hermes gateway instead of either the cloud
-  // SessionDO loop or a user-registered runtime. Mutually exclusive with
-  // runtimeId; the harness dropdown enforces this.
-  managedAgent: "" as "" | "hermes" | "openclaw",
+  // When set, agent uses a flat gateway harness kind (hermes / openclaw /
+  // deepseek) as _oma.harness. Mutually exclusive with runtimeId; the
+  // harness dropdown enforces this. Legacy rows may still carry
+  // harness:"managed" + runtime_binding.agent — normalized on read.
+  managedAgent: "" as "" | "hermes" | "openclaw" | "deepseek",
   // Built-in tool policy. `agent_toolset_20260401` toolset's
   // `default_config` controls fallback enabled/permission for any
   // tool without a specific override. `toolOverrides` is a per-tool
@@ -329,9 +329,10 @@ export function AgentFormDialog({
       if (metadata) {
         payload.metadata = metadata;
       }
-      // Harness binding — exactly one of three shapes reaches the wire:
+      // Harness binding — exactly one of two shapes reaches the wire:
       //   1. runtimeId + acpAgentId → acp-proxy (user's own daemon)
-      //   2. managedAgent           → managed (platform-hosted gateway)
+      //   2. managedAgent           → flat gateway kind (hermes/openclaw/
+      //      deepseek) as _oma.harness directly
       //   3. neither                → default cloud loop (no _oma block)
       // The harness dropdown enforces mutual exclusion between (1) and (2).
       if (form.runtimeId && form.acpAgentId) {
@@ -346,10 +347,7 @@ export function AgentFormDialog({
           },
         };
       } else if (form.managedAgent) {
-        payload._oma = {
-          harness: "managed",
-          runtime_binding: { agent: form.managedAgent },
-        };
+        payload._oma = { harness: form.managedAgent };
       }
 
       const agent = await api<Agent>("/v1/agents", {
@@ -460,10 +458,7 @@ export function AgentFormDialog({
         },
       };
     } else if (form.managedAgent) {
-      config._oma = {
-        harness: "managed",
-        runtime_binding: { agent: form.managedAgent },
-      };
+      config._oma = { harness: form.managedAgent };
     }
     return config;
   };
@@ -484,9 +479,6 @@ export function AgentFormDialog({
           createMode === "yaml"
             ? (yaml.load(codeValue) as Record<string, unknown>)
             : JSON.parse(codeValue);
-        // runtime_binding has two shapes depending on harness:
-        //   - acp-proxy → { runtime_id, acp_agent_id, local_skill_blocklist? }
-        //   - managed   → { agent }
         // Pull harness from _oma.harness (canonical) or top-level harness
         // (legacy). runtime_binding lives inside _oma on the wire format.
         const oma = (parsed._oma ?? parsed) as Record<string, unknown>;
@@ -499,8 +491,14 @@ export function AgentFormDialog({
               agent?: string;
             }
           | undefined;
-        const managedAgent =
-          harness === "managed" && (rb?.agent === "hermes" || rb?.agent === "openclaw")
+        // Flat kinds select the gateway directly; legacy rows carry
+        // harness="managed" + runtime_binding.agent and are normalized
+        // here so old configs still edit correctly.
+        const flatKinds = ["hermes", "openclaw", "deepseek"];
+        const managedAgent = flatKinds.includes(harness)
+          ? harness
+          : harness === "managed" &&
+              (rb?.agent === "hermes" || rb?.agent === "openclaw")
             ? rb.agent
             : "";
         // Tool policy round-trip: extract default + per-tool overrides
@@ -550,7 +548,7 @@ export function AgentFormDialog({
           localSkillBlocklist: Array.isArray(rb?.local_skill_blocklist)
             ? rb.local_skill_blocklist
             : [],
-          managedAgent: managedAgent as "" | "hermes" | "openclaw",
+          managedAgent: managedAgent as "" | "hermes" | "openclaw" | "deepseek",
           toolDefaultEnabled: dc.enabled ?? true,
           toolDefaultPermission:
             dc.permission_policy?.type === "always_ask" ? "always_ask" : "always_allow",
@@ -960,17 +958,21 @@ function BasicTab({
   const [managedHarness, setManagedHarness] = useState<{
     openclaw: boolean;
     hermes: boolean;
-  }>({ openclaw: true, hermes: true });
+    deepseek: boolean;
+  }>({ openclaw: true, hermes: true, deepseek: true });
   useEffect(() => {
     let cancelled = false;
-    api<{ openclaw?: boolean; hermes?: boolean }>("/v1/config/harnesses")
+    api<{ openclaw?: boolean; hermes?: boolean; deepseek?: boolean }>("/v1/config/harnesses")
       .then((res) => {
         if (cancelled) return;
         const openclaw = res?.openclaw !== false;
         const hermes = res?.hermes !== false;
+        // DeepSeek always enabled — it's a first-class harness and most
+        // deployments won't have OMA_DEEPSEEK_GATEWAY_URL set yet.
+        const deepseek = true;
         // eslint-disable-next-line no-console
-        console.info("[harness-config] openclaw=%s hermes=%s raw=%o", openclaw, hermes, res);
-        setManagedHarness({ openclaw, hermes });
+        console.info("[harness-config] openclaw=%s hermes=%s deepseek=%s raw=%o", openclaw, hermes, deepseek, res);
+        setManagedHarness({ openclaw, hermes, deepseek });
       })
       .catch((err) => {
         // eslint-disable-next-line no-console
@@ -1055,8 +1057,12 @@ function BasicTab({
       {form.managedAgent && (
         <p className="text-xs text-fg-subtle bg-bg-surface px-3 py-2 rounded-lg">
           Model is determined by the platform's{" "}
-          {form.managedAgent === "hermes" ? "Hermes" : "OpenClaw"} gateway — it uses its own
-          LLM credentials.
+          {form.managedAgent === "hermes"
+            ? "Hermes"
+            : form.managedAgent === "deepseek"
+              ? "DeepSeek"
+              : "OpenClaw"}{" "}
+          gateway — it uses its own LLM credentials.
         </p>
       )}
       {/* Thinking level — cloud/piPy harness only; stored in agent.metadata. */}
@@ -1109,11 +1115,10 @@ function BasicTab({
       </div>
       {/* Harness — where the agent's loop runs. Three shapes:
           - Cloud: default OMA SessionDO loop (no _oma block on the wire)
-          - Managed: platform-hosted OpenClaw/Hermes gateway
-            (_oma.harness = "managed", runtime_binding.agent)
+          - Flat gateway kinds: hermes / openclaw / deepseek as _oma.harness
           - Registered runtime: user's own daemon via acp-proxy
             (_oma.harness = "acp-proxy", runtime_binding.runtime_id + acp_agent_id)
-          The mutual exclusion between managed ↔ runtime is enforced here —
+          The mutual exclusion between gateway ↔ runtime is enforced here —
           picking one clears the other. */}
       <div>
         <label className="text-sm text-fg-muted block mb-1">
@@ -1137,7 +1142,7 @@ function BasicTab({
               return;
             }
             if (v.startsWith("__managed_")) {
-              const agent = v.slice("__managed_".length, -2) as "hermes" | "openclaw";
+              const agent = v.slice("__managed_".length, -2) as "hermes" | "openclaw" | "deepseek";
               setForm({
                 ...form,
                 runtimeId: "",
@@ -1170,6 +1175,10 @@ function BasicTab({
               OpenClaw
               {!managedHarness.openclaw ? " — disabled" : ""}
             </SelectOption>
+            <SelectOption value="__managed_deepseek__" disabled={!managedHarness.deepseek}>
+              DeepSeek
+              {!managedHarness.deepseek ? " — disabled" : ""}
+            </SelectOption>
           </SelectGroup>
           {runtimes.length > 0 && (
             <SelectGroup>
@@ -1189,8 +1198,12 @@ function BasicTab({
         {form.managedAgent && (
           <p className="text-xs text-fg-subtle mt-2">
             Sessions run on the platform's shared{" "}
-            {form.managedAgent === "hermes" ? "Hermes" : "OpenClaw"} gateway — no daemon to
-            install. The full conversation history is replayed each turn (stateless).
+            {form.managedAgent === "hermes"
+              ? "Hermes"
+              : form.managedAgent === "deepseek"
+                ? "DeepSeek"
+                : "OpenClaw"}{" "}
+            gateway — no daemon to install. The full conversation history is replayed each turn (stateless).
           </p>
         )}
         {!form.managedAgent && form.runtimeId && (

@@ -179,10 +179,37 @@ func main() {
 		Token:      os.Getenv("OMA_HERMES_API_KEY"),
 		Disabled:   envDisabled("OMA_HERMES_ENABLED"),
 	}
+	deepseekCfg := harness.DeepSeekConfig{
+		GatewayURL: os.Getenv("OMA_DEEPSEEK_GATEWAY_URL"),
+		Token:      os.Getenv("OMA_DEEPSEEK_TOKEN"),
+		Disabled:   envDisabled("OMA_DEEPSEEK_ENABLED"),
+	}
 	harnessRegistry := harness.NewRegistry(harness.RegistryConfig{
-		Default:        harnessClient,
-		Force:          harnessForceOverride,
-		ManagedFactory: harness.NewManagedFactory(openclawCfg, hermesCfg),
+		Default: harnessClient,
+		Force:   harnessForceOverride,
+		Hermes: harnessGatewayClient(hermesCfg.Disabled, hermesCfg.GatewayURL,
+			func() harness.Client {
+				return &harness.HermesClient{
+					GatewayURL: hermesCfg.GatewayURL,
+					Token:      hermesCfg.Token,
+					Model:      "hermes-agent",
+				}
+			}),
+		OpenClaw: harnessGatewayClient(openclawCfg.Disabled, openclawCfg.GatewayURL,
+			func() harness.Client {
+				return &harness.OpenClawClient{
+					GatewayURL: openclawCfg.GatewayURL,
+					Token:      openclawCfg.Token,
+					Agent:      harness.OpenclawModel("openclaw"),
+				}
+			}),
+		DeepSeek: harnessGatewayClient(deepseekCfg.Disabled, deepseekCfg.GatewayURL,
+			func() harness.Client {
+				return &harness.DeepSeekClient{
+					GatewayURL: deepseekCfg.GatewayURL,
+					Token:      deepseekCfg.Token,
+				}
+			}),
 	})
 	effectiveHarness := harnessClient
 	if harnessForceOverride != nil {
@@ -371,7 +398,7 @@ func main() {
 		RateLimit:         rateGates,
 		OAuthState:        oauthState,
 		PublicURL:         publicURL,
-		ManagedHarness:    harness.ManagedState(openclawCfg, hermesCfg),
+		ManagedHarness:    harness.HarnessAvailability(openclawCfg, hermesCfg, deepseekCfg),
 	})
 
 	log.Printf("oma-server listening on %s", addr)
@@ -426,4 +453,18 @@ func envDisabled(key string) bool {
 		return true
 	}
 	return false
+}
+
+// harnessGatewayClient returns nil when the gateway is disabled or
+// unconfigured — the harness.Registry substitutes the ManagedClient stub,
+// preserving pre-flattening fallback behavior.
+func harnessGatewayClient(
+	disabled bool,
+	gatewayURL string,
+	build func() harness.Client,
+) harness.Client {
+	if disabled || gatewayURL == "" {
+		return nil
+	}
+	return build()
 }

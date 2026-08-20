@@ -12,11 +12,22 @@ import (
 type Kind string
 
 const (
-	// KindDefaultLoop is the pipy HTTP sidecar. The legacy alias "pipy" is
+	// KindDefaultLoop is the piPy HTTP sidecar. The legacy alias "pipy" is
 	// accepted on input and normalized to KindDefaultLoop.
 	KindDefaultLoop Kind = "default-loop"
-	// KindManaged is the platform-hosted per-tenant daemon pool (see §10).
+	// KindManaged is the legacy two-layer kind. Agents written before the
+	// 2026-08 flattening carry harness="managed" plus runtime_binding.agent;
+	// normalizeKind maps them onto the flat gateway kinds at dispatch time.
+	// Kept for legacy data only — new agents write the flat kinds directly.
 	KindManaged Kind = "managed"
+	// KindHermes is the Hermes Agent gateway client.
+	KindHermes Kind = "hermes"
+	// KindOpenClaw is the OpenClaw Gateway client.
+	KindOpenClaw Kind = "openclaw"
+	// KindDeepSeek is the DeepSeek harness (dsh web) gateway client.
+	// Declared here so validation/state code has the constant; the
+	// dispatch case lands with DeepSeekClient.
+	KindDeepSeek Kind = "deepseek"
 	// KindFake is the test stub. OMA_FAKE_HARNESS env var resolves here.
 	KindFake Kind = "fake"
 )
@@ -97,85 +108,35 @@ type HermesConfig struct {
 	Disabled bool
 }
 
-// NewOpenClawFactory returns a ManagedFactory that creates OpenClawClient
-// instances per binding. The binding.Agent field maps to the OpenClaw
-// model id:
-//
-//	"openclaw" → "openclaw/default"
-//	"<other>"  → "openclaw/<other>"
-//
-// When cfg.GatewayURL is empty the factory returns the ManagedClient stub
-// instead, preserving backward compatibility for tests and deployments
-// that haven't configured an OpenClaw Gateway yet.
-func NewOpenClawFactory(cfg OpenClawConfig) func(ManagedBinding) (Client, error) {
-	return func(b ManagedBinding) (Client, error) {
-		if cfg.Disabled || cfg.GatewayURL == "" {
-			return ManagedClient{}, nil
-		}
-		model := "openclaw/" + b.Agent
-		if b.Agent == "openclaw" {
-			model = "openclaw/default"
-		}
-		return &OpenClawClient{
-			GatewayURL: cfg.GatewayURL,
-			Token:      cfg.Token,
-			Agent:      model,
-		}, nil
-	}
-}
-
-// NewHermesFactory returns a ManagedFactory that creates HermesClient
-// instances per binding. The binding.Agent field maps to the Hermes model
-// id — by default "hermes-agent" for all agents, but the binding may
-// override via runtime_binding.model if needed in the future.
-//
-// When cfg.GatewayURL is empty the factory returns the ManagedClient stub.
-func NewHermesFactory(cfg HermesConfig) func(ManagedBinding) (Client, error) {
-	return func(b ManagedBinding) (Client, error) {
-		if cfg.Disabled || cfg.GatewayURL == "" {
-			return ManagedClient{}, nil
-		}
-		return &HermesClient{
-			GatewayURL: cfg.GatewayURL,
-			Token:      cfg.Token,
-			Model:      "hermes-agent",
-		}, nil
-	}
-}
-
-// NewManagedFactory returns a ManagedFactory that dispatches by
-// binding.Agent — "hermes" routes to HermesConfig, everything else routes
-// to OpenClawConfig. When both configs have empty GatewayURL the factory
-// falls back to the ManagedClient stub.
-func NewManagedFactory(oc OpenClawConfig, hc HermesConfig) func(ManagedBinding) (Client, error) {
-	ocFactory := NewOpenClawFactory(oc)
-	hFactory := NewHermesFactory(hc)
-	return func(b ManagedBinding) (Client, error) {
-		if b.Agent == "hermes" {
-			return hFactory(b)
-		}
-		return ocFactory(b)
-	}
-}
-
 // Registry resolves a harness.Client per agent based on the agent's
 // `_oma.harness` metadata. One Registry is constructed at process start
 // and threaded through every session.Machine.
 type Registry struct {
-	defaultClient Client
-	managedFactory func(ManagedBinding) (Client, error)
-	fakeClient    Client
-	forceClient   Client // if non-nil, returned for every agent (env-var override)
+	defaultClient  Client
+	hermesClient   Client
+	openclawClient Client
+	deepseekClient Client
+	fakeClient     Client
+	forceClient    Client // if non-nil, returned for every agent (env-var override)
 }
 
-// RegistryConfig holds the per-kind client factories.
+// RegistryConfig holds the per-kind clients. The gateway kinds are
+// stateless HTTP clients constructed once at process start (the former
+// ManagedFactory indirection existed for the never-implemented daemon
+// pool and was removed by the 2026-08 flattening).
 type RegistryConfig struct {
 	// Default is the client returned for KindDefaultLoop (and for agents
 	// with no _oma.harness set, since "" normalizes to default-loop).
 	Default Client
-	// ManagedFactory builds a Client for a given ManagedBinding. Invoked
-	// per-turn so the factory may hand out pooled / per-tenant clients.
-	ManagedFactory func(ManagedBinding) (Client, error)
+	// Hermes is the client for KindHermes. Nil falls back to the
+	// ManagedClient stub.
+	Hermes Client
+	// OpenClaw is the client for KindOpenClaw. Nil falls back to the
+	// ManagedClient stub.
+	OpenClaw Client
+	// DeepSeek is the client for KindDeepSeek. Nil falls back to the
+	// ManagedClient stub.
+	DeepSeek Client
 	// Fake is the client returned for KindFake. Defaults to &FakeClient{}
 	// when nil.
 	Fake Client
@@ -184,23 +145,19 @@ type RegistryConfig struct {
 	Force Client
 }
 
-// NewRegistry builds a Registry from cfg. When ManagedFactory is nil, the
-// registry falls back to a ManagedClient stub whose RunTurn returns 501 —
-// Phase 3 behavior. Phase 4 wires a real pool-backed factory.
+// NewRegistry builds a Registry from cfg. Gateway kinds that are nil
+// fall back to the ManagedClient stub in ClientFor, preserving
+// pre-flattening fallback behavior.
 func NewRegistry(cfg RegistryConfig) *Registry {
 	fake := cfg.Fake
 	if fake == nil {
 		fake = &FakeClient{}
 	}
-	managedFactory := cfg.ManagedFactory
-	if managedFactory == nil {
-		managedFactory = func(ManagedBinding) (Client, error) {
-			return ManagedClient{}, nil
-		}
-	}
 	return &Registry{
 		defaultClient:  cfg.Default,
-		managedFactory: managedFactory,
+		hermesClient:   cfg.Hermes,
+		openclawClient: cfg.OpenClaw,
+		deepseekClient: cfg.DeepSeek,
 		fakeClient:     fake,
 		forceClient:    cfg.Force,
 	}
@@ -209,15 +166,56 @@ func NewRegistry(cfg RegistryConfig) *Registry {
 // DefaultOnly builds a Registry that returns defaultClient for every agent
 // regardless of _oma.harness. Use this to migrate existing tests with a
 // 1-line change: `Harness: c` → `HarnessRegistry: DefaultOnly(c)`.
-// Managed kind falls back to the ManagedClient stub.
+// Gateway kinds fall back to the ManagedClient stub.
 func DefaultOnly(defaultClient Client) *Registry {
 	return &Registry{
 		defaultClient: defaultClient,
-		managedFactory: func(ManagedBinding) (Client, error) {
-			return ManagedClient{}, nil
-		},
-		fakeClient: &FakeClient{},
+		fakeClient:    &FakeClient{},
 	}
+}
+
+// normalizeKind maps an agent's harness fields onto a flat Kind.
+// Legacy two-layer agents (harness="managed" + runtime_binding.agent) are
+// normalized here at dispatch time, the same pattern as the "pipy" alias
+// for default-loop — no data migration needed.
+func normalizeKind(agent store.AgentConfig) (Kind, error) {
+	kind := Kind(agent.Harness)
+	switch kind {
+	case "":
+		return KindDefaultLoop, nil
+	case "pipy":
+		return KindDefaultLoop, nil
+	case KindDefaultLoop, KindHermes, KindOpenClaw, KindDeepSeek, KindFake:
+		return kind, nil
+	case KindManaged:
+		b, err := ParseManagedBinding(agent.RuntimeBinding)
+		if err != nil {
+			return "", err
+		}
+		switch b.Agent {
+		case "hermes":
+			return KindHermes, nil
+		case "openclaw":
+			return KindOpenClaw, nil
+		default:
+			// claude-acp / codex-acp / anything else keeps the
+			// pre-flattening pass-through to the OpenClaw client
+			// (model "openclaw/<agent>" — see OpenclawModel).
+			return KindOpenClaw, nil
+		}
+	}
+	return "", fmt.Errorf("harness registry: unknown kind %q", kind)
+}
+
+// OpenclawModel maps a legacy runtime_binding.agent value to the
+// OpenClaw model id. Pre-flattening behavior: "openclaw" becomes
+// "openclaw/default", anything else becomes "openclaw/<agent>".
+// Exported so cmd/oma-server can assemble the single client.
+func OpenclawModel(bindingAgent string) string {
+	if bindingAgent == "openclaw" {
+		return "openclaw/default"
+	}
+	return "openclaw/" + bindingAgent
 }
 
 // ClientFor resolves the harness.Client for the given agent config.
@@ -225,30 +223,36 @@ func (r *Registry) ClientFor(agent store.AgentConfig) (Client, error) {
 	if r.forceClient != nil {
 		return r.forceClient, nil
 	}
-	kind := Kind(agent.Harness)
-	switch kind {
-	case "":
-		kind = KindDefaultLoop
-	case "pipy":
-		kind = KindDefaultLoop
+	kind, err := normalizeKind(agent)
+	if err != nil {
+		return nil, err
 	}
 	switch kind {
 	case KindDefaultLoop:
 		if r.defaultClient == nil {
-			return nil, fmt.Errorf("harness registry: default-loop client not configured")
+			return nil, fmt.Errorf(
+				"harness registry: default-loop client not configured")
 		}
 		return r.defaultClient, nil
-	case KindManaged:
-		b, err := ParseManagedBinding(agent.RuntimeBinding)
-		if err != nil {
-			return nil, err
+	case KindHermes:
+		if r.hermesClient == nil {
+			return ManagedClient{}, nil
 		}
-		return r.managedFactory(b)
+		return r.hermesClient, nil
+	case KindOpenClaw:
+		if r.openclawClient == nil {
+			return ManagedClient{}, nil
+		}
+		return r.openclawClient, nil
+	case KindDeepSeek:
+		if r.deepseekClient == nil {
+			return ManagedClient{}, nil
+		}
+		return r.deepseekClient, nil
 	case KindFake:
 		return r.fakeClient, nil
-	default:
-		return nil, fmt.Errorf("harness registry: unknown kind %q", kind)
 	}
+	return nil, fmt.Errorf("harness registry: unknown kind %q", kind)
 }
 
 // ParseManagedBinding parses AgentConfig.RuntimeBinding for harness=managed.
@@ -266,22 +270,41 @@ func ParseManagedBinding(raw json.RawMessage) (ManagedBinding, error) {
 	return b, nil
 }
 
-// ManagedHarnessState describes which platform-hosted managed harnesses
-// are currently enabled. Surfaced via the /v1/config/harnesses endpoint
-// so the console UI can grey out disabled options in the Harness
-// dropdown.
-type ManagedHarnessState struct {
+// HarnessState describes which gateway harnesses are currently enabled.
+// Surfaced via the /v1/config/harnesses endpoint so the console UI can
+// grey out disabled options in the Harness dropdown.
+type HarnessState struct {
 	OpenClaw bool `json:"openclaw"`
 	Hermes   bool `json:"hermes"`
+	DeepSeek bool `json:"deepseek"`
 }
 
-// State returns the on/off state of each managed harness based on the
-// configs used to build the factory. A harness is considered enabled
-// when it is not Disabled AND its GatewayURL is configured (otherwise
-// the factory returns the stub client).
-func ManagedState(oc OpenClawConfig, hc HermesConfig) ManagedHarnessState {
-	return ManagedHarnessState{
+// HarnessAvailability returns the on/off state of each gateway harness
+// based on the configs used to build the clients. A harness is considered
+// enabled when it is not Disabled AND its GatewayURL is configured.
+func HarnessAvailability(
+	oc OpenClawConfig,
+	hc HermesConfig,
+	ds DeepSeekConfig,
+) HarnessState {
+	return HarnessState{
 		OpenClaw: !oc.Disabled && oc.GatewayURL != "",
 		Hermes:   !hc.Disabled && hc.GatewayURL != "",
+		DeepSeek: !ds.Disabled && ds.GatewayURL != "",
 	}
+}
+
+// DeepSeekConfig holds the configuration for the DeepSeek harness (dsh
+// web) gateway integration. When GatewayURL is empty or Disabled the
+// registry falls back to the ManagedClient stub and the console greys
+// out the DeepSeek option.
+type DeepSeekConfig struct {
+	// GatewayURL is the dsh web gateway base URL, e.g.
+	// "http://dsh:3080". No trailing slash.
+	GatewayURL string
+	// Token is the optional bearer token. dsh web ships without auth;
+	// the field exists for future upstream support and reverse proxies.
+	Token string
+	// Disabled toggles the DeepSeek harness off.
+	Disabled bool
 }

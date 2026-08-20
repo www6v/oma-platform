@@ -1,0 +1,6 @@
+# DeepSeek harness (dsh web gateway)
+OMA_DEEPSEEK_GATEWAY_URL=http://127.0.0.1:3080
+OMA_DEEPSEEK_ENABLED=1
+
+# Disable fake harness override so real harness clients are used
+OMA_FAKE_HARNESS=0
