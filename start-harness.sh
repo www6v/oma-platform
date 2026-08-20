@@ -3,6 +3,22 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Detect Windows (Git Bash / MSYS / Cygwin) vs POSIX for venv paths and tooling.
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) IS_WINDOWS=1 ;;
+  *) IS_WINDOWS=0 ;;
+esac
+
+if [[ "$IS_WINDOWS" == "1" ]]; then
+  VENV_BIN="${ROOT_DIR}/harness/.venv/Scripts"
+  UVICORN_BIN="${VENV_BIN}/uvicorn.exe"
+  VENV_PY="${VENV_BIN}/python.exe"
+else
+  VENV_BIN="${ROOT_DIR}/harness/.venv/bin"
+  UVICORN_BIN="${VENV_BIN}/uvicorn"
+  VENV_PY="${VENV_BIN}/python"
+fi
+
 if [[ -f "${ROOT_DIR}/.env" ]]; then
   set -a
   # shellcheck disable=SC1091
@@ -29,7 +45,16 @@ export no_proxy="${no_proxy:-$NO_PROXY}"
 cd "${ROOT_DIR}/harness"
 
 # Kill any process occupying port 8090
-lsof -ti:8090 | xargs kill -9 2>/dev/null || true
+if command -v lsof >/dev/null 2>&1; then
+  lsof -ti:8090 | xargs kill -9 2>/dev/null || true
+elif [[ "$IS_WINDOWS" == "1" ]] && command -v netstat >/dev/null 2>&1; then
+  # netstat -ano => "TCP  0.0.0.0:8090  0.0.0.0:0  LISTENING  12345"
+  for pid in $(netstat -ano | awk '$2 ~ /:8090$/ && $4 == "LISTENING" {print $5}' | sort -u); do
+    if [[ -n "$pid" && "$pid" != "0" ]]; then
+      taskkill //PID "$pid" //F >/dev/null 2>&1 || true
+    fi
+  done
+fi
 
 if ! command -v uv >/dev/null 2>&1; then
   echo "error: uv is required to install harness dependencies" >&2
@@ -46,9 +71,18 @@ if [[ "${OMA_COOKBOOK_PACKAGES:-0}" == "1" ]]; then
     echo "error: uv is required for OMA_COOKBOOK_PACKAGES=1" >&2
     exit 1
   fi
-  uv pip install --python "${ROOT_DIR}/harness/.venv/bin/python" pandas plotly
+  uv pip install --python "${VENV_PY}" pandas plotly
 fi
 
-exec "${ROOT_DIR}/harness/.venv/bin/uvicorn" oma_adapter.main:app \
+if [[ "$IS_WINDOWS" == "1" ]]; then
+  # uv's .exe trampolines in Scripts/ fail with "Failed to canonicalize
+  # script path" on paths containing special chars (e.g. "++myCode");
+  # launch uvicorn via the module form instead.
+  exec "${VENV_PY}" -m uvicorn oma_adapter.main:app \
+    --host 0.0.0.0 \
+    --port 8090
+fi
+
+exec "${UVICORN_BIN}" oma_adapter.main:app \
   --host 0.0.0.0 \
   --port 8090

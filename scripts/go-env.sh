@@ -37,12 +37,18 @@ _oma_workspace_root="$(cd "${_oma_platform_root}/.." && pwd)" || \
   _oma_go_env_fail "cannot resolve workspace root from ${_oma_platform_root}"
 
 GO_BIN="${_oma_workspace_root}/.tools/go/bin/go"
-if [[ ! -x "${GO_BIN}" ]]; then
-  _oma_go_env_fail "Go toolchain not found at ${GO_BIN}"
+if [[ -x "${GO_BIN}" ]]; then
+  export GOROOT="${_oma_workspace_root}/.tools/go"
+  export PATH="${GOROOT}/bin:${PATH}"
+else
+  # Fall back to the system Go toolchain when no workspace copy exists.
+  GO_BIN="$(command -v go || true)"
+  if [[ -z "${GO_BIN}" ]]; then
+    _oma_go_env_fail "Go toolchain not found at ${_oma_workspace_root}/.tools/go/bin/go and no 'go' on PATH"
+  fi
+  GO_BIN="$(cd "$(dirname "${GO_BIN}")" && pwd)/$(basename "${GO_BIN}")"
+  export PATH="$(dirname "${GO_BIN}"):${PATH}"
 fi
-
-export GOROOT="${_oma_workspace_root}/.tools/go"
-export PATH="${GOROOT}/bin:${PATH}"
 
 unset _oma_platform_root _oma_workspace_root _script
 unset -f _oma_go_env_is_sourced _oma_go_env_fail 2>/dev/null || true
