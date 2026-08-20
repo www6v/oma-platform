@@ -1151,6 +1151,168 @@ Expected: PASS。
 
 ---
 
+## 附录 A：dsh wire 协议勘误（2026-08-20 spike 核实，覆盖 Task 8/9/11 正文示例代码）
+
+Spike 报告：`docs/superpowers/spikes/2026-08-20-dsh-web-protocol.md`。Task 8/9 正文示例代码中的信封形态（`{args}` / `{ok,value}`、`session/wait`、mux 裸帧）是 spike 前占位，**以下列为准**；其余（事件映射目标、测试结构、文件组织）不变。
+
+### A.1 上行 RPC 信封（替换 Task 8 Step 3 的 `dshRpcResponse` 与 `rpc()`）
+
+```go
+// dshClientRequest is the uplink wire envelope (apiproxy rpc.ts
+// ClientRequest): method is dotted, path == method.
+type dshClientRequest struct {
+	Type    string `json:"type"`
+	RpcID   string `json:"rpcId"`
+	Method  string `json:"method"`
+	Payload any    `json:"payload"`
+}
+
+// dshServerResponse is the response envelope. Business errors arrive as
+// HTTP 200 with result.ok=false; HTTP status codes are carrier-only
+// (404 unknown method / 415 non-JSON content-type / 400 bad JSON / 500).
+type dshServerResponse struct {
+	Type   string `json:"type"`
+	RpcID  string `json:"rpcId"`
+	Result struct {
+		OK    bool            `json:"ok"`
+		Value json.RawMessage `json:"value,omitempty"`
+		Error *struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error,omitempty"`
+	} `json:"result"`
+}
+
+// rpc posts one dotted-method call to POST /api/<method>.
+func (c *DeepSeekClient) rpc(
+	ctx context.Context,
+	method string,
+	payload map[string]any,
+	out any,
+) error {
+	body, err := json.Marshal(dshClientRequest{
+		Type:    "client-request",
+		RpcID:   randomOCID(),
+		Method:  method,
+		Payload: payload,
+	})
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(
+		ctx, http.MethodPost,
+		c.GatewayURL+"/api/"+method,
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if c.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.Token)
+	}
+	resp, err := c.httpClient().Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("deepseek rpc %s status=%d: %s",
+			method, resp.StatusCode, strings.TrimSpace(string(raw)))
+	}
+	var env dshServerResponse
+	if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
+		return fmt.Errorf("deepseek rpc %s decode: %w", method, err)
+	}
+	if !env.Result.OK {
+		msg := "unknown error"
+		if env.Result.Error != nil {
+			msg = env.Result.Error.Code + ": " + env.Result.Error.Message
+		}
+		return fmt.Errorf("deepseek rpc %s: %s", method, msg)
+	}
+	if out != nil {
+		return json.Unmarshal(env.Result.Value, out)
+	}
+	return nil
+}
+```
+
+方法名点分：`session.create`、`session.prompt`、`session.cancel`（不是 `session/prompt`）。
+
+### A.2 会话建立（新增，Task 8 RunTurn/Task 9 RunTurnStream 开头各调用一次）
+
+dsh 无隐式会话创建：prompt 未创建的会话返回 `session-not-found`。OMA session id 直接作为 dsh sessionId 传入：
+
+```go
+// ensureSession creates the dsh session on first use. session-conflict
+// means it already exists — not an error.
+func (c *DeepSeekClient) ensureSession(
+	ctx context.Context, sessionID string,
+) error {
+	err := c.rpc(ctx, "session.create", map[string]any{
+		"sessionId": sessionID,
+	}, nil)
+	if err != nil && strings.Contains(err.Error(), "session-conflict") {
+		return nil
+	}
+	return err
+}
+```
+
+prompt payload：`{ "sessionId": sid, "mode": "queue", "content": [{"type":"text","text": userText}] }`。
+
+### A.3 下行 mux 帧（替换 Task 9 的 `dshMuxFrame`）
+
+每条 WebSocket text 消息是一个完整 ServerRequest 文档，MuxFrame 在其 `payload` 槽内：
+
+```go
+// dshServerRequest is one /api/events.mux text message.
+type dshServerRequest struct {
+	Type    string          `json:"type"`
+	RpcID   string          `json:"rpcId"`
+	Method  string          `json:"method"`
+	Payload json.RawMessage `json:"payload"`
+}
+
+// dshMuxFrame is the payload slot; mux aggregates ALL sessions, so the
+// client filters on SessionID.
+type dshMuxFrame struct {
+	Type      string          `json:"type"`
+	SessionID string          `json:"sessionId"`
+	Event     dshSessionEvent `json:"event"`
+}
+```
+
+读取循环伪代码：`ReadMessage` → `json.Unmarshal` 为 `dshServerRequest` → 仅处理 `Type == "server-request"` → `json.Unmarshal(Payload)` 为 `dshMuxFrame` → 仅处理 `frame.Type == "session/event"` 且 `frame.SessionID == req.SessionID` → 映射 `frame.Event`。`payload.type == "stream/error"` → 返回错误。
+
+### A.4 turn/end reason（修正 Task 8/9 的判断）
+
+`data.reason` 是判别联合：`{kind:"completed"}` / `{kind:"aborted",reason:{kind:...}}` / `{kind:"blocked"}` / `{kind:"error",error:{...}}` / `{kind:"max-tokens"}` / `{kind:"interrupted"}`。仅 `kind=="error"` 作为 turn 失败返回错误；其余 kind 均正常结束收集。
+
+### A.5 Task 8 测试双修正（替换 fakeDshGateway 的 `session/wait` 段）
+
+无 `session/wait` 端点——`RunTurn` 内部拨 WS 收集至 `turn/end`（复用 Task 9 收集器）。Task 8 的 fake 网关需同时提供 `POST /api/session.create`、`POST /api/session.prompt`（ClientRequest 信封校验、返回 ServerResponse 信封）与 `/api/events.mux` WebSocket 端点（发 `session/subscribed` → `assistant/message`（带 usage）→ `turn/end` 三个 ServerRequest 文本消息）。`TestDeepSeekClient_RunTurn_RpcError` 改为：prompt 时 fake 返回 `result.ok=false, error.code="session-not-found"` 并断言错误串包含 `session-not-found`。
+
+### A.6 Task 11 部署修正（替换 Dockerfile CMD 与 socat 注释）
+
+dsh **禁止 `--host 0.0.0.0`**（startup.ts 刻意拒绝）。容器内绑定 eth0 IP 并声明信任：
+
+```dockerfile
+# dsh refuses --host 0.0.0.0 by design; bind the container's own IP and
+# whitelist it plus the compose service name for the Host trust fence.
+ENTRYPOINT ["sh", "-c", "ip=$(hostname -i | awk '{print $1}') && exec pnpm dsh web --host \"$ip\" --trusted-host \"$ip\" --trusted-host dsh"]
+```
+
+compose `healthcheck` 改为 `wget -qO- http://127.0.0.1:3080/ || exit 1`（容器内 loopback 请求经 Host 围栏放行）。注意：`oma-platform` 访问 `http://dsh:3080` 时 Host 头为 `dsh:3080`，靠 `--trusted-host dsh` 放行。
+
+### A.7 凭证
+
+dsh 默认读环境变量 `DEEPSEEK_API_KEY`；compose 注入该名即可（Task 11 正文已如此写，确认无误）。默认模型 `deepseek-official/deepseek-v4-flash`。
+
+---
+
 ### Task 8: DeepSeekClient — RPC 骨架
 
 **Files:**
