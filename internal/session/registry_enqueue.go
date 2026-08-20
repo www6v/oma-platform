@@ -108,23 +108,30 @@ func (r *Registry) EnqueueEvents(
 		return nil
 	}
 
-	if len(pendingEvents) == 0 {
-		return nil
+	// Determine the thread ID: pending events take priority, otherwise
+	// fall back to default for direct-only flows.
+	threadID := defaultThreadID
+	if len(pendingEvents) > 0 {
+		threadID = threadIDFromPendingEvents(pendingEvents)
 	}
-	threadID := threadIDFromPendingEvents(pendingEvents)
+
 	if runTurn {
 		// When idle, promote synchronously so queue-input events (including
 		// schedule wakeups fired from the background worker) appear in the
 		// session log before the async turn worker runs.
 		if !lane.machine.IsTurnActive() {
-			if _, err := lane.promoteAllPending(ctx, threadID); err != nil {
-				return err
+			if len(pendingEvents) > 0 {
+				if _, err := lane.promoteAllPending(ctx, threadID); err != nil {
+					return err
+				}
 			}
 		}
 		lane.scheduleTurn(threadID, onDone)
 		return nil
 	}
-	lane.schedulePromote(threadID, onDone)
+	if len(pendingEvents) > 0 {
+		lane.schedulePromote(threadID, onDone)
+	}
 	return nil
 }
 

@@ -309,7 +309,7 @@ func (c *HermesClient) doRun(
 				continue
 			}
 			accumulated.WriteString(ev.Delta)
-			mapped, mapErr := agentMessageEvent(msgID, accumulated.String())
+			mapped, mapErr := agentMessageEvent(randomOCID(), msgID, accumulated.String())
 			if mapErr != nil {
 				return events, nil, mapErr
 			}
@@ -329,7 +329,7 @@ func (c *HermesClient) doRun(
 			// produced a short final answer without streaming),
 			// emit the full output as a single agent.message.
 			if !emittedContent && ev.Output != "" {
-				mapped, mapErr := agentMessageEvent(msgID, ev.Output)
+				mapped, mapErr := agentMessageEvent(randomOCID(), msgID, ev.Output)
 				if mapErr != nil {
 					return events, nil, mapErr
 				}
@@ -361,7 +361,7 @@ func (c *HermesClient) doRun(
 	// Always emit at least one agent.message so downstream consumers
 	// never see a turn with only tool events and no text output.
 	if !emittedContent {
-		mapped, mapErr := agentMessageEvent(msgID, "")
+		mapped, mapErr := agentMessageEvent(randomOCID(), msgID, "")
 		if mapErr != nil {
 			return events, nil, mapErr
 		}

@@ -266,7 +266,7 @@ func (c *DeepSeekClient) collectTurn(
 					continue
 				}
 				accumulated.WriteString(d.Chunk.Text)
-				mapped, mapErr := agentMessageEvent(msgID, accumulated.String())
+				mapped, mapErr := agentMessageEvent(randomOCID(), msgID, accumulated.String())
 				if mapErr != nil {
 					return events, usage, mapErr
 				}
@@ -328,7 +328,7 @@ func (c *DeepSeekClient) collectTurn(
 					}
 				}
 				if sb.Len() > 0 {
-					mapped, mapErr := agentMessageEvent(msgID, sb.String())
+					mapped, mapErr := agentMessageEvent(randomOCID(), msgID, sb.String())
 					if mapErr != nil {
 						return events, usage, mapErr
 					}
@@ -350,7 +350,7 @@ func (c *DeepSeekClient) collectTurn(
 				}
 				_ = json.Unmarshal(ev.Data, &d)
 				if !emitted {
-					mapped, mapErr := agentMessageEvent(msgID, accumulated.String())
+					mapped, mapErr := agentMessageEvent(randomOCID(), msgID, accumulated.String())
 					if mapErr != nil {
 						return events, usage, mapErr
 					}
@@ -460,7 +460,7 @@ func (c *DeepSeekClient) RunTurnStream(
 					continue
 				}
 				accumulated.WriteString(d.Chunk.Text)
-				mapped, mapErr := agentMessageEvent(msgID, accumulated.String())
+				mapped, mapErr := agentMessageEvent(randomOCID(), msgID, accumulated.String())
 				if mapErr != nil {
 					return mapErr
 				}
@@ -528,7 +528,7 @@ func (c *DeepSeekClient) RunTurnStream(
 					}
 				}
 				if sb.Len() > 0 {
-					mapped, mapErr := agentMessageEvent(msgID, sb.String())
+					mapped, mapErr := agentMessageEvent(randomOCID(), msgID, sb.String())
 					if mapErr != nil {
 						return mapErr
 					}
@@ -546,7 +546,7 @@ func (c *DeepSeekClient) RunTurnStream(
 				}
 				_ = json.Unmarshal(ev.Data, &d)
 				if !emitted {
-					mapped, mapErr := agentMessageEvent(msgID, accumulated.String())
+					mapped, mapErr := agentMessageEvent(randomOCID(), msgID, accumulated.String())
 					if mapErr != nil {
 						return mapErr
 					}

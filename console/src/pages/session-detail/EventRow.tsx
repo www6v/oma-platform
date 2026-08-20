@@ -140,22 +140,50 @@ export function mergeConsecutiveAgentEvents(events: Event[]): DisplayEvent[] {
 /**
  * Combine text from merged consecutive agent.message events.
  *
- * These are typically streaming token fragments, so concatenate with no
- * separator — inserting newlines would break Markdown (headers, tables,
- * lists) that spans multiple fragments.
+ * Two streaming modes exist:
+ * 1. **Cumulative** (DeepSeek / OpenClaw / Hermes): each event contains the
+ *    full text accumulated so far. Each event's text is a prefix of the next.
+ *    → Use only the last event (it has the complete message).
+ * 2. **Delta** (standard harness): each event is an independent fragment.
+ *    → Concatenate all fragments.
+ *
+ * Detection: if every event's text is a prefix of the next event's text,
+ * it's cumulative streaming.
  */
 export function getMergedEventText(events: Event[]): string {
-  return events
-    .map((e) => {
-      const text = Array.isArray(e.content)
-        ? e.content.map((b) => b.text).join("")
-        : typeof e.content === "string"
-          ? e.content
-          : "";
-      return text;
-    })
-    .filter((t) => t.length > 0)
-    .join("");
+  if (events.length <= 1) {
+    return events.length === 1 ? extractEventText(events[0]) : "";
+  }
+
+  const texts = events.map((e) => extractEventText(e)).filter((t) => t.length > 0);
+  if (texts.length <= 1) return texts[0] ?? "";
+
+  // Detect cumulative streaming: check if each text is a prefix of the next.
+  // We only need to check a few pairs to be confident.
+  const checkLimit = Math.min(3, texts.length - 1);
+  let isCumulative = true;
+  for (let i = 0; i < checkLimit; i++) {
+    if (!texts[i + 1].startsWith(texts[i])) {
+      isCumulative = false;
+      break;
+    }
+  }
+
+  if (isCumulative) {
+    // Cumulative streaming — last event has the complete text.
+    return texts[texts.length - 1];
+  }
+
+  // Delta streaming — concatenate all fragments.
+  return texts.join("");
+}
+
+function extractEventText(e: Event): string {
+  return Array.isArray(e.content)
+    ? e.content.map((b) => b.text).join("")
+    : typeof e.content === "string"
+      ? e.content
+      : "";
 }
 
 /**

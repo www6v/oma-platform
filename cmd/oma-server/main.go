@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	runtimeos "runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -53,6 +54,11 @@ func main() {
 	skillsDataDir := envOrDefault("SKILLS_DATA_DIR", "./data/skills")
 	filesDataDir := envOrDefault("FILES_DATA_DIR", "./data/files")
 	outputsDir := envOrDefault("SESSION_OUTPUTS_DIR", "./data/session-outputs")
+	// On Windows, symlink privileges are often unavailable. Skip session
+	// outputs mount to avoid "required privilege is not held by the client".
+	if runtimeos.GOOS == "windows" {
+		outputsDir = ""
+	}
 	absWorkdir, err := filepath.Abs(workdirBase)
 	if err != nil {
 		log.Fatal(err)
@@ -91,8 +97,10 @@ func main() {
 	if err := os.MkdirAll(filesDataDir, 0o755); err != nil {
 		log.Fatal(err)
 	}
-	if err := os.MkdirAll(outputsDir, 0o755); err != nil {
-		log.Fatal(err)
+	if outputsDir != "" {
+		if err := os.MkdirAll(outputsDir, 0o755); err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	db, err := store.Open(dbPath)

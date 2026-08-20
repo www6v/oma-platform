@@ -302,7 +302,7 @@ func (c *OpenClawClient) doResponse(
 				continue
 			}
 			accumulated.WriteString(ev.Delta)
-			mapped, mapErr := agentMessageEvent(msgID, accumulated.String())
+			mapped, mapErr := agentMessageEvent(randomOCID(), msgID, accumulated.String())
 			if mapErr != nil {
 				return events, nil, mapErr
 			}
@@ -321,7 +321,7 @@ func (c *OpenClawClient) doResponse(
 			if !emittedContent && ev.Response != nil {
 				text := assembleOutputText(ev.Response.Output)
 				if text != "" {
-					mapped, mapErr := agentMessageEvent(msgID, text)
+					mapped, mapErr := agentMessageEvent(randomOCID(), msgID, text)
 					if mapErr != nil {
 						return events, nil, mapErr
 					}
@@ -362,7 +362,7 @@ func (c *OpenClawClient) doResponse(
 	// Always emit at least one agent.message so downstream consumers
 	// never see a turn with only tool events and no text output.
 	if !emittedContent {
-		mapped, mapErr := agentMessageEvent(msgID, "")
+		mapped, mapErr := agentMessageEvent(randomOCID(), msgID, "")
 		if mapErr != nil {
 			return events, nil, mapErr
 		}
@@ -517,14 +517,20 @@ func extractLastUserMessage(events []json.RawMessage) string {
 }
 
 // agentMessageEvent builds an oma-format agent.message event.
-func agentMessageEvent(id, text string) (json.RawMessage, error) {
-	return json.Marshal(map[string]any{
+// id is a unique event ID; messageID is for stream correlation (optional,
+// set to "" when not needed).
+func agentMessageEvent(id, messageID, text string) (json.RawMessage, error) {
+	event := map[string]any{
 		"type": "agent.message",
 		"id":   id,
 		"content": []map[string]string{
 			{"type": "text", "text": text},
 		},
-	})
+	}
+	if messageID != "" {
+		event["message_id"] = messageID
+	}
+	return json.Marshal(event)
 }
 
 const ocIDAlphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
