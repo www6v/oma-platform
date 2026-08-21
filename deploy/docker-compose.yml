@@ -165,5 +165,31 @@ services:
       oma-harness-2:
         condition: service_healthy
 
+  # DeepSeek dsh web gateway (harness Kind "deepseek").
+  # Takes ~10 min to start — no other service depends_on it.
+  oma-deepseek:
+    build:
+      context: ../../deepseek-harness-master
+      dockerfile: deploy/Dockerfile.dsh
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
+        APT_MIRROR: ${APT_MIRROR:-mirrors.aliyun.com}
+    env_file:
+      - ../.env
+    environment:
+      DSH_HOME: /root/.pi/agent
+    ports:
+      - "0.0.0.0:${DSH_HOST_PORT:-3080}:3080"
+    volumes:
+      - ../data:/data
+      - ${HOME}/.pi/agent:/root/.pi/agent
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:3080/"]
+      interval: 5s
+      timeout: 3s
+      retries: 240
+      start_period: 90s
+    restart: unless-stopped
+
 volumes:
   ov-data:
