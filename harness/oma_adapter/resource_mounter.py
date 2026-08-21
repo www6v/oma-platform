@@ -5,10 +5,13 @@ from __future__ import annotations
 import base64
 import logging
 import os
+import platform
 from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+_IS_WINDOWS = platform.system() == "Windows"
 
 
 def ensure_session_output_mounts(workdir: str) -> None:
@@ -38,17 +41,52 @@ def _resolve_output_target(*paths: Path) -> Path | None:
 
 
 def _ensure_output_symlink(link: Path, target: Path) -> None:
-    if link.is_symlink():
+    if link.is_symlink() or _is_junction(link):
         try:
             if link.resolve() == target.resolve():
                 return
         except OSError:
             pass
-        link.unlink()
+        _remove_link(link)
     elif link.exists():
         return
     link.parent.mkdir(parents=True, exist_ok=True)
-    link.symlink_to(target, target_is_directory=True)
+    if _IS_WINDOWS:
+        _create_directory_junction(link, target)
+    else:
+        link.symlink_to(target, target_is_directory=True)
+
+
+def _is_junction(path: Path) -> bool:
+    """Detect Windows directory junction (reparse point)."""
+    if not _IS_WINDOWS:
+        return False
+    try:
+        import ctypes
+        attrs = ctypes.windll.kernel32.GetFileAttributesW(str(path))
+        if attrs == 0xFFFFFFFF:
+            return False
+        return bool(attrs & 0x400)  # FILE_ATTRIBUTE_REPARSE_POINT
+    except Exception:
+        return False
+
+
+def _remove_link(path: Path) -> None:
+    """Remove a symlink or Windows junction."""
+    if _IS_WINDOWS and _is_junction(path):
+        import subprocess
+        subprocess.run(["cmd", "/c", "rmdir", str(path)], check=False)
+    else:
+        path.unlink()
+
+
+def _create_directory_junction(link: Path, target: Path) -> None:
+    """Create a Windows directory junction (no admin privileges needed)."""
+    import subprocess
+    subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(link), str(target.resolve())],
+        check=True,
+    )
 
 
 def mount_resources(
