@@ -1,0 +1,74 @@
+ubuntu@VM-0-17-ubuntu:~/wei$ docker compose -f oma-platform/deploy/docker-compose.yml ps
+NAME                      IMAGE                   COMMAND                  SERVICE          CREATED          STATUS                    PORTS
+deploy-oma-auth-1         deploy-oma-auth         "docker-entrypoint.s…"   oma-auth         13 minutes ago   Up 13 minutes (healthy)   8788/tcp
+deploy-oma-deepseek-1     deploy-oma-deepseek     "docker-entrypoint.s…"   oma-deepseek     13 minutes ago   Up 13 minutes (healthy)   0.0.0.0:3080->3080/tcp
+deploy-oma-harness-1-1    deploy-oma-harness-1    "uvicorn oma_adapter…"   oma-harness-1    13 minutes ago   Up 13 minutes (healthy)   8090/tcp
+deploy-oma-harness-2-1    deploy-oma-harness-2    "uvicorn oma_adapter…"   oma-harness-2    13 minutes ago   Up 13 minutes (healthy)   8090/tcp
+deploy-oma-harness-lb-1   nginx:1.27-alpine       "/docker-entrypoint.…"   oma-harness-lb   13 minutes ago   Up 13 minutes             80/tcp, 0.0.0.0:8090->8090/tcp, [::]:8090->8090/tcp
+deploy-oma-openviking-1   deploy-oma-openviking   "/opt/oma/entrypoint…"   oma-openviking   13 minutes ago   Up 13 minutes (healthy)   0.0.0.0:1933->1933/tcp, [::]:1933->1933/tcp
+deploy-oma-platform-1     deploy-oma-platform     "/app/oma-server"        oma-platform     13 minutes ago   Up 13 minutes             0.0.0.0:8787->8787/tcp, [::]:8787->8787/tcp
+ubuntu@VM-0-17-ubuntu:~/wei$ 
+ubuntu@VM-0-17-ubuntu:~/wei$ 
+ubuntu@VM-0-17-ubuntu:~/wei$ 
+ubuntu@VM-0-17-ubuntu:~/wei$  docker compose -f oma-platform/deploy/docker-compose.yml logs oma-deepseek --tail 50
+oma-deepseek-1  | [WARN] Request took 12046ms: https://registry.npmjs.org/react-is
+oma-deepseek-1  | [WARN] Request took 13034ms: https://registry.npmjs.org/react-dom
+oma-deepseek-1  | [WARN] Request took 11039ms: https://registry.npmjs.org/typescript
+oma-deepseek-1  | [WARN] Request took 15044ms: https://registry.npmjs.org/scheduler
+oma-deepseek-1  | [WARN] Request took 19179ms: https://registry.npmjs.org/react-refresh
+oma-deepseek-1  | [WARN] Request took 17658ms: https://registry.npmjs.org/vite
+oma-deepseek-1  | [WARN] Request took 20388ms: https://registry.npmjs.org/react
+oma-deepseek-1  | [WARN] Request took 23478ms: https://registry.npmjs.org/playwright
+oma-deepseek-1  | Progress: resolved 453, reused 0, downloaded 446, added 448
+oma-deepseek-1  | Progress: resolved 453, reused 0, downloaded 446, added 449
+oma-deepseek-1  | [WARN] Request took 11263ms: https://registry.npmjs.org/react-dom
+oma-deepseek-1  | [WARN] Request took 26444ms: https://registry.npmjs.org/playwright-core
+oma-deepseek-1  | [WARN] Tarball download average speed 25 KiB/s (size 1118 KiB) is below 50 KiB/s: https://registry.npmjs.org/@anthropic-ai/claude-agent-sdk/-/claude-agent-sdk-0.3.220.tgz (GET)
+oma-deepseek-1  | Progress: resolved 453, reused 0, downloaded 447, added 449
+oma-deepseek-1  | [WARN] Request took 13906ms: https://registry.npmjs.org/typescript
+oma-deepseek-1  | Progress: resolved 453, reused 0, downloaded 447, added 450
+oma-deepseek-1  | [WARN] Request took 14550ms: https://registry.npmjs.org/scheduler
+oma-deepseek-1  | Progress: resolved 453, reused 0, downloaded 448, added 450
+oma-deepseek-1  | Progress: resolved 453, reused 0, downloaded 448, added 451
+oma-deepseek-1  | [WARN] Request took 16870ms: https://registry.npmjs.org/react
+oma-deepseek-1  | [WARN] GET https://registry.npmjs.org/@anthropic-ai/claude-agent-sdk-linux-x64/-/claude-agent-sdk-linux-x64-0.3.220.tgz error (23). Will retry in 10 seconds. 2 retries left.
+oma-deepseek-1  | [WARN] GET https://registry.npmjs.org/@openai/codex/-/codex-0.147.0-linux-x64.tgz error (23). Will retry in 10 seconds. 2 retries left.
+oma-deepseek-1  | [WARN] Request took 36373ms: https://registry.npmjs.org/react-is
+oma-deepseek-1  | ✓ Lockfile passes supply-chain policies (1203 entries in 1m 17.2s)
+oma-deepseek-1  | Progress: resolved 453, reused 0, downloaded 449, added 451
+oma-deepseek-1  | Progress: resolved 453, reused 0, downloaded 449, added 452
+oma-deepseek-1  | [WARN] GET https://registry.npmjs.org/@openai/codex/-/codex-0.147.0-linux-x64.tgz error (23). Will retry in 1 minute. 1 retries left.
+oma-deepseek-1  | Progress: resolved 453, reused 0, downloaded 449, added 452, done
+oma-deepseek-1  | .../.pnpm/koffi@3.1.1/node_modules/koffi install$ node ./cnoke.cjs -P . -D src/koffi --prebuild --release
+oma-deepseek-1  | .../node_modules/node-pty install$ node scripts/prebuild.js || node-gyp rebuild
+oma-deepseek-1  | .../esbuild@0.25.12/node_modules/esbuild postinstall$ node install.js
+oma-deepseek-1  | .../esbuild@0.21.5/node_modules/esbuild postinstall$ node install.js
+oma-deepseek-1  | .../node_modules/node-pty install: > Checking prebuilds...
+oma-deepseek-1  | .../node_modules/node-pty install: Done
+oma-deepseek-1  | .../node_modules/node-pty postinstall$ node scripts/post-install.js
+oma-deepseek-1  | .../.pnpm/koffi@3.1.1/node_modules/koffi install: Done
+oma-deepseek-1  | .../node_modules/node-pty postinstall: > Cleaning release folder...
+oma-deepseek-1  | .../node_modules/node-pty postinstall: > Moving conpty.dll...
+oma-deepseek-1  | .../node_modules/node-pty postinstall:   SKIPPED (not Windows)
+oma-deepseek-1  | .../node_modules/node-pty postinstall: Done
+oma-deepseek-1  | .../esbuild@0.25.12/node_modules/esbuild postinstall: Done
+oma-deepseek-1  | .../esbuild@0.21.5/node_modules/esbuild postinstall: Done
+oma-deepseek-1  | 
+oma-deepseek-1  | packages/subprocess/subprocess-local postinstall$ node scripts/ensure-spawn-helper.mjs
+oma-deepseek-1  | packages/subprocess/subprocess-local postinstall: Done
+oma-deepseek-1  | . postinstall$ node scripts/install-lefthook.mjs
+oma-deepseek-1  | . postinstall: Done
+oma-deepseek-1  | Done in 4m 25.7s using pnpm v11.7.0
+oma-deepseek-1  | $ node --import tsx/esm apps/cli/src/bin.ts web
+oma-deepseek-1  | dsh web: http://127.0.0.1:3080
+ubuntu@VM-0-17-ubuntu:~/wei$ 
+ubuntu@VM-0-17-ubuntu:~/wei$ 
+ubuntu@VM-0-17-ubuntu:~/wei$  docker inspect --format='{{.State.Health.Status}}' $(docker compose -f oma-platform/deploy/docker-compose.yml ps -q
+  oma-deepseek) 2>/dev/null || echo "容器不存在或未运行"
+oma-deepseek: command not found
+healthy
+healthy
+healthy
+healthy
+healthy
+容器不存在或未运行
