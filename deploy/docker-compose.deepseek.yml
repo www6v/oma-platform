@@ -33,7 +33,7 @@ services:
     environment:
       DSH_HOME: /root/.pi/agent
     ports:
-      - "3080:3080"
+      - "0.0.0.0:${DSH_HOST_PORT:-3080}:3080"
     volumes:
       - ../data:/data
       - ${HOME}/.pi/agent:/root/.pi/agent
