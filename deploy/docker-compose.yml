@@ -96,8 +96,6 @@ services:
         condition: service_healthy
       oma-harness-2:
         condition: service_healthy
-      oma-deepseek:
-        condition: service_healthy
 
   # OpenViking context database (external memory provider).
   # Create deploy/openviking.conf.json from openviking.conf.example.json
@@ -166,32 +164,6 @@ services:
         condition: service_healthy
       oma-harness-2:
         condition: service_healthy
-
-  # DeepSeek dsh web gateway (harness Kind "deepseek").
-  # Serves the dsh web UI + API on :3080. Only accessible on the
-  # internal Docker network — no host port mapping (dsh ships without
-  # auth; see internal/harness/deepseek_client.go).
-  oma-deepseek:
-    build:
-      context: ../../deepseek-harness-master
-      dockerfile: deploy/Dockerfile.dsh
-      args:
-        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
-        APT_MIRROR: ${APT_MIRROR:-mirrors.aliyun.com}
-    env_file:
-      - ../.env
-    environment:
-      DSH_HOME: /root/.pi/agent
-    volumes:
-      - ../data:/data
-      - ${HOME}/.pi/agent:/root/.pi/agent
-    healthcheck:
-      test: ["CMD", "curl", "-sf", "http://127.0.0.1:3080/"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-      start_period: 90s
-    restart: unless-stopped
 
 volumes:
   ov-data:

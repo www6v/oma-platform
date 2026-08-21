@@ -5,6 +5,7 @@ set -euo pipefail
 DEPLOY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${DEPLOY_DIR}/.." && pwd)"
 COMPOSE_FILE="${DEPLOY_DIR}/docker-compose.yml"
+DEEPSEEK_COMPOSE_FILE="${DEPLOY_DIR}/docker-compose.deepseek.yml"
 
 export DOCKER_BUILDKIT=1
 export COMPOSE_DOCKER_CLI_BUILD=1
@@ -29,6 +30,14 @@ compose() {
     env_args=(--env-file "${ROOT_DIR}/.env")
   fi
   docker compose -f "${COMPOSE_FILE}" "${env_args[@]}" "$@"
+}
+
+compose_deepseek() {
+  local env_args=()
+  if [[ -f "${ROOT_DIR}/.env" ]]; then
+    env_args=(--env-file "${ROOT_DIR}/.env")
+  fi
+  docker compose -f "${DEEPSEEK_COMPOSE_FILE}" "${env_args[@]}" "$@"
 }
 
 ensure_data_dir() {
@@ -110,11 +119,24 @@ Commands:
   ps          Show container status
   smoke       Run scripts/e2e/smoke-test.sh against the running stack
 
+DeepSeek Commands:
+  deepseek-up           Start oma-deepseek independently (background)
+  deepseek-down         Stop and remove oma-deepseek
+  deepseek-logs         Tail oma-deepseek logs
+  deepseek-ps           Show oma-deepseek container status
+  deepseek-connect      Connect oma-deepseek to main stack network (run after deepseek-up)
+
 Examples:
   $(basename "$0")
   $(basename "$0") up
   $(basename "$0") logs oma-platform
   $(basename "$0") down
+
+  # DeepSeek standalone:
+  $(basename "$0") deepseek-up
+  $(basename "$0") deepseek-connect    # connect to main network
+  $(basename "$0") deepseek-logs
+  $(basename "$0") deepseek-down
 
   # Or without docker.sh (must pass parent .env for build-arg substitution):
   docker compose --env-file ../.env up -d --build --remove-orphans
@@ -123,6 +145,7 @@ Environment:
   Loads ${ROOT_DIR}/.env when present (via --env-file and service env_file).
   Platform API: http://localhost:8787
   Harness LB:   http://localhost:8090  (oma-harness-lb → harness-1/2)
+  DeepSeek:     http://localhost:3080  (oma-deepseek)
 EOF
 }
 
@@ -178,6 +201,45 @@ case "${cmd}" in
     fi
     export HARNESS_URL="${HARNESS_URL:-http://127.0.0.1:8090}"
     "${ROOT_DIR}/scripts/e2e/smoke-test.sh"
+    ;;
+  deepseek-up)
+    compose_deepseek up -d --build --remove-orphans "$@"
+    echo "oma-deepseek started at http://localhost:3080"
+    echo "Run '$(basename "$0") deepseek-connect' to connect it to the main network"
+    ;;
+  deepseek-down)
+    compose_deepseek down --remove-orphans "$@"
+    echo "oma-deepseek stopped"
+    ;;
+  deepseek-logs)
+    compose_deepseek logs -f "$@"
+    ;;
+  deepseek-ps|deepseek-status)
+    compose_deepseek ps "$@"
+    ;;
+  deepseek-connect)
+    # Get the main stack's network name (usually deploy_default)
+    MAIN_NETWORK=$(compose config --format json 2>/dev/null | grep -o '"name":"[^"]*"' | head -1 | cut -d'"' -f4)
+    if [[ -z "${MAIN_NETWORK}" ]]; then
+      MAIN_NETWORK="deploy_default"
+    fi
+    
+    # Get deepseek container ID
+    DEEPSEEK_CONTAINER=$(compose_deepseek ps -q oma-deepseek 2>/dev/null || true)
+    if [[ -z "${DEEPSEEK_CONTAINER}" ]]; then
+      echo "error: oma-deepseek is not running; run '$(basename "$0") deepseek-up' first" >&2
+      exit 1
+    fi
+    
+    # Connect to main network
+    echo "Connecting oma-deepseek to network: ${MAIN_NETWORK}"
+    docker network connect "${MAIN_NETWORK}" "${DEEPSEEK_CONTAINER}" 2>/dev/null || {
+      echo "warning: already connected or network not found"
+      echo "Available networks:"
+      docker network ls --format '{{.Name}}' | grep -E 'deploy|oma' || true
+    }
+    
+    echo "oma-deepseek is now accessible at http://oma-deepseek:3080 from oma-platform"
     ;;
   *)
     echo "error: unknown command: ${cmd}" >&2
