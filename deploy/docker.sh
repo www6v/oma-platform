@@ -203,7 +203,7 @@ case "${cmd}" in
     "${ROOT_DIR}/scripts/e2e/smoke-test.sh"
     ;;
   deepseek-up)
-    compose_deepseek up -d --build --remove-orphans "$@"
+    compose_deepseek up -d --build "$@"
     echo "oma-deepseek started at http://localhost:3080"
     echo "Run '$(basename "$0") deepseek-connect' to connect it to the main network"
     ;;
