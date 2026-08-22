@@ -8,26 +8,22 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
 SERVICE_NAME="oma-deepseek"
 
-# Domestic Docker Hub mirror for base image pulls.
-# Set in .env: REGISTRY_MIRROR=registry.cn-hangzhou.aliyuncs.com/library
-export REGISTRY_MIRROR="${REGISTRY_MIRROR:-}"
-
 compose() {
   docker compose -f "$COMPOSE_FILE" "$@"
 }
 
-# Check whether a Docker Hub mirror is configured.
+# Check whether Docker Hub mirrors are configured.
 check_mirror() {
-  if [[ -n "${REGISTRY_MIRROR}" ]]; then
-    echo "[OK] Using Docker Hub mirror: ${REGISTRY_MIRROR}"
-    return 0
-  fi
   if [[ -f /etc/docker/daemon.json ]] && grep -q 'registry-mirrors' /etc/docker/daemon.json 2>/dev/null; then
-    echo "[OK] Docker daemon has registry mirror configured."
-    return 0
+    local mirror
+    mirror="$(grep -A1 'registry-mirrors' /etc/docker/daemon.json | grep -oE 'https?://[^"]+' | head -1)"
+    if [[ -n "${mirror}" ]]; then
+      echo "[OK] Docker Hub mirror configured: ${mirror}"
+      return 0
+    fi
   fi
   echo "[WARN] No Docker Hub mirror configured. Base image pulls may be slow in China." >&2
-  echo "  Set in .env: REGISTRY_MIRROR=registry.cn-hangzhou.aliyuncs.com/library" >&2
+  echo "  Run: ../docker.sh setup-mirror" >&2
 }
 
 cmd_start() {

@@ -11,11 +11,6 @@ COMPOSE_FILE="${DEPLOY_DIR}/docker-compose.yml"
 export DOCKER_BUILDKIT=1
 export COMPOSE_DOCKER_CLI_BUILD=1
 
-# Domestic Docker Hub mirror for base image pulls.
-# Set in .env: REGISTRY_MIRROR=registry.cn-hangzhou.aliyuncs.com/library
-# This overrides FROM images in Dockerfiles to pull from the mirror registry.
-export REGISTRY_MIRROR="${REGISTRY_MIRROR:-}"
-
 load_env() {
   if [[ -f "${ROOT_DIR}/.env" ]]; then
     set -a
@@ -103,26 +98,68 @@ check_harness_port() {
   fi
 }
 
-# Check whether Docker Hub pulls are slow and suggest a domestic mirror.
+# Check whether Docker Hub mirrors are configured.
 check_mirror() {
-  if [[ -n "${REGISTRY_MIRROR}" ]]; then
-    echo "[OK] Using Docker Hub mirror: ${REGISTRY_MIRROR}"
-    return 0
-  fi
-
   # Check if Docker daemon has a mirror configured.
   if [[ -f /etc/docker/daemon.json ]] && grep -q 'registry-mirrors' /etc/docker/daemon.json 2>/dev/null; then
-    local mirrors
-    mirrors="$(grep -A1 'registry-mirrors' /etc/docker/daemon.json | tail -1)"
-    echo "[OK] Docker daemon has registry mirror configured: ${mirrors}"
-    return 0
+    local mirror
+    mirror="$(grep -A1 'registry-mirrors' /etc/docker/daemon.json | grep -oE 'https?://[^"]+' | head -1)"
+    if [[ -n "${mirror}" ]]; then
+      echo "[OK] Docker Hub mirror configured: ${mirror}"
+      return 0
+    fi
   fi
 
   echo "[WARN] No Docker Hub mirror configured. Base image pulls may be slow in China." >&2
-  echo "  Option 1 (recommended): Add to /etc/docker/daemon.json and restart Docker:" >&2
-  echo '    {"registry-mirrors": ["https://registry.cn-hangzhou.aliyuncs.com"]}' >&2
-  echo "  Option 2: Set in .env:" >&2
-  echo "    REGISTRY_MIRROR=registry.cn-hangzhou.aliyuncs.com/library" >&2
+  echo "  Run: $(basename "$0") setup-mirror" >&2
+}
+
+# Configure Docker daemon to use a domestic registry mirror.
+cmd_setup_mirror() {
+  local mirror="${1:-https://registry.cn-hangzhou.aliyuncs.com}"
+  local daemon_json="/etc/docker/daemon.json"
+
+  echo "Configuring Docker daemon to use mirror: ${mirror}"
+
+  if [[ ! -f "${daemon_json}" ]]; then
+    # Create new daemon.json
+    sudo tee "${daemon_json}" > /dev/null <<EOF
+{
+  "registry-mirrors": ["${mirror}"]
+}
+EOF
+  else
+    # Backup existing config
+    if [[ ! -f "${daemon_json}.bak" ]]; then
+      sudo cp "${daemon_json}" "${daemon_json}.bak"
+      echo "Backup saved to ${daemon_json}.bak"
+    fi
+
+    # Use jq if available, otherwise sed
+    if command -v jq >/dev/null 2>&1; then
+      local tmp
+      tmp="$(mktemp)"
+      jq --arg m "${mirror}" '.["registry-mirrors"] = [$m]' "${daemon_json}" > "${tmp}"
+      sudo mv "${tmp}" "${daemon_json}"
+    else
+      # Simple sed-based approach (assumes no existing registry-mirrors)
+      if grep -q 'registry-mirrors' "${daemon_json}" 2>/dev/null; then
+        echo "[WARN] registry-mirrors already configured. Edit ${daemon_json} manually." >&2
+        return 0
+      fi
+      # Insert before the closing brace
+      sudo sed -i "s/}[[:space:]]*$/{\"registry-mirrors\": [\"${mirror}\"]}/" "${daemon_json}"
+    fi
+  fi
+
+  echo "Restarting Docker daemon..."
+  if sudo systemctl restart docker 2>/dev/null; then
+    echo "[OK] Docker daemon restarted with mirror configured."
+    echo "    Current mirror: ${mirror}"
+  else
+    echo "[WARN] Could not restart Docker via systemctl. Please restart Docker manually:" >&2
+    echo "    sudo systemctl restart docker" >&2
+  fi
 }
 
 usage() {
@@ -130,15 +167,16 @@ usage() {
 Usage: $(basename "$0") <command> [options]
 
 Commands:
-  up          Build (if needed) and start services in the background (default)
-  up-fg       Build and start in the foreground
-  down        Stop and remove containers (also removes orphans)
-  build       Build images without starting
-  pull        Pull base images (useful for warming up cache before build)
-  restart     Restart all services
-  logs        Tail logs (optional service: oma-platform | oma-auth | oma-harness-lb)
-  ps          Show container status
-  smoke       Run scripts/e2e/smoke-test.sh against the running stack
+  up            Build (if needed) and start services in the background (default)
+  up-fg         Build and start in the foreground
+  down          Stop and remove containers (also removes orphans)
+  build         Build images without starting
+  pull          Pull base images (useful for warming up cache before build)
+  restart       Restart all services
+  logs          Tail logs (optional service: oma-platform | oma-auth | oma-harness-lb)
+  ps            Show container status
+  setup-mirror  Configure Docker daemon to use a domestic registry mirror
+  smoke         Run scripts/e2e/smoke-test.sh against the running stack
 
 Independent services (managed separately):
   oma-openviking  ./openviking/start-openviking.sh {start|stop|restart|status|logs}
@@ -147,6 +185,8 @@ Independent services (managed separately):
 Examples:
   $(basename "$0")
   $(basename "$0") up
+  $(basename "$0") setup-mirror
+  $(basename "$0") setup-mirror https://docker.m.daocloud.io
   $(basename "$0") logs oma-platform
   $(basename "$0") down
 
@@ -217,6 +257,9 @@ case "${cmd}" in
     ;;
   ps|status)
     compose ps "$@"
+    ;;
+  setup-mirror)
+    cmd_setup_mirror "$@"
     ;;
   smoke)
     ensure_data_dir

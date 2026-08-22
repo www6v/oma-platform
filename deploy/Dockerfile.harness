@@ -1,10 +1,6 @@
 # syntax=docker/dockerfile:1
 
-# Domestic registry mirror for Docker Hub base images.
-# Set --build-arg REGISTRY_MIRROR=registry.cn-hangzhou.aliyuncs.com/library
-# for faster pulls in China, or leave default for Docker Hub.
-ARG REGISTRY_MIRROR=
-FROM ${REGISTRY_MIRROR:+${REGISTRY_MIRROR}/}python:3.12-slim
+FROM python:3.12-slim
 
 ARG APT_MIRROR=mirrors.aliyun.com
 ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple

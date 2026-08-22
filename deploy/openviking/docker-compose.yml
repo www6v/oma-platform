@@ -19,7 +19,6 @@ services:
       context: ../..
       dockerfile: deploy/openviking/Dockerfile.openviking
       args:
-        REGISTRY_MIRROR: ${REGISTRY_MIRROR:-}
         PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
     ports:
       - "1933:1933"
