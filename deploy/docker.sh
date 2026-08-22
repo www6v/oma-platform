@@ -98,20 +98,15 @@ check_harness_port() {
   fi
 }
 
-# Check whether Docker Hub mirrors are configured.
+# Check whether Docker Hub mirrors are configured (info only, no warning).
 check_mirror() {
-  # Check if Docker daemon has a mirror configured.
   if [[ -f /etc/docker/daemon.json ]] && grep -q 'registry-mirrors' /etc/docker/daemon.json 2>/dev/null; then
     local mirror
     mirror="$(grep -A1 'registry-mirrors' /etc/docker/daemon.json | grep -oE 'https?://[^"]+' | head -1)"
     if [[ -n "${mirror}" ]]; then
-      echo "[OK] Docker Hub mirror configured: ${mirror}"
-      return 0
+      echo "[OK] Docker Hub mirror: ${mirror}"
     fi
   fi
-
-  echo "[WARN] No Docker Hub mirror configured. Base image pulls may be slow in China." >&2
-  echo "  Run: $(basename "$0") setup-mirror" >&2
 }
 
 # Configure Docker daemon to use a domestic registry mirror.
@@ -227,7 +222,7 @@ case "${cmd}" in
     check_mirror
     free_stale_harness_port
     check_harness_port
-    compose up -d --build "$@"
+    compose up -d --build --parallel "$@"
     print_endpoints
     ;;
   up-fg)
@@ -235,18 +230,18 @@ case "${cmd}" in
     check_mirror
     free_stale_harness_port
     check_harness_port
-    compose up --build "$@"
+    compose up --build --parallel "$@"
     ;;
   down)
     compose down --remove-orphans "$@"
     ;;
   build)
-    compose build "$@"
+    compose build --parallel "$@"
     ;;
   pull)
     check_mirror
     echo "Pulling base images (this may take a while on first run)..."
-    compose pull "$@"
+    compose pull --parallel "$@"
     ;;
   restart)
     compose restart "$@"

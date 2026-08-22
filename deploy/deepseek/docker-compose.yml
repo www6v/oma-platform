@@ -29,8 +29,8 @@ services:
       test: ["CMD", "curl", "-sf", "http://127.0.0.1:3080/"]
       interval: 5s
       timeout: 3s
-      retries: 240
-      start_period: 90s
+      retries: 20
+      start_period: 30s
     restart: unless-stopped
 
 networks:

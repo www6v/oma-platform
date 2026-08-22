@@ -12,18 +12,15 @@ compose() {
   docker compose -f "$COMPOSE_FILE" "$@"
 }
 
-# Check whether Docker Hub mirrors are configured.
+# Check whether Docker Hub mirrors are configured (info only, no warning).
 check_mirror() {
   if [[ -f /etc/docker/daemon.json ]] && grep -q 'registry-mirrors' /etc/docker/daemon.json 2>/dev/null; then
     local mirror
     mirror="$(grep -A1 'registry-mirrors' /etc/docker/daemon.json | grep -oE 'https?://[^"]+' | head -1)"
     if [[ -n "${mirror}" ]]; then
-      echo "[OK] Docker Hub mirror configured: ${mirror}"
-      return 0
+      echo "[OK] Docker Hub mirror: ${mirror}"
     fi
   fi
-  echo "[WARN] No Docker Hub mirror configured. Base image pulls may be slow in China." >&2
-  echo "  Run: ../docker.sh setup-mirror" >&2
 }
 
 cmd_start() {
