@@ -13,8 +13,8 @@ RUN pip install --no-cache-dir -i "${PIP_INDEX_URL}" openviking==0.4.13
 
 # Web Studio overlay: lets deep links assert a tenant identity so tenant
 # memories (viking://user/<tenant>/...) are visible in the Studio tree.
-COPY deploy/openviking-studio-inject.js /opt/oma/openviking-studio-inject.js
-COPY deploy/docker-entrypoint-openviking.sh /opt/oma/entrypoint.sh
+COPY deploy/openviking/openviking-studio-inject.js /opt/oma/openviking-studio-inject.js
+COPY deploy/openviking/docker-entrypoint-openviking.sh /opt/oma/entrypoint.sh
 RUN chmod +x /opt/oma/entrypoint.sh
 
 EXPOSE 1933
