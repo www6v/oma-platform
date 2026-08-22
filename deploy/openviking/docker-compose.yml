@@ -17,7 +17,7 @@ services:
   oma-openviking:
     build:
       context: ../..
-      dockerfile: deploy/Dockerfile.openviking
+      dockerfile: deploy/openviking/Dockerfile.openviking
       args:
         PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
     ports:
