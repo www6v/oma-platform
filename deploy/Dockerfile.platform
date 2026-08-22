@@ -5,7 +5,8 @@ ARG NPM_REGISTRY=https://registry.npmmirror.com
 WORKDIR /src/console
 COPY console/package.json console/package-lock.json ./
 COPY console/packages ./packages
-RUN npm config set registry "${NPM_REGISTRY}" \
+RUN --mount=type=cache,target=/root/.npm \
+    npm config set registry "${NPM_REGISTRY}" \
   && npm ci --ignore-scripts
 COPY console/ ./
 RUN npm run build
@@ -16,9 +17,11 @@ ARG GOSUMDB=sum.golang.google.cn
 ENV GOPROXY=${GOPROXY} GOSUMDB=${GOSUMDB}
 WORKDIR /src
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -o /oma-server ./cmd/oma-server
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go build -o /oma-server ./cmd/oma-server
 
 # Use Docker Hub instead of gcr.io/distroless (often blocked or slow in CN).
 FROM debian:bookworm-slim

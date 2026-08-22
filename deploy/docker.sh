@@ -157,12 +157,43 @@ EOF
   fi
 }
 
+# Pre-flight: verify Docker, disk space, and required ports before starting.
+preflight() {
+  # Check Docker daemon
+  if ! docker info >/dev/null 2>&1; then
+    echo "error: Docker daemon is not running or unreachable." >&2
+    echo "  sudo systemctl status docker" >&2
+    return 1
+  fi
+
+  # Check disk space — warn if / has less than 5 GB free
+  local avail_gb
+  avail_gb="$(df -BG / | awk 'NR==2 {gsub(/G/,"",$4); print $4}')"
+  if [[ "${avail_gb}" -lt 5 ]]; then
+    echo "[WARN] Low disk space: ${avail_gb}GB free on / (recommend >= 5GB)." >&2
+    echo "  docker system prune -af  # remove unused images/layers" >&2
+    echo "  df -h /" >&2
+  else
+    echo "[OK] Disk: ${avail_gb}GB free on /"
+  fi
+
+  # Check Docker buildx
+  if ! docker buildx version >/dev/null 2>&1; then
+    echo "[WARN] buildx not found, falling back to legacy build" >&2
+    export DOCKER_BUILDKIT=0
+    export COMPOSE_DOCKER_CLI_BUILD=0
+  else
+    echo "[OK] Docker buildx: $(docker buildx version 2>/dev/null)"
+  fi
+}
+
 usage() {
   cat <<EOF
 Usage: $(basename "$0") <command> [options]
 
 Commands:
   up            Build (if needed) and start services in the background (default)
+  up --no-build Start services without rebuilding (faster restart)
   up-fg         Build and start in the foreground
   down          Stop and remove containers (also removes orphans)
   build         Build images without starting
@@ -170,6 +201,7 @@ Commands:
   restart       Restart all services
   logs          Tail logs (optional service: oma-platform | oma-auth | oma-harness-lb)
   ps            Show container status
+  preflight     Run pre-flight checks without starting anything
   setup-mirror  Configure Docker daemon to use a domestic registry mirror
   smoke         Run scripts/e2e/smoke-test.sh against the running stack
 
@@ -219,14 +251,24 @@ load_env
 case "${cmd}" in
   up)
     ensure_data_dir
+    preflight
     check_mirror
     free_stale_harness_port
     check_harness_port
-    compose up -d --build "$@"
+
+    build_args=()
+    if [[ "${1:-}" == "--no-build" ]]; then
+      echo "[info] skipping build (--no-build), starting existing images..."
+      shift || true
+    else
+      build_args=(--build)
+    fi
+    compose up -d "${build_args[@]}" "$@"
     print_endpoints
     ;;
   up-fg)
     ensure_data_dir
+    preflight
     check_mirror
     free_stale_harness_port
     check_harness_port
@@ -236,14 +278,20 @@ case "${cmd}" in
     compose down --remove-orphans "$@"
     ;;
   build)
+    preflight
+    check_mirror
     compose build "$@"
     ;;
   pull)
+    preflight
     check_mirror
     echo "Pulling base images (this may take a while on first run)..."
     compose pull "$@"
     ;;
   restart)
+    ensure_data_dir
+    preflight
+    check_harness_port
     compose restart "$@"
     print_endpoints
     ;;
@@ -252,6 +300,11 @@ case "${cmd}" in
     ;;
   ps|status)
     compose ps "$@"
+    ;;
+  preflight)
+    preflight
+    check_mirror
+    check_harness_port 2>/dev/null || true
     ;;
   setup-mirror)
     cmd_setup_mirror "$@"
