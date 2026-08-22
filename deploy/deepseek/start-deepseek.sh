@@ -8,26 +8,47 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
 SERVICE_NAME="oma-deepseek"
 
+# Domestic Docker Hub mirror for base image pulls.
+# Set in .env: REGISTRY_MIRROR=registry.cn-hangzhou.aliyuncs.com/library
+export REGISTRY_MIRROR="${REGISTRY_MIRROR:-}"
+
 compose() {
   docker compose -f "$COMPOSE_FILE" "$@"
 }
 
+# Check whether a Docker Hub mirror is configured.
+check_mirror() {
+  if [[ -n "${REGISTRY_MIRROR}" ]]; then
+    echo "[OK] Using Docker Hub mirror: ${REGISTRY_MIRROR}"
+    return 0
+  fi
+  if [[ -f /etc/docker/daemon.json ]] && grep -q 'registry-mirrors' /etc/docker/daemon.json 2>/dev/null; then
+    echo "[OK] Docker daemon has registry mirror configured."
+    return 0
+  fi
+  echo "[WARN] No Docker Hub mirror configured. Base image pulls may be slow in China." >&2
+  echo "  Set in .env: REGISTRY_MIRROR=registry.cn-hangzhou.aliyuncs.com/library" >&2
+}
+
 cmd_start() {
+  check_mirror
   # Ensure the shared network exists (created by main stack or here).
   docker network create oma-network 2>/dev/null || true
   echo "Starting $SERVICE_NAME..."
   compose up -d
   echo "Waiting for health check (this may take a few minutes on first build)..."
-  compose ps --format json 2>/dev/null | grep -q '"Health":"healthy"' && echo "[OK] $SERVICE_NAME is healthy." || {
-    for i in $(seq 1 60); do
-      sleep 5
-      if compose ps --format json 2>/dev/null | grep -q '"Health":"healthy"'; then
-        echo "[OK] $SERVICE_NAME is healthy."
-        return 0
-      fi
-    done
-    echo "[WARN] $SERVICE_NAME may not be healthy yet. Check with: $0 status"
-  }
+  for i in $(seq 1 120); do
+    sleep 3
+    if compose ps --format json 2>/dev/null | grep -q '"Health":"healthy"'; then
+      echo "[OK] $SERVICE_NAME is healthy (took ~$((i * 3))s)."
+      return 0
+    fi
+    # Print progress every 20 iterations (~60s)
+    if (( i % 20 == 0 )); then
+      echo "  ... still waiting ($((i * 3))s elapsed)"
+    fi
+  done
+  echo "[WARN] $SERVICE_NAME may not be healthy yet. Check with: $0 status"
 }
 
 cmd_stop() {

@@ -3,6 +3,7 @@ x-harness-common: &harness-common
     context: ..
     dockerfile: deploy/Dockerfile.harness
     args:
+      REGISTRY_MIRROR: ${REGISTRY_MIRROR:-}
       APT_MIRROR: ${APT_MIRROR:-mirrors.aliyun.com}
       PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
       UV_INDEX_URL: ${UV_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
@@ -25,6 +26,7 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile.auth
       args:
+        REGISTRY_MIRROR: ${REGISTRY_MIRROR:-}
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
         APT_MIRROR: ${APT_MIRROR:-mirrors.aliyun.com}
     env_file:
@@ -55,6 +57,7 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile.platform
       args:
+        REGISTRY_MIRROR: ${REGISTRY_MIRROR:-}
         GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
         GOSUMDB: ${GOSUMDB:-sum.golang.google.cn}
         APT_MIRROR: ${APT_MIRROR:-mirrors.aliyun.com}

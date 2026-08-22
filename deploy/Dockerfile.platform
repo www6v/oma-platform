@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1
 
-FROM node:22-bookworm AS console-build
+ARG REGISTRY_MIRROR=
+FROM ${REGISTRY_MIRROR:+${REGISTRY_MIRROR}/}node:22-bookworm AS console-build
 ARG NPM_REGISTRY=https://registry.npmmirror.com
 WORKDIR /src/console
 COPY console/package.json console/package-lock.json ./
@@ -10,7 +11,8 @@ RUN npm config set registry "${NPM_REGISTRY}" \
 COPY console/ ./
 RUN npm run build
 
-FROM golang:1.24-bookworm AS build
+ARG REGISTRY_MIRROR=
+FROM ${REGISTRY_MIRROR:+${REGISTRY_MIRROR}/}golang:1.24-bookworm AS build
 ARG GOPROXY=https://goproxy.cn,direct
 ARG GOSUMDB=sum.golang.google.cn
 ENV GOPROXY=${GOPROXY} GOSUMDB=${GOSUMDB}
@@ -21,7 +23,8 @@ COPY . .
 RUN CGO_ENABLED=0 go build -o /oma-server ./cmd/oma-server
 
 # Use Docker Hub instead of gcr.io/distroless (often blocked or slow in CN).
-FROM debian:bookworm-slim
+ARG REGISTRY_MIRROR=
+FROM ${REGISTRY_MIRROR:+${REGISTRY_MIRROR}/}debian:bookworm-slim
 ARG APT_MIRROR=mirrors.aliyun.com
 RUN sed -i "s|deb.debian.org|${APT_MIRROR}|g; s|security.debian.org|${APT_MIRROR}|g" \
       /etc/apt/sources.list.d/debian.sources \

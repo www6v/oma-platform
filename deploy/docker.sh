@@ -11,6 +11,11 @@ COMPOSE_FILE="${DEPLOY_DIR}/docker-compose.yml"
 export DOCKER_BUILDKIT=1
 export COMPOSE_DOCKER_CLI_BUILD=1
 
+# Domestic Docker Hub mirror for base image pulls.
+# Set in .env: REGISTRY_MIRROR=registry.cn-hangzhou.aliyuncs.com/library
+# This overrides FROM images in Dockerfiles to pull from the mirror registry.
+export REGISTRY_MIRROR="${REGISTRY_MIRROR:-}"
+
 load_env() {
   if [[ -f "${ROOT_DIR}/.env" ]]; then
     set -a
@@ -98,6 +103,28 @@ check_harness_port() {
   fi
 }
 
+# Check whether Docker Hub pulls are slow and suggest a domestic mirror.
+check_mirror() {
+  if [[ -n "${REGISTRY_MIRROR}" ]]; then
+    echo "[OK] Using Docker Hub mirror: ${REGISTRY_MIRROR}"
+    return 0
+  fi
+
+  # Check if Docker daemon has a mirror configured.
+  if [[ -f /etc/docker/daemon.json ]] && grep -q 'registry-mirrors' /etc/docker/daemon.json 2>/dev/null; then
+    local mirrors
+    mirrors="$(grep -A1 'registry-mirrors' /etc/docker/daemon.json | tail -1)"
+    echo "[OK] Docker daemon has registry mirror configured: ${mirrors}"
+    return 0
+  fi
+
+  echo "[WARN] No Docker Hub mirror configured. Base image pulls may be slow in China." >&2
+  echo "  Option 1 (recommended): Add to /etc/docker/daemon.json and restart Docker:" >&2
+  echo '    {"registry-mirrors": ["https://registry.cn-hangzhou.aliyuncs.com"]}' >&2
+  echo "  Option 2: Set in .env:" >&2
+  echo "    REGISTRY_MIRROR=registry.cn-hangzhou.aliyuncs.com/library" >&2
+}
+
 usage() {
   cat <<EOF
 Usage: $(basename "$0") <command> [options]
@@ -107,6 +134,7 @@ Commands:
   up-fg       Build and start in the foreground
   down        Stop and remove containers (also removes orphans)
   build       Build images without starting
+  pull        Pull base images (useful for warming up cache before build)
   restart     Restart all services
   logs        Tail logs (optional service: oma-platform | oma-auth | oma-harness-lb)
   ps          Show container status
@@ -156,6 +184,7 @@ load_env
 case "${cmd}" in
   up)
     ensure_data_dir
+    check_mirror
     free_stale_harness_port
     check_harness_port
     compose up -d --build "$@"
@@ -163,6 +192,7 @@ case "${cmd}" in
     ;;
   up-fg)
     ensure_data_dir
+    check_mirror
     free_stale_harness_port
     check_harness_port
     compose up --build "$@"
@@ -172,6 +202,11 @@ case "${cmd}" in
     ;;
   build)
     compose build "$@"
+    ;;
+  pull)
+    check_mirror
+    echo "Pulling base images (this may take a while on first run)..."
+    compose pull "$@"
     ;;
   restart)
     compose restart "$@"
