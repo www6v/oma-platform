@@ -222,7 +222,7 @@ case "${cmd}" in
     check_mirror
     free_stale_harness_port
     check_harness_port
-    compose up -d --build --parallel "$@"
+    compose up -d --build "$@"
     print_endpoints
     ;;
   up-fg)
@@ -230,18 +230,18 @@ case "${cmd}" in
     check_mirror
     free_stale_harness_port
     check_harness_port
-    compose up --build --parallel "$@"
+    compose up --build "$@"
     ;;
   down)
     compose down --remove-orphans "$@"
     ;;
   build)
-    compose build --parallel "$@"
+    compose build "$@"
     ;;
   pull)
     check_mirror
     echo "Pulling base images (this may take a while on first run)..."
-    compose pull --parallel "$@"
+    compose pull "$@"
     ;;
   restart)
     compose restart "$@"
