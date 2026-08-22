@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Deploy oma-platform + oma-harness + oma-deepseek with Docker Compose.
+# Deploy oma-platform + oma-harness with Docker Compose.
+# Independent services (oma-openviking / oma-deepseek) are managed by their
+# own scripts: start-openviking.sh / start-deepseek.sh.
 set -euo pipefail
 
 DEPLOY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -106,32 +108,40 @@ Commands:
   down        Stop and remove containers (also removes orphans)
   build       Build images without starting
   restart     Restart all services
-  logs        Tail logs (optional service: oma-platform | oma-auth | oma-harness-lb | oma-deepseek)
+  logs        Tail logs (optional service: oma-platform | oma-auth | oma-harness-lb)
   ps          Show container status
   smoke       Run scripts/e2e/smoke-test.sh against the running stack
+
+Independent services (managed separately):
+  oma-openviking  ./openviking/start-openviking.sh {start|stop|restart|status|logs}
+  oma-deepseek    ./deepseek/start-deepseek.sh   {start|stop|restart|status|logs}
 
 Examples:
   $(basename "$0")
   $(basename "$0") up
   $(basename "$0") logs oma-platform
-  $(basename "$0") logs oma-deepseek
   $(basename "$0") down
 
+  ./openviking/start-openviking.sh start
+  ./deepseek/start-deepseek.sh   start
+
   # Or without docker.sh (must pass parent .env for build-arg substitution):
-  docker compose --env-file ../.env up -d --build --remove-orphans
+  docker compose --env-file ../.env -f docker-compose.yml up -d --build --remove-orphans
 
 Environment:
   Loads ${ROOT_DIR}/.env when present (via --env-file and service env_file).
   Platform API: http://localhost:8787
   Harness LB:   http://localhost:8090  (oma-harness-lb → harness-1/2)
-  DeepSeek:     http://localhost:3080  (oma-deepseek, ~10 min to start)
+  OpenViking:   http://localhost:1933  (oma-openviking, managed by start-openviking.sh)
+  DeepSeek:     http://localhost:3080  (oma-deepseek, managed by start-deepseek.sh)
 EOF
 }
 
 print_endpoints() {
   echo "oma-platform: http://localhost:8787  (Console UI + /health)"
   echo "oma-harness:  http://localhost:8090  (LB → oma-harness-1/2)"
-  echo "oma-deepseek: http://localhost:3080  (starts ~10 min in background)"
+  echo "oma-openviking: http://localhost:1933  (use openviking/start-openviking.sh to start)"
+  echo "oma-deepseek:   http://localhost:3080  (use deepseek/start-deepseek.sh to start)"
 }
 
 cmd="${1:-up}"

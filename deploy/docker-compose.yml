@@ -97,27 +97,6 @@ services:
       oma-harness-2:
         condition: service_healthy
 
-  # OpenViking context database (external memory provider).
-  # Create deploy/openviking.conf.json from openviking.conf.example.json
-  # (fill in the DashScope API key) before `docker compose up`.
-  oma-openviking:
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile.openviking
-      args:
-        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
-    ports:
-      - "1933:1933"
-    volumes:
-      - ./openviking.conf.json:/etc/openviking/ov.conf:ro
-      - ov-data:/var/lib/openviking
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:1933/health')"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-      start_period: 20s
-    restart: unless-stopped
 
   # Same-host piPy replicas behind oma-harness-lb. Multi-replica requires
   # DATABASE_URL (MySQL); shared OMA_DATABASE_PATH SQLite is unsafe.
@@ -133,9 +112,6 @@ services:
       OMA_MEMORY_PROVIDER: openviking
       OPENVIKING_ENDPOINT: http://oma-openviking:1933
       OPENVIKING_AGENT: oma
-    depends_on:
-      oma-openviking:
-        condition: service_healthy
 
   oma-harness-2:
     <<: *harness-common
@@ -147,9 +123,6 @@ services:
       OPENVIKING_AGENT: oma
       # Must match server.root_api_key in deploy/openviking.conf.json (trusted mode).
       OPENVIKING_API_KEY: ${OPENVIKING_API_KEY:-oma-ov-internal-dev}
-    depends_on:
-      oma-openviking:
-        condition: service_healthy
 
   # Dedicated harness LB on host :8090. Coexists with any existing Nginx on :80
   # (e.g. notebooklm-nginx) — no port clash.
@@ -165,31 +138,6 @@ services:
       oma-harness-2:
         condition: service_healthy
 
-  # DeepSeek dsh web gateway (harness Kind "deepseek").
-  # Takes ~10 min to start — no other service depends_on it.
-  oma-deepseek:
-    build:
-      context: ../../deepseek-harness-master
-      dockerfile: deploy/Dockerfile.dsh
-      args:
-        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
-        APT_MIRROR: ${APT_MIRROR:-mirrors.aliyun.com}
-    env_file:
-      - ../.env
-    environment:
-      DSH_HOME: /root/.pi/agent
-    ports:
-      - "0.0.0.0:${DSH_HOST_PORT:-3080}:3080"
-    volumes:
-      - ../data:/data
-      - ${HOME}/.pi/agent:/root/.pi/agent
-    healthcheck:
-      test: ["CMD", "curl", "-sf", "http://127.0.0.1:3080/"]
-      interval: 5s
-      timeout: 3s
-      retries: 240
-      start_period: 90s
-    restart: unless-stopped
-
-volumes:
-  ov-data:
+networks:
+  default:
+    name: oma-network

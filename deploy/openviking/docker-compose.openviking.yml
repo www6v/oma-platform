@@ -1,0 +1,41 @@
+# Standalone compose for oma-openviking (OpenViking context database).
+#
+# Usage:
+#   # Start / stop / restart:
+#   docker compose -f deploy/openviking/docker-compose.yml up -d
+#   docker compose -f deploy/openviking/docker-compose.yml down
+#   docker compose -f deploy/openviking/docker-compose.yml restart
+#
+#   # View logs:
+#   docker compose -f deploy/openviking/docker-compose.yml logs -f
+#
+#   # With the main harness stack (shares oma-network):
+#   docker compose -f deploy/docker-compose.yml \
+#     -f deploy/openviking/docker-compose.yml up -d
+
+services:
+  oma-openviking:
+    build:
+      context: ../..
+      dockerfile: deploy/Dockerfile.openviking
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
+    ports:
+      - "1933:1933"
+    volumes:
+      - ./openviking.conf.json:/etc/openviking/ov.conf:ro
+      - ov-data:/var/lib/openviking
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:1933/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+networks:
+  default:
+    name: oma-network
+
+volumes:
+  ov-data:
