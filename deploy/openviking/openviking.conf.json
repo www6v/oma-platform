@@ -1,0 +1,27 @@
+{
+  "default_account": "default",
+  "default_user": "default",
+  "storage": {
+    "workspace": "/Users/t-wangwei07/Downloads/workspacePy/mycode/oma/oma-platform/data/openviking"
+  },
+  "vlm": {
+    "provider": "openai",
+    "model": "qwen3.7-plus",
+    "api_key": "sk-e4586ec037624d6792b1c7a4a850cef2",
+    "api_base": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "timeout": 120.0
+  },
+  "embedding": {
+    "dense": {
+      "provider": "dashscope",
+      "model": "text-embedding-v4",
+      "api_key": "sk-e4586ec037624d6792b1c7a4a850cef2",
+      "dimension": 1024,
+      "input": "text"
+    }
+  },
+  "server": {
+    "auth_mode": "trusted",
+    "root_api_key": "oma-ov-internal-dev"
+  }
+}

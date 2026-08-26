@@ -5,8 +5,7 @@
 #   ./start-deepseek.sh {start|stop|restart|status|logs|rebuild}
 #
 #   With the main harness stack (shares oma-network):
-#   docker compose -f deploy/docker-compose.yml \
-#     -f deploy/deepseek/docker-compose.yml up -d
+#   docker compose -f deploy/docker-compose.yml #     -f deploy/deepseek/docker-compose.yml up -d
 
 services:
   oma-deepseek:
@@ -20,6 +19,9 @@ services:
       - ../../.env
     environment:
       DSH_HOME: /root/.pi/agent
+    # Trust oma-deepseek hostname so the /api trust fence accepts requests
+    # from other containers on oma-network (DeepSeekClient RPC + WS calls).
+    command: ["pnpm", "dsh", "web", "--host", "0.0.0.0", "--trusted-host", "oma-deepseek"]
     ports:
       - "0.0.0.0:${DSH_HOST_PORT:-3080}:3080"
     volumes:
