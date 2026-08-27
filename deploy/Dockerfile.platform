@@ -7,7 +7,7 @@ COPY console/package.json console/package-lock.json ./
 COPY console/packages ./packages
 RUN --mount=type=cache,target=/root/.npm \
     npm config set registry "${NPM_REGISTRY}" \
-  && npm ci --ignore-scripts
+  && npm install --ignore-scripts --no-save
 COPY console/ ./
 RUN npm run build
 
