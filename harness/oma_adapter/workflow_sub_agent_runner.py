@@ -1,6 +1,6 @@
 """OMA harness subAgent backend via pi_subagent run_sub_turn delegation.
 
-When piPy-dynamic-workflows runs inside oma-platform harness, each workflow
+When piPy-dynamic-workflows runs inside meta-harness harness, each workflow
 agent() step delegates through the host ``SubAgentRuntime`` (same sandbox,
 Console thread visibility).
 

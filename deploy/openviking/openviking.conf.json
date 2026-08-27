@@ -2,7 +2,7 @@
   "default_account": "default",
   "default_user": "default",
   "storage": {
-    "workspace": "/Users/t-wangwei07/Downloads/workspacePy/mycode/oma/oma-platform/data/openviking"
+    "workspace": "/Users/t-wangwei07/Downloads/workspacePy/mycode/oma/meta-harness/data/openviking"
   },
   "vlm": {
     "provider": "openai",

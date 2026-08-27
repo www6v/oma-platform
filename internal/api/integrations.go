@@ -894,7 +894,7 @@ func trimOptional(s *string) *string {
 func integrationsGatewayOrigin() string {
 	// Match open-managed-agents/apps/main-node:
 	//   GATEWAY_ORIGIN ?? PUBLIC_BASE_URL ?? "http://localhost:8787"
-	// Also accept oma-platform aliases so existing .env / tests keep working.
+	// Also accept meta-harness aliases so existing .env / tests keep working.
 	// Slack OAuth redirect_uri and webhook URLs are built from this origin.
 	for _, key := range []string{
 		"GATEWAY_ORIGIN",

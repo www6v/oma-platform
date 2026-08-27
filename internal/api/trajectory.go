@@ -56,7 +56,7 @@ func buildTrajectory(sess *store.Session, events []store.StoredEvent) map[string
 		"environment_config": jsonAny(sess.EnvironmentSnapshot),
 		"model": map[string]any{
 			"id":       modelIDFromSnapshot(sess.AgentSnapshot),
-			"provider": "oma-platform",
+			"provider": "meta-harness",
 		},
 		"started_at": startedAt,
 		"ended_at":   nullIfEmpty(endedAt),

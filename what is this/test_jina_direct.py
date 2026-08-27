@@ -9,7 +9,7 @@ import sys
 os.environ["JINA_API_KEY"] = "jina_91aea80b9adb44d3b95f9218c7a8ec9dTKitm7fV85nJHP-NuVEwNldJwVxh"
 
 # Add harness to path
-sys.path.insert(0, "/Users/t-wangwei07/Downloads/workspacePy/mycode/oma/oma-platform/harness")
+sys.path.insert(0, "/Users/t-wangwei07/Downloads/workspacePy/mycode/oma/meta-harness/harness")
 
 
 async def test_jina():

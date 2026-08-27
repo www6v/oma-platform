@@ -1,7 +1,7 @@
 -- ============================================================================
 -- harness.sql
 -- OMA Harness (piPy 动态工作流扩展) - 全量表结构 DDL
--- 来源: oma-platform/harness/data/workflows.db
+-- 来源: meta-harness/harness/data/workflows.db
 --        + piPy-dynamic-workflows/pipy_dynamic_workflows/lib/database.py
 -- 数据库: SQLite (workflows.db)
 -- ============================================================================

@@ -1,7 +1,7 @@
 -- ============================================================================
 -- harness_mysql.sql
 -- OMA Harness (piPy 动态工作流扩展) - MySQL 版本 DDL
--- 来源: oma-platform/scripts/sql/harness.sql (SQLite) 的 MySQL 等价版本
+-- 来源: meta-harness/scripts/sql/harness.sql (SQLite) 的 MySQL 等价版本
 -- 数据库: MySQL (managed_agent), 与 platform 表共用同一个库
 -- ============================================================================
 -- 注意:

@@ -20,10 +20,10 @@ importers:
       '@hookform/resolvers':
         specifier: ^5.2.2
         version: 5.4.0(react-hook-form@7.82.0(react@19.2.7))
-      '@oma-platform/acp-known-agents':
+      '@meta-harness/acp-known-agents':
         specifier: file:./packages/acp-known-agents
         version: file:packages/acp-known-agents
-      '@oma-platform/api-types':
+      '@meta-harness/api-types':
         specifier: file:./packages/api-types
         version: file:packages/api-types
       '@radix-ui/react-collapsible':
@@ -827,10 +827,10 @@ packages:
     resolution: {integrity: sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg==}
     engines: {node: '>= 8'}
 
-  '@oma-platform/acp-known-agents@file:packages/acp-known-agents':
+  '@meta-harness/acp-known-agents@file:packages/acp-known-agents':
     resolution: {directory: packages/acp-known-agents, type: directory}
 
-  '@oma-platform/api-types@file:packages/api-types':
+  '@meta-harness/api-types@file:packages/api-types':
     resolution: {directory: packages/api-types, type: directory}
 
   '@open-draft/deferred-promise@2.2.0':
@@ -5377,9 +5377,9 @@ snapshots:
       '@nodelib/fs.scandir': 2.1.5
       fastq: 1.20.1
 
-  '@oma-platform/acp-known-agents@file:packages/acp-known-agents': {}
+  '@meta-harness/acp-known-agents@file:packages/acp-known-agents': {}
 
-  '@oma-platform/api-types@file:packages/api-types': {}
+  '@meta-harness/api-types@file:packages/api-types': {}
 
   '@open-draft/deferred-promise@2.2.0': {}
 

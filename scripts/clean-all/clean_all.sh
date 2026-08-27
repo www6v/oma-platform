@@ -13,7 +13,7 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-# Load oma-platform/.env when present (OMA_API_KEY, OMA_BASE_URL, etc.)
+# Load meta-harness/.env when present (OMA_API_KEY, OMA_BASE_URL, etc.)
 if [[ -f "${ROOT_DIR}/.env" ]]; then
     set -a
     # shellcheck disable=SC1091

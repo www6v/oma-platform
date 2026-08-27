@@ -6,10 +6,10 @@ import os
 import sys
 
 # Add harness to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "oma-platform", "harness"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "meta-harness", "harness"))
 
 # Load .env
-env_file = os.path.join(os.path.dirname(__file__), "oma-platform", ".env")
+env_file = os.path.join(os.path.dirname(__file__), "meta-harness", ".env")
 if os.path.exists(env_file):
     with open(env_file) as f:
         for line in f:

@@ -8,7 +8,7 @@
 #   - Python harness sandbox_paths + resource_mounter (memory no-op)
 #
 # Mirrors open-managed-agents/apps/main-node/test/promote-sandbox-file.test.ts
-# at the unit/smoke layer (no /exec on oma-platform yet).
+# at the unit/smoke layer (no /exec on meta-harness yet).
 #
 # Usage:
 #   ./scripts/e2e/smoke-promote-sandbox-e2e.sh

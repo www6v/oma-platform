@@ -1,4 +1,4 @@
-"""Bash operations that delegate to oma-platform POST /v1/sessions/:id/exec."""
+"""Bash operations that delegate to meta-harness POST /v1/sessions/:id/exec."""
 
 from __future__ import annotations
 

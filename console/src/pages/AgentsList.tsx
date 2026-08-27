@@ -10,7 +10,7 @@ import { FilterChip, CreatedFilterChip } from "../components/FilterChip";
 import { RowActionsMenu } from "../components/RowActionsMenu";
 import { Button } from "@/components/ui/button";
 import { PopoverContent } from "@/components/ui/popover";
-import type { ModelCard } from "@oma-platform/api-types";
+import type { ModelCard } from "@meta-harness/api-types";
 import type { AgentRecord as Agent } from "../types/agent";
 import { AgentFormDialog } from "./agents/AgentFormDialog";
 

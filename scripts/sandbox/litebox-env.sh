@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared LiteBox / BoxLite environment for oma-platform.
+# Shared LiteBox / BoxLite environment for meta-harness.
 # Source from start scripts and smoke tests.
 set -euo pipefail
 

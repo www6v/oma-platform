@@ -5,12 +5,12 @@ One-shot migration: workflows SQLite → MySQL.
 Reads:
     By default ./data/workflows.db (piPy-dynamic-workflows project).
     Override with WORKFLOWS_SQLITE env var. Only migrates this one file;
-    sibling workflows.db files (console/, harness/, oma-platform/data/)
+    sibling workflows.db files (console/, harness/, meta-harness/data/)
     are independent copies and can each be migrated by passing their path
     via WORKFLOWS_SQLITE.
 
 Writes into the MySQL database pointed to by DATABASE_URL (same one that
-oma-platform uses). The four workflow tables (workflows, workflow_executions,
+meta-harness uses). The four workflow tables (workflows, workflow_executions,
 workflow_traces, workflow_journal) are created if missing; existing rows are
 skipped via INSERT IGNORE so the script is safe to re-run.
 

@@ -7,7 +7,7 @@ Reads:
   ./data/oma.db    — OMA tenant tables: tenant, membership
 
 Writes into the MySQL database pointed to by DATABASE_URL (same one that
-oma-platform uses). Tables are created if missing; existing rows are skipped
+meta-harness uses). Tables are created if missing; existing rows are skipped
 via INSERT IGNORE so the script is safe to re-run.
 
 Usage:

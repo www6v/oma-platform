@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploy oma-platform + oma-harness with Docker Compose.
+# Deploy meta-harness + oma-harness with Docker Compose.
 # Independent services (oma-openviking / oma-deepseek) are managed by their
 # own scripts: start-openviking.sh / start-deepseek.sh.
 set -euo pipefail
@@ -199,7 +199,7 @@ Commands:
   build         Build images without starting
   pull          Pull base images (useful for warming up cache before build)
   restart       Restart all services
-  logs          Tail logs (optional service: oma-platform | oma-auth | oma-harness-lb)
+  logs          Tail logs (optional service: meta-harness | oma-auth | oma-harness-lb)
   ps            Show container status
   preflight     Run pre-flight checks without starting anything
   setup-mirror  Configure Docker daemon to use a domestic registry mirror
@@ -214,7 +214,7 @@ Examples:
   $(basename "$0") up
   $(basename "$0") setup-mirror
   $(basename "$0") setup-mirror https://docker.m.daocloud.io
-  $(basename "$0") logs oma-platform
+  $(basename "$0") logs meta-harness
   $(basename "$0") down
 
   ./openviking/start-openviking.sh start
@@ -233,7 +233,7 @@ EOF
 }
 
 print_endpoints() {
-  echo "oma-platform: http://localhost:8787  (Console UI + /health)"
+  echo "meta-harness: http://localhost:8787  (Console UI + /health)"
   echo "oma-harness:  http://localhost:8090  (LB → oma-harness-1/2)"
   echo "oma-openviking: http://localhost:1933  (use openviking/start-openviking.sh to start)"
   echo "oma-deepseek:   http://localhost:3080  (use deepseek/start-deepseek.sh to start)"
@@ -311,8 +311,8 @@ case "${cmd}" in
     ;;
   smoke)
     ensure_data_dir
-    if ! compose ps --status running --quiet oma-platform | grep -q .; then
-      echo "error: oma-platform is not running; run $(basename "$0") up first" >&2
+    if ! compose ps --status running --quiet meta-harness | grep -q .; then
+      echo "error: meta-harness is not running; run $(basename "$0") up first" >&2
       exit 1
     fi
     export HARNESS_URL="${HARNESS_URL:-http://127.0.0.1:8090}"

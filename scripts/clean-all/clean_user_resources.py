@@ -16,7 +16,7 @@ from typing import Iterator, Optional
 import anthropic
 import httpx
 
-# Allow importing oma_sdk from oma-platform/sdk without a pip install.
+# Allow importing oma_sdk from meta-harness/sdk without a pip install.
 _SDK_DIR = Path(__file__).resolve().parents[2] / "sdk"
 if str(_SDK_DIR) not in sys.path:
     sys.path.insert(0, str(_SDK_DIR))
@@ -28,7 +28,7 @@ _DEFAULT_API_KEY = "dev-key"
 
 
 def _load_dotenv() -> None:
-    """Load oma-platform/.env when present."""
+    """Load meta-harness/.env when present."""
     dotenv = Path(__file__).resolve().parents[2] / ".env"
     if not dotenv.exists():
         return
@@ -361,7 +361,7 @@ def main():
     _load_dotenv()
     args = parser.parse_args()
 
-    # Determine base URL (default: local oma-platform)
+    # Determine base URL (default: local meta-harness)
     base_url = None
     if args.localhost:
         base_url = _DEFAULT_BASE_URL

@@ -364,15 +364,15 @@ export function Login() {
         className="absolute top-10 right-10 sm:top-12 sm:right-12 flex items-center gap-1 sm:gap-2"
       >
         <a
-          href="https://github.com/www6v/oma-platform"
+          href="https://github.com/www6v/meta-harness"
           target="_blank"
           rel="noopener noreferrer"
-          title="oma-platform on GitHub"
-          aria-label="oma-platform on GitHub"
+          title="meta-harness on GitHub"
+          aria-label="meta-harness on GitHub"
           className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-fg-muted hover:text-fg hover:bg-bg-surface transition-colors duration-[var(--dur-quick)] ease-[var(--ease-soft)]"
         >
           <GitHubIcon className="w-4 h-4 shrink-0" />
-          <span className="hidden sm:inline">oma-platform</span>
+          <span className="hidden sm:inline">meta-harness</span>
         </a>
         <a
           href="https://github.com/www6v/oma-sdk"

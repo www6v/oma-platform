@@ -6,7 +6,7 @@ CONSOLE="${CONSOLE_ROOT:-$ROOT/console}"
 
 if [[ ! -d "$CONSOLE" ]]; then
   echo "Console source not found at $CONSOLE" >&2
-  echo "Set CONSOLE_ROOT to oma-platform/console" >&2
+  echo "Set CONSOLE_ROOT to meta-harness/console" >&2
   exit 1
 fi
 

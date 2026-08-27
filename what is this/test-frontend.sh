@@ -55,7 +55,7 @@ echo ""
 
 # Test 5: Check plugin files
 echo "✓ Test 5: Plugin Files"
-PLUGIN_DIR="/Users/t-wangwei07/Downloads/workspacePy/mycode/oma/oma-platform/console/src/plugins/dynamic-workflows"
+PLUGIN_DIR="/Users/t-wangwei07/Downloads/workspacePy/mycode/oma/meta-harness/console/src/plugins/dynamic-workflows"
 FILES=("WorkflowList.tsx" "WorkflowEditor.tsx" "TraceViewer.tsx" "index.tsx" "styles.css" "README.md")
 for file in "${FILES[@]}"; do
     if [ -f "$PLUGIN_DIR/$file" ]; then
@@ -69,7 +69,7 @@ echo ""
 
 # Test 6: Check registry integration
 echo "✓ Test 6: Registry Integration"
-if grep -q "dynamicWorkflowsPlugin" "/Users/t-wangwei07/Downloads/workspacePy/mycode/oma/oma-platform/console/src/plugins/registry.ts"; then
+if grep -q "dynamicWorkflowsPlugin" "/Users/t-wangwei07/Downloads/workspacePy/mycode/oma/meta-harness/console/src/plugins/registry.ts"; then
     echo "  ✓ Plugin registered in registry.ts"
 else
     echo "  ✗ Plugin not registered in registry.ts"

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * LiteBox (BoxLite) JSON-RPC bridge for oma-platform Go executor.
+ * LiteBox (BoxLite) JSON-RPC bridge for meta-harness Go executor.
  * Mirrors open-managed-agents/packages/sandbox/src/adapters/litebox.ts.
  *
  * Protocol: one JSON object per line on stdin; one JSON response per line on stdout.

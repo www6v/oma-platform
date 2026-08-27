@@ -19,7 +19,7 @@ type consoleStubDeps struct {
 }
 
 // mountConsoleStubRoutes registers empty-list stubs for Console pages that
-// main-node implements fully but oma-platform defers. Responses match the
+// main-node implements fully but meta-harness defers. Responses match the
 // wire shapes the Console SPA expects so pages render empty states without
 // console.warn noise or HTML 404 bodies.
 func mountConsoleStubRoutes(
@@ -90,6 +90,6 @@ func handleStubNotImplemented(w http.ResponseWriter, _ *http.Request) {
 	writeError(
 		w,
 		http.StatusNotImplemented,
-		"not implemented in oma-platform MVP",
+		"not implemented in meta-harness MVP",
 	)
 }

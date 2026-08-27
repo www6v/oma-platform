@@ -1,5 +1,5 @@
 {
-  "name": "@oma-platform/api-types",
+  "name": "@meta-harness/api-types",
   "version": "0.1.0",
   "private": true,
   "type": "module",

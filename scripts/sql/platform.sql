@@ -1,7 +1,7 @@
 -- ============================================================================
 -- platform.sql
 -- OMA Platform - 全量表结构 DDL
--- 来源: oma-platform/internal/store/migrations/001 ~ 023
+-- 来源: meta-harness/internal/store/migrations/001 ~ 023
 -- 数据库: SQLite (oma.db)
 -- ============================================================================
 

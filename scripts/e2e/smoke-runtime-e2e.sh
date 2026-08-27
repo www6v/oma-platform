@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# End-to-end smoke for Local ACP Runtime against oma-platform.
+# End-to-end smoke for Local ACP Runtime against meta-harness.
 #
 # Phase 1 (always): connect-runtime → exchange → list runtimes
 # Phase 2 (always): daemon WebSocket attach + hello/ping

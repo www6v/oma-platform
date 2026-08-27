@@ -62,7 +62,7 @@ services:
           memory: 512M
           cpus: "0.5"
 
-  oma-platform:
+  meta-harness:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.platform
@@ -78,7 +78,7 @@ services:
       # Container paths / in-network URLs only. App secrets and toggles
       # (OMA_FAKE_HARNESS, OMA_INTERNAL_SECRET, OMA_API_KEY, …) come from
       # env_file above — do not re-declare them here or they override .env.
-      # Database: oma-platform now connects to MySQL via DATABASE_URL in .env;
+      # Database: meta-harness now connects to MySQL via DATABASE_URL in .env;
       # no local SQLite file is used by the Go server anymore.
       SANDBOX_WORKDIR: /data/sandboxes
       # All artifact dirs must live on the shared /data volume so harness
@@ -90,7 +90,7 @@ services:
       # In-network LB URL (do not inherit host .env HARNESS_URL=127.0.0.1).
       HARNESS_URL: http://oma-harness-lb:8090
       # Harness schedule/MCP tools call oma-server from the sidecar container.
-      OMA_HARNESS_PLATFORM_BASE: http://oma-platform:8787
+      OMA_HARNESS_PLATFORM_BASE: http://meta-harness:8787
       # Slack/GitHub OAuth redirect_uri host (open-managed-agents GATEWAY_ORIGIN).
       # Prefer .env GATEWAY_ORIGIN / PUBLIC_BASE_URL; do not default to container
       # localhost or Slack will reject redirect_uri.
@@ -124,7 +124,7 @@ services:
   oma-harness-1:
     <<: *harness-common
     environment:
-      OMA_PLATFORM_URL: http://oma-platform:8787
+      OMA_PLATFORM_URL: http://meta-harness:8787
       OMA_DATABASE_PATH: /data/oma.db
       # External memory: OpenViking provider (built-in memory still runs;
       # OV adds tenant-level cross-session/cross-agent recall).
@@ -135,7 +135,7 @@ services:
   oma-harness-2:
     <<: *harness-common
     environment:
-      OMA_PLATFORM_URL: http://oma-platform:8787
+      OMA_PLATFORM_URL: http://meta-harness:8787
       OMA_DATABASE_PATH: /data/oma.db
       OMA_MEMORY_PROVIDER: openviking
       OPENVIKING_ENDPOINT: http://oma-openviking:1933

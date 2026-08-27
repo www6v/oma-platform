@@ -9,7 +9,7 @@ import { FacetedFilter } from "../components/FacetedFilter";
 import { FilterChip, CreatedFilterChip } from "../components/FilterChip";
 import { TextInput, SecretInput } from "../components/Input";
 import { toast } from "sonner";
-import type { ModelCard } from "@oma-platform/api-types";
+import type { ModelCard } from "@meta-harness/api-types";
 
 // Provider enum — mirrors the whitelist on the server
 // (apps/main/src/routes/model-cards.ts GET handler). Anything outside

@@ -32,7 +32,7 @@ else
 fi
 
 _oma_platform_root="$(cd "$(dirname "${_script}")/.." && pwd)" || \
-  _oma_go_env_fail "cannot resolve oma-platform root from ${_script}"
+  _oma_go_env_fail "cannot resolve meta-harness root from ${_script}"
 _oma_workspace_root="$(cd "${_oma_platform_root}/.." && pwd)" || \
   _oma_go_env_fail "cannot resolve workspace root from ${_oma_platform_root}"
 

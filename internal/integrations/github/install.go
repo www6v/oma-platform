@@ -36,7 +36,7 @@ func MintInstallationToken(
 	req.Header.Set("Authorization", "Bearer "+appJWT)
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-	req.Header.Set("User-Agent", "oma-platform")
+	req.Header.Set("User-Agent", "meta-harness")
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
@@ -84,7 +84,7 @@ func GetInstallation(
 	req.Header.Set("Authorization", "Bearer "+appJWT)
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-	req.Header.Set("User-Agent", "oma-platform")
+	req.Header.Set("User-Agent", "meta-harness")
 	resp, err := client.Do(req)
 	if err != nil {
 		return empty, err
