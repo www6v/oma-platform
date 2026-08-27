@@ -408,7 +408,7 @@ Environment snapshot 的 `resources`（或 `config.resources`）可声明：
 
 ## 与 Cloudflare 原版的差异
 
-| 能力 | CF 参考实现 | oma-platform MVP |
+| 能力 | CF 参考实现 | meta-harness MVP |
 |------|-------------|------------------|
 | 元数据 | D1 + API | SQLite + `/v1/memory_stores` ✅ |
 | 大对象 | R2 + FUSE | 本地 `MEMORY_DATA_DIR` ✅ |
@@ -447,4 +447,4 @@ Environment snapshot 的 `resources`（或 `config.resources`）可声明：
 
 ---
 
-*文档基于 oma-platform 当前代码库；若实现变更，以源码与迁移文件为准。*
+*文档基于 meta-harness 当前代码库；若实现变更，以源码与迁移文件为准。*

@@ -1,15 +1,15 @@
 # DeepSeek Harness 集成分析
 
 > **分析日期**: 2026-08-24
-> **分析范围**: `deepseek-harness-master` 对外 API 与 `oma-platform` 的集成方式
+> **分析范围**: `deepseek-harness-master` 对外 API 与 `meta-harness` 的集成方式
 
 ---
 
 ## 执行摘要
 
-**核心架构**：`oma-platform` 与 `deepseek-harness-master` 的集成采用 **HTTP RPC + WebSocket** 架构。DeepSeek harness 作为独立服务运行（Node.js web gateway，默认 :3080），oma-platform 的 Go 客户端通过 HTTP/WebSocket 与之通信。
+**核心架构**：`meta-harness` 与 `deepseek-harness-master` 的集成采用 **HTTP RPC + WebSocket** 架构。DeepSeek harness 作为独立服务运行（Node.js web gateway，默认 :3080），meta-harness 的 Go 客户端通过 HTTP/WebSocket 与之通信。
 
-**重要发现**：`oma-platform/harness/` 目录（Python FastAPI sidecar）**不是** DeepSeek Harness，而是基于 piPy SDK 的默认循环适配器。DeepSeek 集成完全在 Go 层实现（`internal/harness/deepseek_client.go`）。
+**重要发现**：`meta-harness/harness/` 目录（Python FastAPI sidecar）**不是** DeepSeek Harness，而是基于 piPy SDK 的默认循环适配器。DeepSeek 集成完全在 Go 层实现（`internal/harness/deepseek_client.go`）。
 
 ---
 
@@ -198,7 +198,7 @@ dsh plugin --profile tui add <pkg>
 
 ---
 
-## 2. oma-platform 中的 DeepSeek 集成架构
+## 2. meta-harness 中的 DeepSeek 集成架构
 
 ### 2.1 总体架构
 
@@ -285,7 +285,7 @@ func (c *DeepSeekClient) RunTurnStream(ctx context.Context, req TurnRequest, onE
 
 ---
 
-## 3. 被 oma-platform 使用的 DeepSeek Harness API 清单
+## 3. 被 meta-harness 使用的 DeepSeek Harness API 清单
 
 ### 3.1 RPC 方法（上行 HTTP）
 
@@ -413,7 +413,7 @@ _oma.harness = "deepseek"
 
 ---
 
-## 4. 不被 oma-platform 使用的 API
+## 4. 不被 meta-harness 使用的 API
 
 | 类别 | API | 不被使用的原因 |
 |------|-----|--------------|
@@ -487,7 +487,7 @@ OMA_DEEPSEEK_GATEWAY_URL=http://oma-deepseek:3080  # 容器 DNS
 | `apps/cli/src/bin.ts` | CLI 入口 |
 | `apps/cli/src/args.ts` | CLI 参数解析 |
 
-### oma-platform
+### meta-harness
 
 | 路径 | 作用 |
 |------|------|
@@ -518,7 +518,7 @@ OMA_DEEPSEEK_GATEWAY_URL=http://oma-deepseek:3080  # 容器 DNS
 
 ## 8. 架构对比
 
-| 维度 | deepseek-harness 原生 | oma-platform 集成方式 |
+| 维度 | deepseek-harness 原生 | meta-harness 集成方式 |
 |------|---------------------|---------------------|
 | **通信协议** | stdio JSON-RPC 或 HTTP/WS | HTTP/WS（仅 web gateway） |
 | **会话管理** | dsh 内部状态 | oma Go 层持久化（MySQL） |
@@ -532,7 +532,7 @@ OMA_DEEPSEEK_GATEWAY_URL=http://oma-deepseek:3080  # 容器 DNS
 
 ## 9. 总结
 
-### oma-platform 使用 deepseek-harness 的方式可概括为：
+### meta-harness 使用 deepseek-harness 的方式可概括为：
 
 1. **仅使用 web gateway**：通过 `POST /api/session.*` RPC + `WS /api/events.mux` 通信
 2. **最小化集成**：只使用 `session.create`、`session.prompt`、`session.list` 三个 RPC 方法

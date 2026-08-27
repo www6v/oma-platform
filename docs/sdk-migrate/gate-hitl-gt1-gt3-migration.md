@@ -1,6 +1,6 @@
 # Gate HITL — GT1–GT3 迁移清单
 
-> **目标：** 将 Anthropic cookbook `CMA_gate_human_in_the_loop.ipynb` 所需的 custom-tool HITL 能力从 [open-managed-agents](https://github.com/anthropics/claude-cookbooks/tree/main/managed_agents) 移植到 `oma-platform`。
+> **目标：** 将 Anthropic cookbook `CMA_gate_human_in_the_loop.ipynb` 所需的 custom-tool HITL 能力从 [open-managed-agents](https://github.com/anthropics/claude-cookbooks/tree/main/managed_agents) 移植到 `meta-harness`。
 >
 > **探针：** `sdk/example/example3/gate_human_in_the_loop.py`  
 > **SDK helper（已就绪）：** `oma_sdk.cookbook.stream_hitl_until_end_turn`（GT4/GT5）  
@@ -10,7 +10,7 @@
 
 ## 现状速览
 
-| 层 | open-managed-agents | oma-platform 今天 |
+| 层 | open-managed-agents | meta-harness 今天 |
 |---|---|---|
 | Agent 存 `type: "custom"` | ✅ | ✅ JSON 可存，harness 忽略 |
 | 模型看到 custom tool | ✅ `buildTools` 无 execute | ✅ Phase C — piPy stub 注册 + JSON Schema |
@@ -281,7 +281,7 @@ oma 若 `project_oma_events` 在仅有 tool_result、无新 user.message 时仍�
 
 ## 文件对照表（移植地图）
 
-| GT | open-managed-agents | oma-platform 目标 |
+| GT | open-managed-agents | meta-harness 目标 |
 |---|---|---|
 | GT1 | `harness/tools.ts` L1078-1090 | `harness/oma_adapter/tools.py` + `extensions/custom_tools.py` |
 | GT2 emit | `harness/default-loop.ts` L52-100 | `harness/oma_adapter/emit.py` |

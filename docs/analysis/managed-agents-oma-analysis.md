@@ -2,19 +2,19 @@
 
 > **对照文章**：《Scaling Managed Agents: Decoupling the brain from the hands》
 > **原文作者**：Lance Martin, Gabe Cemaj, Michael Cohen（Anthropic，2026-04-08）
-> **分析对象**：[`oma-platform`](https://github.com/open-ma/open-managed-agents) —— 一个可自托管的 Open Managed Agents 栈（Go 平台 + Python harness sidecar）
+> **分析对象**：[`meta-harness`](https://github.com/open-ma/open-managed-agents) —— 一个可自托管的 Open Managed Agents 栈（Go 平台 + Python harness sidecar）
 > **阅读入口**：`http://localhost:1313/www6vAIGC/docs/Harness-engineering/managed-agent/managed-agent/`
 
 ---
 
 ## 0. 阅读地图
 
-本文按原文的章节顺序，逐章梳理核心主张，再映射到 `oma-platform` 的对应实现。每一章包含：
+本文按原文的章节顺序，逐章梳理核心主张，再映射到 `meta-harness` 的对应实现。每一章包含：
 
 | 元素 | 含义 |
 |------|------|
 | 📖 **原文主张** | Anthropic 工程博客在说什么 |
-| 🏗️ **OMA 复现** | oma-platform 如何实现该主张 |
+| 🏗️ **OMA 复现** | meta-harness 如何实现该主张 |
 | 📂 **代码锚点** | 对应源码/设计文档路径 |
 | 🖼️ **架构图** | Mermaid 绘制的结构/流程图 |
 
@@ -44,7 +44,7 @@ Anthropic 把 Managed Agents 设计成一个「**元控制器（meta-harness）*
 
 ### 🏗️ OMA 复现
 
-oma-platform 把整个栈拆成三个物理进程，各自独立部署、独立故障：
+meta-harness 把整个栈拆成三个物理进程，各自独立部署、独立故障：
 
 | 进程 | 角色 | 端口 |
 |------|------|------|
@@ -106,7 +106,7 @@ flowchart TB
 
 ### 🏗️ OMA 复现
 
-oma-platform 通过「**三进程 + SQLite 外部化**」让每一层都变成**牲畜**：
+meta-harness 通过「**三进程 + SQLite 外部化**」让每一层都变成**牲畜**：
 
 | 组件 | 失败模式 | 恢复方式 |
 |------|----------|----------|
@@ -155,7 +155,7 @@ sequenceDiagram
 
 ### 🏗️ OMA 复现（解耦）
 
-oma-platform 把文章里的四个伪代码接口**一一落地**：
+meta-harness 把文章里的四个伪代码接口**一一落地**：
 
 | 原文接口 | OMA 实现 | 位置 |
 |----------|----------|------|
@@ -196,7 +196,7 @@ flowchart LR
 
 ### 🏗️ OMA 复现（安全边界）
 
-文章强调「**token 永远不被 Claude 生成的代码触及**」。oma-platform 用两层隔离实现：
+文章强调「**token 永远不被 Claude 生成的代码触及**」。meta-harness 用两层隔离实现：
 
 | 模式 | OMA 实现 | 设计文档 |
 |------|----------|----------|
@@ -244,7 +244,7 @@ flowchart TB
 
 ### 🏗️ OMA 复现
 
-oma-platform 用「**只追加事件日志 + 按需切片 + 控制器内 compaction**」实现这一分层：
+meta-harness 用「**只追加事件日志 + 按需切片 + 控制器内 compaction**」实现这一分层：
 
 | 层次 | 实现 | 说明 |
 |------|------|------|
@@ -303,7 +303,7 @@ flowchart TB
 
 ### 🏗️ OMA 复现
 
-oma-platform 通过**三处解耦**实现「多大脑 × 多双手」：
+meta-harness 通过**三处解耦**实现「多大脑 × 多双手」：
 
 #### 5.1 多大脑：无状态 Harness + Sub-agent / Team
 
@@ -364,7 +364,7 @@ flowchart TB
 
 #### 5.3 TTFT 优化：按需配置 Sandbox
 
-原文指出「**容器仅在大脑通过工具调用需要时才被配置**」。oma-platform 的实现：
+原文指出「**容器仅在大脑通过工具调用需要时才被配置**」。meta-harness 的实现：
 
 - Session 创建时**不**立即启动 sandbox，只在工作目录首次被访问时才创建
 - Resource Mounter 在每个 turn 开始时才把 Environment 声明的文件注入 workdir
@@ -412,7 +412,7 @@ sequenceDiagram
 
 ### 🏗️ OMA 复现
 
-oma-platform 通过「**接口驱动 + Provider 注册表**」把元控制器思想落到每一层：
+meta-harness 通过「**接口驱动 + Provider 注册表**」把元控制器思想落到每一层：
 
 | 抽象 | OMA 接口 | 可替换实现 |
 |------|----------|------------|
@@ -567,7 +567,7 @@ flowchart TB
 
 ## 10. 关键结论
 
-1. **架构同构**：oma-platform 的三进程拆分（`oma-server` / `oma-harness` / sandbox）与原文「Session / Harness / Sandbox」三组件一一对应。
+1. **架构同构**：meta-harness 的三进程拆分（`oma-server` / `oma-harness` / sandbox）与原文「Session / Harness / Sandbox」三组件一一对应。
 2. **接口忠实**：原文的 6 个组件伪代码接口（Session / Orchestration / Harness / Sandbox / Resources / Tools）在 OMA 中都有对应的 Go/Python 类型与 HTTP 路由。
 3. **安全边界结构性保证**：通过 Vault + MCP proxy + Outbound proxy 三层拦截，确保「凭据永不进入沙箱」不是靠约定，而是靠架构。
 4. **元控制器可演进**：Provider 注册表（sandbox、harness、tool）让每层都能独立替换，符合原文「对具体控制器不做主张」的元设计哲学。
@@ -576,5 +576,5 @@ flowchart TB
 ---
 
 > **报告生成日期**：2026-07-11
-> **分析版本**：oma-platform `~91% feature parity`（44/52 domains aligned，截至 2026-07-07）
+> **分析版本**：meta-harness `~91% feature parity`（44/52 domains aligned，截至 2026-07-07）
 > **原文翻译参考**：[`http://localhost:1313/www6vAIGC/docs/Harness-engineering/managed-agent/managed-agent/`](http://localhost:1313/www6vAIGC/docs/Harness-engineering/managed-agent/managed-agent/)

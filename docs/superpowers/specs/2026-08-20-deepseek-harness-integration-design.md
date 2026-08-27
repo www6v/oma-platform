@@ -5,7 +5,7 @@
 
 ## 1. 目标与范围
 
-在 oma-platform 现有三种 harness（`piPy`/default-loop、`hermes`、`openclaw`）之外接入第 4 种：DeepSeek 官方 Agent Harness（`dsh`，仓库 `deepseek-harness-master`，v0.1.0-rc.7，developer preview）。
+在 meta-harness 现有三种 harness（`piPy`/default-loop、`hermes`、`openclaw`）之外接入第 4 种：DeepSeek 官方 Agent Harness（`dsh`，仓库 `deepseek-harness-master`，v0.1.0-rc.7，developer preview）。
 
 四种 harness 现状均为"HTTP 网关 + Go 无状态客户端"的同构形态，因此本次工作包含两部分：
 

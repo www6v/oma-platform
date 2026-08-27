@@ -6,7 +6,7 @@
 >
 > **对比文件：**
 > - Cookbook: `harness/claude-cookbooks-main/managed_agents/data_analyst_agent.ipynb`
-> - OMA 示例: `oma-platform/sdk/example/example1/data_analyst_agent.py` → `data_analyst_agent_main.py`
+> - OMA 示例: `meta-harness/sdk/example/example1/data_analyst_agent.py` → `data_analyst_agent_main.py`
 >
 > **P0 范围（已确认）：** session.resources 挂载 + report.html→Files API + 示例去 workaround
 

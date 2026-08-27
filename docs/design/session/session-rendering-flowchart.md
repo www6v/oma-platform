@@ -12,7 +12,7 @@
 ```mermaid
 flowchart TB
     %% ============ 后端 ============
-    subgraph Backend["oma-platform backend (Go :8787 / harness :8090)"]
+    subgraph Backend["meta-harness backend (Go :8787 / harness :8090)"]
         REST[("/v1/sessions/:id/events\nGET · 分页回填历史 (seq ASC, 200/page)")]
         SSE[("SSE · streamEvents()\n实时事件推送")]
         POST[("/v1/sessions/:id/events\nPOST · user.message / user.interrupt\n/ user.tool_confirmation / user.custom_tool_result")]

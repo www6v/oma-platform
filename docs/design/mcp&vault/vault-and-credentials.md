@@ -18,7 +18,7 @@
 
 > A **vault** is a secure credential store. Credentials in vaults are **never exposed to sandboxes** — they're injected via an outbound proxy that intercepts HTTP requests and adds authentication headers transparently.
 
-在 `oma-platform` 里，Vault 是租户级资源，对应 SQLite 表 `vaults`（见 `internal/store/vaults.go`）：
+在 `meta-harness` 里，Vault 是租户级资源，对应 SQLite 表 `vaults`（见 `internal/store/vaults.go`）：
 
 ```go
 // Vault is a tenant-scoped secret container.
@@ -131,7 +131,7 @@ Vault 和 **Sandbox 工作目录**（`SANDBOX_WORKDIR/<session_id>/`）是刻意
 
 两条路径都遵循同一原则：**密钥只在平台侧、每次调用实时从 Vault 读取**，不下发到沙箱内存。
 
-### 请求链路（oma-platform）
+### 请求链路（meta-harness）
 
 ```
 沙箱 / Harness（bash curl、web_fetch、httpx）
@@ -246,7 +246,7 @@ OMA 的 Vault 是上游凭据的**唯一可信来源**。Agent、Harness、沙�
 
 ## MVP 迁移状态说明
 
-`MVP-MIGRATION-PLAN.md` 中 P0-3「Vault outbound HTTP 代理」在 `oma-platform` 已落地基础实现：
+`MVP-MIGRATION-PLAN.md` 中 P0-3「Vault outbound HTTP 代理」在 `meta-harness` 已落地基础实现：
 
 - ✅ Vault CRUD、`mcp_oauth_validate`
 - ✅ MCP Proxy 凭据注入（`/v1/mcp-proxy`）

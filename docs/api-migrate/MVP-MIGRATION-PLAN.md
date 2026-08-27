@@ -1,13 +1,13 @@
-# open-managed-agents → oma-platform 迁移计划
+# open-managed-agents → meta-harness 迁移计划
 
 > Engineering review — 2026-07-10（Sandbox Phase A 专项审查 + 矩阵同步）  
-> 目标仓库：`oma-platform`（Go 平台 + Python piPy harness 侧车 + Python SDK）  
+> 目标仓库：`meta-harness`（Go 平台 + Python piPy harness 侧车 + Python SDK）  
 > 参考源：`../open-managed-agents`（Cloudflare Workers meta-harness）  
 > 已确认范围：**P0 + P1 + P2 主体已完成**；T1–T21（除 T16 browser defer）✅；**Python SDK `oma-sdk` v0.1.0** ✅（`sdk/`）；Managed Agents Cookbook example1–9 + Go CI 探针 ✅；**下一 sprint：Sandbox Phase A（T23–T26）**；剩余 **cap-cli OAuth**、**TS SDK / `oma` CLI 发布**、install **vault 双写** 与生产硬化
 
 ## 文档说明
 
-本文档记录 `open-managed-agents` 与 `oma-platform` 的**功能对齐矩阵**与分阶段迁移 backlog。
+本文档记录 `open-managed-agents` 与 `meta-harness` 的**功能对齐矩阵**与分阶段迁移 backlog。
 
 早期版本（2026-06-07）假设 TypeScript `main-node` 复制路径；当前实现已改为 **Go `oma-server` + Python `harness/` 侧车 + `sdk/oma_sdk`**，矩阵以实际代码为准。验收脚本：`scripts/e2e/console-integration.sh`、`scripts/e2e/smoke-all.sh`；Console QA 最新：`scripts/e2e/.gstack/qa-reports/qa-report-console-2026-06-20.json`（healthScore 100，15/15 路由）。Cookbook parity 路线图：`docs/sdk-migrate/managed-agents-cookbook-roadmap.md`；设计文档索引：`docs/design/`。
 
@@ -64,7 +64,7 @@ Console 全量 wire 验收：`scripts/e2e/console-integration.sh`
 
 ## 架构对齐
 
-### 当前拓扑（oma-platform）
+### 当前拓扑（meta-harness）
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -91,7 +91,7 @@ Console 全量 wire 验收：`scripts/e2e/console-integration.sh`
 
 ### 与 open-managed-agents 差异（有意保留）
 
-| 维度 | open-managed-agents (CF) | oma-platform |
+| 维度 | open-managed-agents (CF) | meta-harness |
 |------|--------------------------|--------------|
 | API 入口 | `apps/main` (Hono Worker) | `cmd/oma-server` (Go) |
 | Session 状态 | SessionDO + DO 内 SQLite | SQLite event log + in-process Registry |
@@ -111,7 +111,7 @@ Console 全量 wire 验收：`scripts/e2e/console-integration.sh`
 
 ### 源仓参考索引
 
-| 能力 | 源文件 | oma-platform 落点（计划） |
+| 能力 | 源文件 | meta-harness 落点（计划） |
 |------|--------|---------------------------|
 | Path 解析 | `packages/sandbox/src/adapters/local-subprocess.ts` `resolvePath()` | ✅ `harness/oma_adapter/sandbox_paths.py`；**T23** 统一 `.mnt/memory` |
 | Memory symlink | `mountMemoryStore()` | **T23** `internal/workdir/manager.go` + `MEMORY_DATA_DIR` |
@@ -179,7 +179,7 @@ POST /v1/sessions/:id/files { path } → read workdir → fileblob      [T24]
 
 ### P0 — 核心 Agent 闭环（~93%）
 
-| 功能域 | 源参考 | oma-platform 实现 | 状态 | 缺口 / 备注 |
+| 功能域 | 源参考 | meta-harness 实现 | 状态 | 缺口 / 备注 |
 |--------|--------|-------------------|------|-------------|
 | Agent CRUD + 版本 | `packages/agents-store`, `buildAgentRoutes` | `internal/api/agents.go`, `store/agents.go` | ✅ | AMA wire 已测 |
 | Session + event log | SessionDO, `event-log` | `sessions.go`, `store/events.go` | ✅ | |
@@ -210,7 +210,7 @@ POST /v1/sessions/:id/files { path } → read workdir → fileblob      [T24]
 
 ### P1 — Console 完整可用 + 集成执行（~88%）
 
-| 功能域 | 源参考 | oma-platform 实现 | 状态 | 缺口 / 备注 |
+| 功能域 | 源参考 | meta-harness 实现 | 状态 | 缺口 / 备注 |
 |--------|--------|-------------------|------|-------------|
 | Console 同源 SPA | main `assets` binding | `internal/console/` + `CONSOLE_DIR` | ✅ | 挂载 `console/dist` |
 | Auth (API key + cookie) | better-auth | `internal/auth/` | ✅ | `AUTH_UPSTREAM_URL` 或 `AUTH_DISABLED=1` |
@@ -234,7 +234,7 @@ POST /v1/sessions/:id/files { path } → read workdir → fileblob      [T24]
 
 ### P2 — 平台 parity
 
-| 功能域 | 源参考 | oma-platform 实现 | 状态 | 缺口 / 备注 |
+| 功能域 | 源参考 | meta-harness 实现 | 状态 | 缺口 / 备注 |
 |--------|--------|-------------------|------|-------------|
 | call_agent / 子 Agent | `harness/tools.ts` | harness `call_agent/` | ✅ | T12；见 `docs/design/subagent.md` |
 | Agent Team | `team_create`, mailbox | `teams`/`team_members`/`agent_messages` + harness tools | ✅ | migrations `017`–`018`；`/v1/sessions/:id/teams/*`；见 `docs/design/agent-team.md` |
@@ -405,7 +405,7 @@ Client / Console / Python SDK (oma-sdk)
 
 ---
 
-## What already exists（oma-platform，勿重写）
+## What already exists（meta-harness，勿重写）
 
 | 能力 | 位置 |
 |------|------|

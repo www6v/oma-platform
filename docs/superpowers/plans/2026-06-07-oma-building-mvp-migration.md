@@ -606,7 +606,7 @@ git commit -m "feat(harness): piPy SDK adapter with OMA event mapping"
 
 ```yaml
 services:
-  oma-platform:
+  meta-harness:
     build: { dockerfile: Dockerfile.platform }
     ports: ["8787:8787"]
     environment:

@@ -150,14 +150,14 @@ await setup_mcp_runtime_for_turn(
 
 当前仓库中还有一套 Cloudflare Workers 实现（`open-managed-agents/apps/main/src/routes/mcp-proxy.ts`），能力更完整：
 
-| 能力 | oma-platform (Go) | open-managed-agents (CF) |
+| 能力 | meta-harness (Go) | open-managed-agents (CF) |
 |------|-------------------|--------------------------|
 | HTTP 代理 | ✅ `/v1/mcp-proxy` | ✅ 同路径 |
 | RPC 代理 | ❌ | ✅ `McpProxyRpc.mcpForward` |
-| OAuth 401 自动刷新 | ❌（oma-platform 暂未实现） | ✅ `forwardWithRefresh` |
+| OAuth 401 自动刷新 | ❌（meta-harness 暂未实现） | ✅ `forwardWithRefresh` |
 | Outbound HTTPS 代理 | ✅ 独立 outbound proxy | ✅ `outboundForward` |
 
-`oma-platform` 是 MVP 迁移版，MCP 核心链路（配置 → 代理 → Harness 工具）已打通；OAuth 刷新等高级能力主要在 CF 版实现。
+`meta-harness` 是 MVP 迁移版，MCP 核心链路（配置 → 代理 → Harness 工具）已打通；OAuth 刷新等高级能力主要在 CF 版实现。
 
 ## 7. 关键文件索引
 

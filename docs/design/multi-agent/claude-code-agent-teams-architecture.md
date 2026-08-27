@@ -1,7 +1,7 @@
 # Claude Code Agent Teams 多 Agent 方案（原项目架构说明）
 
 > 来源项目：`/Users/t-wangwei07/Downloads/workspacePy/harness/claude/claude-code-rev/src`
-> 用途：为迁移到 oma-platform 提供「原样理解」基线，描述 Claude Code 宿主内的 Agent Teams / Swarm 实现。
+> 用途：为迁移到 meta-harness 提供「原样理解」基线，描述 Claude Code 宿主内的 Agent Teams / Swarm 实现。
 
 ---
 
@@ -65,7 +65,7 @@ flowchart TB
 | 3 | **Agent Team** | `TeamCreate` → spawn 队友 | 真并行 | 固定编制团队 |
 | 4 | **Coordinator Mode** | env `CLAUDE_CODE_COORDINATOR_MODE` | 进程内 worker 池 | 大规模任务编排 |
 
-oma-platform 当前最接近 **#1**（`call_agent_*` 单次 sub-turn）；Claude Code 额外强在 **#2/#3 持久 Team + Mailbox + 多后端 spawn**。
+meta-harness 当前最接近 **#1**（`call_agent_*` 单次 sub-turn）；Claude Code 额外强在 **#2/#3 持久 Team + Mailbox + 多后端 spawn**。
 
 ---
 
@@ -320,7 +320,7 @@ spawnTeammate({ mode: 'plan' }) 或 PLAN_MODE_REQUIRED env
 
 ## 11. 与 oma `call_agent` 的本质差异
 
-| 维度 | Claude Code Agent Teams | oma-platform 现状 |
+| 维度 | Claude Code Agent Teams | meta-harness 现状 |
 |------|-------------------------|-------------------|
 | 执行模型 | 多会话 / 多 pane / 可选 in-process | 单 harness 进程内 sub-turn |
 | 团队持久化 | `TeamFile` + mailbox 文件 | `session.thread_*` 事件 |
@@ -365,4 +365,4 @@ spawnTeammate({ mode: 'plan' }) 或 PLAN_MODE_REQUIRED env
 | 远程队友 | remote isolation + CCR | 中 |
 | 持久化 API / 多租户 | 无（本地 CLI） | 不适用 |
 
-此矩阵用于下一文档《Claude Code Agent Teams → oma-platform 迁移方案》的 gap 对照。
+此矩阵用于下一文档《Claude Code Agent Teams → meta-harness 迁移方案》的 gap 对照。

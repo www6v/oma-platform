@@ -3,7 +3,7 @@
 **状态：** APPROVED（已批准，2026-07-11）
 **日期：** 2026-07-11
 **分支：** `harness`
-**范围：** `oma-platform` Go 服务端 + 参考 `open-managed-agents` 的 ACP 运行时实现
+**范围：** `meta-harness` Go 服务端 + 参考 `open-managed-agents` 的 ACP 运行时实现
 
 ## 实施状态（2026-07-12 更新）
 
@@ -85,7 +85,7 @@
 
 ## 1. 问题
 
-今天 `oma-platform` 只有**一种** harness 实现：**pipy HTTP sidecar**。
+今天 `meta-harness` 只有**一种** harness 实现：**pipy HTTP sidecar**。
 `cmd/oma-server/main.go:145` 在启动时构造了一个 `&harness.HTTPClient{BaseURL: harnessURL}`，
 并把它灌入到每一个 session。所有 session —— 不管 agent 的 `_oma.harness` 元数据写了什么 ——
 都用同一个 pipy 客户端。
@@ -430,7 +430,7 @@ openclaw / hermes / claude-acp。如果 daemon 版本过旧，那是另一个任
 
 ## 附录 A：对照 `open-managed-agents` 参考实现
 
-| open-managed-agents | oma-platform |
+| open-managed-agents | meta-harness |
 |---------------------|--------------|
 | `packages/acp-runtime/src/known-agents.ts` | `internal/runtime/known_agents.go`（本方案） |
 | `packages/acp-runtime/src/types.ts::Spawner` | bridge daemon（本方案范围外） |

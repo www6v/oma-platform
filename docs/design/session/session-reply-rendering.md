@@ -1,6 +1,6 @@
 # Session 页面回复 & 工具调用渲染机制
 
-> 记录 OMA Console (`oma-platform/console`) session 详情页里"助手回复 + 工具调用"的渲染链路。
+> 记录 OMA Console (`meta-harness/console`) session 详情页里"助手回复 + 工具调用"的渲染链路。
 > 来源：`console/src/pages/SessionDetail.tsx` + `console/src/components/ai-elements/tool.tsx`。
 
 ---

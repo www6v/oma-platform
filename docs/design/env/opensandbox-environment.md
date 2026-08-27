@@ -1,6 +1,6 @@
 # OpenSandbox 作为 Environment 的设计
 
-本文说明如何把 [OpenSandbox](https://github.com/opensandbox-group/OpenSandbox) 接入 oma-platform，作为第 6 种 sandbox provider（与 `local` / `e2b` / `daytona` / `litebox` / `boxrun` 并列），给 Session 提供远程、容器化、带 execd 的隔离执行环境。
+本文说明如何把 [OpenSandbox](https://github.com/opensandbox-group/OpenSandbox) 接入 meta-harness，作为第 6 种 sandbox provider（与 `local` / `e2b` / `daytona` / `litebox` / `boxrun` 并列），给 Session 提供远程、容器化、带 execd 的隔离执行环境。
 
 参考实现：
 
@@ -10,11 +10,11 @@
 
 ## 一句话总结
 
-**OpenSandbox Provider 通过两层 HTTP 调用完成工作：① Lifecycle Server（`POST /v1/sandboxes`，跑在 VM 上，端口默认 18090）负责创建/销毁容器；② 容器内的 execd（端口 44772）通过 Server 端点代理（`GET /v1/sandboxes/{id}/endpoints/44772?use_server_proxy=true`）暴露出来，oma-platform 走这条代理通道调用 `/command` 跑 shell、`/files/download` 读文件。** 在 `internal/sandbox/` 中新增 `opensandbox.go`，实现 `Executor` 接口；在 `Registry.Acquire` 的 `switch` 中加一个分支；`Config` 增加一组 `OPENSANDBOX_*` 字段。
+**OpenSandbox Provider 通过两层 HTTP 调用完成工作：① Lifecycle Server（`POST /v1/sandboxes`，跑在 VM 上，端口默认 18090）负责创建/销毁容器；② 容器内的 execd（端口 44772）通过 Server 端点代理（`GET /v1/sandboxes/{id}/endpoints/44772?use_server_proxy=true`）暴露出来，meta-harness 走这条代理通道调用 `/command` 跑 shell、`/files/download` 读文件。** 在 `internal/sandbox/` 中新增 `opensandbox.go`，实现 `Executor` 接口；在 `Registry.Acquire` 的 `switch` 中加一个分支；`Config` 增加一组 `OPENSANDBOX_*` 字段。
 
 ## 在整体架构中的位置
 
-oma-platform 的 sandbox 抽象位于 `internal/sandbox/`，对外只暴露 `Executor` 接口（`Exec` / `ReadFile` / `Destroy`）。上层通过 `workdir.Manager.Sandbox`（即 `*sandbox.Registry`）持有；`Session.Machine` 在 turn 开始时根据 `Config.IsRemote()` 决定是否 `Acquire`，turn 结束调 `Release`。OpenSandbox 加进来后：
+meta-harness 的 sandbox 抽象位于 `internal/sandbox/`，对外只暴露 `Executor` 接口（`Exec` / `ReadFile` / `Destroy`）。上层通过 `workdir.Manager.Sandbox`（即 `*sandbox.Registry`）持有；`Session.Machine` 在 turn 开始时根据 `Config.IsRemote()` 决定是否 `Acquire`，turn 结束调 `Release`。OpenSandbox 加进来后：
 
 ```mermaid
 flowchart LR
@@ -55,9 +55,9 @@ flowchart LR
 
 ## OpenSandbox 两层 API 简述
 
-### Layer 1 — Lifecycle Server（oma-platform ↔ Server）
+### Layer 1 — Lifecycle Server（meta-harness ↔ Server）
 
-端口默认 18090，路径前缀 `/v1`。认证：HTTP header `OPEN-SANDBOX-API-KEY`。oma-platform 会用到：
+端口默认 18090，路径前缀 `/v1`。认证：HTTP header `OPEN-SANDBOX-API-KEY`。meta-harness 会用到：
 
 | 操作 | 方法 | 路径 |
 |------|------|------|
@@ -66,7 +66,7 @@ flowchart LR
 | 取 execd 端点 | `GET` | `/v1/sandboxes/{id}/endpoints/44772?use_server_proxy=true` |
 | 续期 TTL | `POST` | `/v1/sandboxes/{id}/renew-expiration`（可选，MVP 不做） |
 
-创建请求体（oma-platform 只填必需字段，其余走服务端默认）：
+创建请求体（meta-harness 只填必需字段，其余走服务端默认）：
 
 ```json
 {
@@ -81,7 +81,7 @@ flowchart LR
 
 响应（202）：`{ id, status: { state: "Running" }, createdAt, entrypoint, metadata, expiresAt }`。拿到 `id` 后**立刻查 endpoint**，execd 的 URL 通常要 1~3 秒后才可用，需带指数退避的重试。
 
-### Layer 2 — execd（oma-platform ↔ 容器内 daemon，经 Server 代理）
+### Layer 2 — execd（meta-harness ↔ 容器内 daemon，经 Server 代理）
 
 `use_server_proxy=true` 时，`GET /v1/sandboxes/{id}/endpoints/44772` 返回：
 
@@ -92,9 +92,9 @@ flowchart LR
 }
 ```
 
-所有后续的 execd 调用都发到 `endpoint + path`，并把 `headers` 透传回去。认证由 Server 端点代理处理，oma-platform 不需要再带 execd 自己的 token。
+所有后续的 execd 调用都发到 `endpoint + path`，并把 `headers` 透传回去。认证由 Server 端点代理处理，meta-harness 不需要再带 execd 自己的 token。
 
-execd 暴露的能力（oma-platform 用到的）：
+execd 暴露的能力（meta-harness 用到的）：
 
 | 操作 | 方法 | 路径 | 备注 |
 |------|------|------|------|
@@ -122,7 +122,7 @@ data: {"type":"stdout","text":"Linux ...\n","timestamp":1700000000000}
 data: {"type":"execution_complete","exit_code":0,"execution_time":42}
 ```
 
-oma-platform 的 SSE parser 只需关心 `stdout` / `stderr` / `execution_complete` / `error` 四类。
+meta-harness 的 SSE parser 只需关心 `stdout` / `stderr` / `execution_complete` / `error` 四类。
 
 ## 模块设计
 
@@ -337,15 +337,15 @@ sequenceDiagram
 
 ## 安全考量
 
-1. **认证**：Lifecycle Server 用 `OPEN-SANDBOX-API-KEY`；execd 通过 Server 端点代理，oma-platform 不直接持有 execd token。这意味着 oma-platform 只要保护一个 secret。
+1. **认证**：Lifecycle Server 用 `OPEN-SANDBOX-API-KEY`；execd 通过 Server 端点代理，meta-harness 不直接持有 execd token。这意味着 meta-harness 只要保护一个 secret。
 2. **传输层**：默认 `http`；生产环境应配 `OPENSANDBOX_PROTOCOL=https` 并启用 `secureAccess: true`（K8s 模式下由 Server 签发 endpoint token）。MVP 用 `use_server_proxy=true` 已足够。
 3. **沙箱隔离**：每个 oma session 一个 sandbox（对应一个容器），与 e2b/daytona 的粒度一致。metadata 里打 `oma_session_id` / `oma_tenant_id` 方便追溯。
-4. **出站网络**：OpenSandbox 支持 `networkPolicy`，oma-platform 暂不暴露该字段，默认 allow-all。后续可加 `OPENSANDBOX_NETWORK_POLICY` 环境变量（JSON）。
-5. **密钥注入**：OpenSandbox 有 `credentialProxy` 机制；oma-platform 的 Vault 集成（见 `docs/design/vault-and-credentials.md`）可后续对接，MVP 不接。
+4. **出站网络**：OpenSandbox 支持 `networkPolicy`，meta-harness 暂不暴露该字段，默认 allow-all。后续可加 `OPENSANDBOX_NETWORK_POLICY` 环境变量（JSON）。
+5. **密钥注入**：OpenSandbox 有 `credentialProxy` 机制；meta-harness 的 Vault 集成（见 `docs/design/vault-and-credentials.md`）可后续对接，MVP 不接。
 
 ## 部署考量
 
-oma-platform 不直接部署 OpenSandbox Server——后者由运维团队独立维护（参考 `agent-infra/deploy/start-opensandbox.sh`，已在 VM 上验证）。oma-platform 只需：
+meta-harness 不直接部署 OpenSandbox Server——后者由运维团队独立维护（参考 `agent-infra/deploy/start-opensandbox.sh`，已在 VM 上验证）。meta-harness 只需：
 
 1. `.env` 增加 `SANDBOX_PROVIDER=opensandbox` 与 `OPENSANDBOX_DOMAIN` 等变量。
 2. 网络可达：oma-server → Lifecycle Server (18090) → execd (44772，代理模式只需开到 Server)。
@@ -360,7 +360,7 @@ oma-platform 不直接部署 OpenSandbox Server——后者由运维团队独立
 - `networkPolicy` 出站策略
 - `credentialProxy` Vault 注入
 - `secureAccess`（K8s 端点签名）
-- Code Interpreter 语义（`/code/contexts`、`/code`）——oma-platform 只把 OpenSandbox 当 shell sandbox 用，code interpreter 留给独立 provider
+- Code Interpreter 语义（`/code/contexts`、`/code`）——meta-harness 只把 OpenSandbox 当 shell sandbox 用，code interpreter 留给独立 provider
 - 资源 requests vs limits 区分（用 `limits` 即可）
 - `volumes`（OSSFS/PVC 等）
 - 多 execd 语言会话管理

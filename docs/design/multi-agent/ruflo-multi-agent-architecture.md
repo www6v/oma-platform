@@ -1,7 +1,7 @@
 # Ruflo 多 Agent 方案（原项目架构说明）
 
 > 来源项目：`/Users/t-wangwei07/Downloads/workspacePy/harness/ruflo-main`（`claude-flow` / `ruflo` v3.10.x）
-> 用途：为迁移到 oma-platform 提供「原样理解」基线，不假设 oma 已有能力。
+> 用途：为迁移到 meta-harness 提供「原样理解」基线，不假设 oma 已有能力。
 
 ---
 
@@ -62,7 +62,7 @@ flowchart TB
 | 4 | **跨会话 / 跨机器** | AgentDB + Federation WSS + Ed25519 信任梯 | 是（多节点） |
 | 5 | **结构化流水线** | 类型化 SendMessage + 阻塞门（如 risk-analyst） | 协议强制，可串行 |
 
-oma-platform 当前最接近 **#1 + 部分 #2**（`call_agent` 委派）；Ruflo 额外强在 **#3 账本、#4 联邦、#5 流水线、Hooks 学习环**。
+meta-harness 当前最接近 **#1 + 部分 #2**（`call_agent` 委派）；Ruflo 额外强在 **#3 账本、#4 联邦、#5 流水线、Hooks 学习环**。
 
 ---
 
@@ -389,4 +389,4 @@ swarm_init(hierarchical, max=8, specialized)
 | 类型化流水线 | 领域插件示例 | 中（需定制） |
 | 持久化 API / 多租户 | 无（本地/CLI 为主） | 低 vs 云平台 |
 
-此矩阵直接用于下一文档《Ruflo → oma-platform 多 Agent 迁移方案》的 gap 对照。
+此矩阵直接用于下一文档《Ruflo → meta-harness 多 Agent 迁移方案》的 gap 对照。

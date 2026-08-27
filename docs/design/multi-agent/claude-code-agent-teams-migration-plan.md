@@ -1,7 +1,7 @@
-# Claude Code Agent Teams → oma-platform 迁移方案
+# Claude Code Agent Teams → meta-harness 迁移方案
 
 > 前置阅读：[claude-code-agent-teams-architecture.md](./claude-code-agent-teams-architecture.md)
-> 目标仓库：`oma-platform`（Go `oma-server` + Python `oma-harness`）
+> 目标仓库：`meta-harness`（Go `oma-server` + Python `oma-harness`）
 > 源仓库：`claude-code-rev/src`（Claude Code Agent Teams / Swarm）
 
 **实施状态（2026-06-20）**
@@ -113,7 +113,7 @@ flowchart TB
 
 ### 3.1 概念映射
 
-| Claude Code | oma-platform |
+| Claude Code | meta-harness |
 |-------------|--------------|
 | Team Lead session | Session 主线程 `sthr_primary` |
 | Teammate session | Session Thread `sthr_*` + 可选长驻 worker |

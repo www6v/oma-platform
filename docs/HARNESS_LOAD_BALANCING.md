@@ -10,7 +10,7 @@ does **not** conflict with the harness LB on **:8090**.
 ## Topology
 
 ```
-Console → oma-platform (Go :8787)
+Console → meta-harness (Go :8787)
               │  HARNESS_URL=http://oma-harness-lb:8090
               ▼
          oma-harness-lb (Nginx :8090)
@@ -60,7 +60,7 @@ read/send timeouts.
 
 ## Deploy (docker compose)
 
-From `oma-platform/deploy/`:
+From `meta-harness/deploy/`:
 
 ```bash
 ./docker.sh up
@@ -92,7 +92,7 @@ Services:
 |---------|------|
 | `oma-harness-1` / `oma-harness-2` | piPy replicas (no host port) |
 | `oma-harness-lb` | Nginx on host `:8090` |
-| `oma-platform` | `HARNESS_URL=http://oma-harness-lb:8090` |
+| `meta-harness` | `HARNESS_URL=http://oma-harness-lb:8090` |
 
 Host `:80` Nginx (notebooklm, etc.) can keep running unchanged.
 
@@ -144,7 +144,7 @@ should receive traffic.
 1. Deploy piPy on the remote host with its own LiteLLM virtual key and local
    disk (no shared `/data` with the primary host).
 2. To fail over: set platform `HARNESS_URL=http://<remote>:8090` (bypass lb
-   or retarget lb upstream to the remote only) and restart `oma-platform`.
+   or retarget lb upstream to the remote only) and restart `meta-harness`.
 3. **Limitation:** sessions whose `workdir` lived on the primary `/data` will
    not see files on the remote. Prefer standby for new sessions or after
    copying needed artifacts.

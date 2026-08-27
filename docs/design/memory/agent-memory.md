@@ -19,7 +19,7 @@ prompt，agent 通过 `memory` 工具增删改并持久化到平台 Memory Store
 - **外部记忆可插拔**：最终可集成 OpenViking 等外部记忆系统（语义召回、会话提取），
   且不改变内置记忆的行为——与 Hermes 的"内置 + provider 并行"语义一致。
 - **交付形态**：全部记忆逻辑放在 piPy extension 包（`piPy-hermes-memory/`，布局对齐
-  `piPy-subagent/`、`piPy-teams/`）；oma-platform 只做薄接线（store 扩展 + 两个 internal
+  `piPy-subagent/`、`piPy-teams/`）；meta-harness 只做薄接线（store 扩展 + 两个 internal
   端点 + harness 桥接），不改 TurnRequest、不改 `compose_system_prompt`。
 - **默认关闭**：`OMA_MEMORY_ENABLED=1` 才启用，避免改变既有 e2e 行为。
 
@@ -27,7 +27,7 @@ prompt，agent 通过 `memory` 工具增删改并持久化到平台 Memory Store
 
 ```mermaid
 flowchart LR
-    subgraph Platform["oma-platform (Go)"]
+    subgraph Platform["meta-harness (Go)"]
         API["/v1/internal/agent_memory\nGET / write"]
         MS[("memory_stores\nkind=agent_builtin\n+ memory_versions 审计")]
         API --> MS
@@ -52,7 +52,7 @@ flowchart LR
 
 | 层 | 位置 | 职责 |
 |----|------|------|
-| 平台存储 | `oma-platform` Go | 内置 store 懒创建、读写持久化、版本审计、console 可见性 |
+| 平台存储 | `meta-harness` Go | 内置 store 懒创建、读写持久化、版本审计、console 可见性 |
 | Host 桥接 | `harness/oma_adapter` | 开关、每回合构建 MemoryRuntime、加载 extension、drain 后台任务 |
 | Extension | `piPy-hermes-memory/extensions` | `register(api)`：拉取记忆 → 注入 prompt → 注册工具 → 绑定生命周期钩子 |
 | 记忆库 | `piPy-hermes-memory/packages/pi_memory` | 内置记忆语义、注入、工具、Provider 抽象与 OpenViking 适配器 |
@@ -247,7 +247,7 @@ sequenceDiagram
     T->>B: finally: reset_runtime（ContextVar 复位）
 ```
 
-## Host 接线（oma-platform 侧，最小改动）
+## Host 接线（meta-harness 侧，最小改动）
 
 - `harness/oma_adapter/memory_bridge.py`：`memory_enabled()`（`OMA_MEMORY_ENABLED=1`）；
   `build_memory_runtime()` 从 TurnRequest 提取 session_id / tenant_id / agent.id /

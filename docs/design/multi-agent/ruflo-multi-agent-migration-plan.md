@@ -1,7 +1,7 @@
-# Ruflo 多 Agent 方案 → oma-platform 迁移方案
+# Ruflo 多 Agent 方案 → meta-harness 迁移方案
 
 > 前置阅读：[ruflo-multi-agent-architecture.md](./ruflo-multi-agent-architecture.md)
-> 目标仓库：`oma-platform`（Go `oma-server` + Python `oma-harness`）
+> 目标仓库：`meta-harness`（Go `oma-server` + Python `oma-harness`）
 > 源仓库：`ruflo-main`（`@claude-flow/cli` 生态）
 
 ---
@@ -458,7 +458,7 @@ POST   /v1/internal/swarms/{id}/agents
 
 ### User Challenge（无）
 
-模型未建议改变你的核心方向（迁移到 oma-platform）；按上述分阶段执行即可。
+模型未建议改变你的核心方向（迁移到 meta-harness）；按上述分阶段执行即可。
 
 ---
 

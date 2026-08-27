@@ -3,13 +3,13 @@
 **Status:** APPROVED — 已实现并验证（单测全绿 + 真实 OpenViking E2E 13/13 通过；见文末进度）
 **Date:** 2026-08-11
 **Branch:** `memory`
-**Scope:** 新目录 `piPy-hermes-memory/`（piPy extension 包）+ `oma-platform` 薄接线（Go internal API + harness/oma_adapter）
+**Scope:** 新目录 `piPy-hermes-memory/`（piPy extension 包）+ `meta-harness` 薄接线（Go internal API + harness/oma_adapter）
 
 > 本方案取代早期的 Go-centric 设计（internal/memoryprovider）。按最新决定：**memory 系统以 piPy extension 的形式集成**，全部记忆逻辑放在 `piPy-hermes-memory/`，布局对齐 `piPy-subagent/`、`piPy-teams/`。
 
 ## 一句话总结
 
-以 piPy extension 包形态实现 Hermes Agent 的 memory 体系：内置记忆（MEMORY.md/USER.md）、MemoryProvider 抽象层、OpenViking 适配器全部落在 `piPy-hermes-memory/`；oma-platform 侧只做三件薄事——内置 store 自动创建 + 两个 internal 端点（持久化与审计）、oma_adapter 的 runtime 桥接与 extension 加载、harness 依赖声明。
+以 piPy extension 包形态实现 Hermes Agent 的 memory 体系：内置记忆（MEMORY.md/USER.md）、MemoryProvider 抽象层、OpenViking 适配器全部落在 `piPy-hermes-memory/`；meta-harness 侧只做三件薄事——内置 store 自动创建 + 两个 internal 端点（持久化与审计）、oma_adapter 的 runtime 桥接与 extension 加载、harness 依赖声明。
 
 ## 关键技术依据（已验证）
 
@@ -96,7 +96,7 @@ piPy-hermes-memory/
 
 ---
 
-## Host 接线（oma-platform，最小改动）
+## Host 接线（meta-harness，最小改动）
 
 - `harness/oma_adapter/memory_bridge.py`：`build_memory_runtime(turn_request)` —— 从 TurnRequest 取 session_id / tenant_id / agent.id / workdir / platform_base / internal_secret，从 events 提取最后一条 user 文本，生成 turn_uuid；`turn.py` 在配置 subagent/team runtime 同处 configure，finally 里 clear。
 - `harness/oma_adapter/tools.py`：`resolve_memory_extension_path()`（env `PIPY_MEMORY_EXTENSION` → 同目录 bundled → `parents[3]/"piPy-hermes-memory"/extensions/memory_extension.py`，与 subagent/teams 完全同构）；`_extension_paths_for_agent` 在 `OMA_MEMORY_ENABLED=1` 且 runtime 要素齐全时追加该路径。
@@ -151,7 +151,7 @@ piPy-hermes-memory/
 
 ### 已完成
 
-- **Go 侧（oma-platform）**
+- **Go 侧（meta-harness）**
   - [x] `internal/store/migrations/024_agent_memory.sql`：`memory_stores` 增加 `kind`（开发库已同步 ALTER）
   - [x] `scripts/sql/platform_mysql.sql` 同步 `kind` 字段
   - [x] `MemoryStoreRepo`：`Kind` 字段、`IncludeBuiltin` 选项、幂等 `EnsureStoreWithID`（MySQL `INSERT IGNORE`，确定性 ID `agentmem-{agent_id}`）、`GetMemoryByPath`（blob hydrate）、列表默认过滤 `kind='standard'`
@@ -162,7 +162,7 @@ piPy-hermes-memory/
   - [x] `packages/pi_memory`：`runtime`（ContextVar）/ `builtin`（§ 条目、2200/1375 上限、add/replace/remove）/ `platform_client` / `inject`（APPEND_SYSTEM.md marker 幂等写入）/ `tools`（MemoryTool 写后全文镜像落库）/ `providers`（base/builtin/openviking，env 单选）
   - [x] `extensions/memory_extension.py`：async register，快照+召回注入，turn_end/session_before_compact/agent_end 钩子
   - [x] 36 个单元测试全绿（httpx MockTransport）
-- **harness（oma-platform/harness）**
+- **harness（meta-harness/harness）**
   - [x] `oma_adapter/memory_bridge.py`：`OMA_MEMORY_ENABLED=1` 开关、按回合构建/配置/重置 MemoryRuntime、最后一条 user 文本提取、后台任务 drain
   - [x] `oma_adapter/turn.py`：subagent runtime 之后构建并 configure，返回前 drain，finally 中 reset
   - [x] `oma_adapter/tools.py`：`resolve_memory_extension_path()`（env → bundled → 兄弟仓库），enabled 时追加 memory extension

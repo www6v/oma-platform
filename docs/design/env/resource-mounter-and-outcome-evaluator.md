@@ -1,6 +1,6 @@
 # Resource Mounter 与 Outcome Evaluator
 
-本文说明 oma-platform 中 **Resource Mounter**（资源挂载器）与 **Outcome Evaluator**（结果评判器）分别是什么、在系统里如何分工，以及与源项目 `open-managed-agents` 的对应关系。
+本文说明 meta-harness 中 **Resource Mounter**（资源挂载器）与 **Outcome Evaluator**（结果评判器）分别是什么、在系统里如何分工，以及与源项目 `open-managed-agents` 的对应关系。
 
 ---
 
@@ -62,7 +62,7 @@
 
 **Resource Mounter** 把 **Environment** 里配置的 `resources`（或 `config.resources`）在回合开始前物化到当前 Session 的 **workdir**，使 piPy Agent 通过读文件、环境变量等方式使用这些资源。
 
-在 oma-platform 中实现为 **两段式**：
+在 meta-harness 中实现为 **两段式**：
 
 1. **平台侧解析（Resolve）**：`internal/harness/resources.go` 中的 `ResourceResolver`，在 Go 进程内从 DB / blob 拉取正文，生成 Harness 可消费的 JSON。
 2. **Harness 侧挂载（Mount）**：`harness/oma_adapter/resource_mounter.py` 中的 `mount_resources`，在 Python 侧写入磁盘并更新 `os.environ`。

@@ -1,6 +1,6 @@
 # Session Schedule（会话定时唤醒）
 
-本文说明 oma-platform 中 **Schedule / Wakeup** 的职责、端到端数据流，以及与 Agent 工具、平台 API、后台 Worker 的协作方式。
+本文说明 meta-harness 中 **Schedule / Wakeup** 的职责、端到端数据流，以及与 Agent 工具、平台 API、后台 Worker 的协作方式。
 
 ## 一句话
 
@@ -247,7 +247,7 @@ sequenceDiagram
 | 变量 | 说明 |
 |------|------|
 | `OMA_INTERNAL_SECRET` | Internal API 与 harness schedule client 共享密钥 |
-| `OMA_HARNESS_PLATFORM_BASE` | 传给 harness 的 `platform_base` / `mcp_proxy_base`（Docker 内用 `http://oma-platform:8787`） |
+| `OMA_HARNESS_PLATFORM_BASE` | 传给 harness 的 `platform_base` / `mcp_proxy_base`（Docker 内用 `http://meta-harness:8787`） |
 | `OMA_PUBLIC_URL` | 对外 URL（webhook/OAuth）；未设时回退 `PUBLIC_BASE_URL` |
 | `OMA_WAKEUP_WORKER_DISABLED` | 设为 `1` 关闭 Worker（仅可手动/API 测存储，不会自动触发） |
 | `OMA_WAKEUP_WORKER_INTERVAL` | Worker tick 间隔，如 `2s`、`10s` |
@@ -282,7 +282,7 @@ Live E2E 前提：`oma-server` 可达、`OMA_INTERNAL_SECRET` 已配置、Worker
 
 ## 与 open-managed-agents 的对应
 
-| 维度 | open-managed-agents (CF) | oma-platform |
+| 维度 | open-managed-agents (CF) | meta-harness |
 |------|--------------------------|--------------|
 | 工具面 | `schedule` / `cancel_schedule` / `list_schedules` | 同名，Python extension |
 | 持久化 | SessionDO + D1 / alarm | SQLite `session_wakeup_schedules` |

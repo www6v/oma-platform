@@ -1,7 +1,7 @@
 # Managed Agents Cookbook — 迁移调研与开新路线图
 
 > **来源：** Anthropic [`managed_agents/`](https://github.com/anthropics/claude-cookbooks/tree/main/managed_agents)（本地路径：`claude-cookbooks-main/managed_agents/`）  
-> **目标：** 梳理全部 cookbook，对齐 oma-platform 现状，按「补齐系统明显短板 / 大缺口」优先级决定开新顺序。  
+> **目标：** 梳理全部 cookbook，对齐 meta-harness 现状，按「补齐系统明显短板 / 大缺口」优先级决定开新顺序。  
 > **关联：** `sdk/SDK-PLAN.md` § Cookbook parity；已落地迁移清单见本目录下专项文档。
 
 ---

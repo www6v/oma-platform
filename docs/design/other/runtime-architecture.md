@@ -1,6 +1,6 @@
 # Runtime 架构
 
-本文说明 OMA（Open Managed Agents）系统中 **Runtime（本地 ACP 桥接运行时）** 是什么、在整体架构中的位置，以及 oma-platform 中的实现设计。
+本文说明 OMA（Open Managed Agents）系统中 **Runtime（本地 ACP 桥接运行时）** 是什么、在整体架构中的位置，以及 meta-harness 中的实现设计。
 
 ## 一句话总结
 
@@ -10,7 +10,7 @@ Wire 格式与 `open-managed-agents` 的 AMA（Agent Management API）兼容，�
 
 ## 术语区分
 
-oma-platform 里「runtime」一词出现在多个层次，含义不同：
+meta-harness 里「runtime」一词出现在多个层次，含义不同：
 
 | 名称 | 含义 | 典型位置 |
 |------|------|----------|
@@ -102,7 +102,7 @@ type Runtime struct {
 
 ### RuntimeRoom（内存中继）
 
-每个 `runtime_id` 对应一个 **Room**（`internal/runtime/room.go`），职责等价于 CF 版的 `RuntimeRoom` Durable Object，但在 oma-platform 中实现为 **进程内内存结构**（`internal/runtime/registry.go`）。
+每个 `runtime_id` 对应一个 **Room**（`internal/runtime/room.go`），职责等价于 CF 版的 `RuntimeRoom` Durable Object，但在 meta-harness 中实现为 **进程内内存结构**（`internal/runtime/registry.go`）。
 
 Room 维护两类 WebSocket 连接：
 
@@ -280,7 +280,7 @@ erDiagram
 
 ## 与 open-managed-agents 的对应
 
-| 能力 | open-managed-agents (CF) | oma-platform (Go) |
+| 能力 | open-managed-agents (CF) | meta-harness (Go) |
 |------|--------------------------|-------------------|
 | 寻址 | Durable Object `idFromName(runtime_id)` | 进程内 `Registry.Room(runtime_id)` |
 | Daemon attach | `/agents/runtime/_attach` | ✅ 同路径 |
@@ -291,7 +291,7 @@ erDiagram
 | WS hibernation / 跨 isolate 恢复 | ✅ DO 原生 | ❌ 单进程内存，无 DO |
 | Resource mounter（memory/files/github） | `runtime/resource-mounter.ts` | ❌ 未迁移（P2-3） |
 
-oma-platform 的 Runtime 子系统目标是 **AMA wire 兼容 + 本地 IDE smoke 可测**；生产级跨节点 HA 仍依赖 CF 版 Durable Object 语义。
+meta-harness 的 Runtime 子系统目标是 **AMA wire 兼容 + 本地 IDE smoke 可测**；生产级跨节点 HA 仍依赖 CF 版 Durable Object 语义。
 
 ## 当前实现状态
 

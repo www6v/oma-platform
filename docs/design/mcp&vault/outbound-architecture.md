@@ -1,6 +1,6 @@
 # Outbound 架构
 
-本文用通俗语言说明 OMA（Open Managed Agents）系统中 **outbound**（也叫 **Vault outbound** / **outbound proxy**）是什么、为什么需要它，以及它在 `oma-platform` 里如何设计与实现。
+本文用通俗语言说明 OMA（Open Managed Agents）系统中 **outbound**（也叫 **Vault outbound** / **outbound proxy**）是什么、为什么需要它，以及它在 `meta-harness` 里如何设计与实现。
 
 相关文档：
 

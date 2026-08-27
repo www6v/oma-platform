@@ -1,7 +1,7 @@
 # OMA Platform 项目分析报告
 
 > 分析日期：2026-07-27  
-> 分析范围：oma-platform monorepo 全栈代码（Go 后端 / Console 前端 / Harness Python / Auth 认证 / 部署配置）
+> 分析范围：meta-harness monorepo 全栈代码（Go 后端 / Console 前端 / Harness Python / Auth 认证 / 部署配置）
 
 ---
 
@@ -264,8 +264,8 @@ main()
 | **包管理** | pnpm workspace | — |
 
 **本地子包（monorepo）**：
-- `@oma-platform/api-types` — 共享 API 类型定义
-- `@oma-platform/acp-known-agents` — 已知 Agent 注册表
+- `@meta-harness/api-types` — 共享 API 类型定义
+- `@meta-harness/acp-known-agents` — 已知 Agent 注册表
 
 ### 4.2 目录结构
 
@@ -502,30 +502,30 @@ Harness 是 OMA 平台的 **AI Agent 执行引擎 sidecar**，以 Python/FastAPI
 | 服务 | 镜像 | 端口 | 技术栈 | 职责 |
 |------|------|------|--------|------|
 | `oma-auth` | `Dockerfile.auth` | 8788（内部，不暴露到宿主机） | Node.js 22 | 认证侧车 |
-| `oma-platform` | `Dockerfile.platform` | **8787:8787**（暴露） | Go 1.24 + Console (React) | 主平台服务 |
+| `meta-harness` | `Dockerfile.platform` | **8787:8787**（暴露） | Go 1.24 + Console (React) | 主平台服务 |
 | `oma-harness` | `Dockerfile.harness` | **8090:8090**（暴露） | Python 3.12 + FastAPI | Agent 执行引擎 |
 
 ### 7.2 依赖关系与启动顺序
 
 ```
-oma-platform ──depends_on──► oma-auth (service_healthy)
+meta-harness ──depends_on──► oma-auth (service_healthy)
                  ──depends_on──► oma-harness (service_healthy)
 ```
 
-- `oma-platform` 等待 auth 和 harness 都健康后才启动
+- `meta-harness` 等待 auth 和 harness 都健康后才启动
 - `oma-auth` 和 `oma-harness` 无互相依赖，可并行启动
 
 ### 7.3 容器内网络通信
 
 | 源 | 目标 | URL | 环境变量 |
 |----|------|-----|----------|
-| oma-platform | oma-auth | `http://oma-auth:8788` | `AUTH_UPSTREAM_URL` |
-| oma-platform | oma-harness | `http://oma-harness:8090` | `HARNESS_URL` |
-| oma-harness | oma-platform | `http://oma-platform:8787` | `OMA_PLATFORM_URL` |
+| meta-harness | oma-auth | `http://oma-auth:8788` | `AUTH_UPSTREAM_URL` |
+| meta-harness | oma-harness | `http://oma-harness:8090` | `HARNESS_URL` |
+| oma-harness | meta-harness | `http://meta-harness:8787` | `OMA_PLATFORM_URL` |
 
 ### 7.4 共享存储
 
-`../data:/data` — `oma-platform` 和 `oma-harness` 共享同一个数据卷：
+`../data:/data` — `meta-harness` 和 `oma-harness` 共享同一个数据卷：
 
 | 路径 | 用途 |
 |------|------|
@@ -543,7 +543,7 @@ oma-platform ──depends_on──► oma-auth (service_healthy)
 |------|----------|------|
 | oma-auth | `fetch('/auth/get-session')` — 状态码 < 500 即通过 | 5s 间隔，3s 超时，5 次重试，10s 启动期 |
 | oma-harness | `urllib.request.urlopen('/health')` | 同上 |
-| oma-platform | ⚠️ **无显式健康检查定义** | — |
+| meta-harness | ⚠️ **无显式健康检查定义** | — |
 
 ### 7.6 构建流水线
 
@@ -720,7 +720,7 @@ Harness Dockerfile 还用 `sed` 替换 `uv.lock` 中的 `files.pythonhosted.org`
 | **Harness 单点** | 🟡 中 | 虽然设计为无状态可恢复，但当前部署模式是单一 Python 进程。高并发下需要多实例 + 负载均衡。 |
 | **HTTPS CONNECT 未实现** | 🟡 中 | Vault Outbound Proxy 不支持 HTTPS 隧道，沙箱内的 HTTPS 请求无法注入凭据。 |
 | **硬编码默认凭据** | 🔴 高 | `DATABASE_URL` 默认值包含硬编码凭据，生产环境必须通过 `.env` 覆盖。 |
-| **oma-platform 缺少健康检查** | 🟡 中 | 作为核心服务却没有定义 Docker `healthcheck`。 |
+| **meta-harness 缺少健康检查** | 🟡 中 | 作为核心服务却没有定义 Docker `healthcheck`。 |
 
 ### 9.3 功能缺口
 
@@ -740,7 +740,7 @@ Harness Dockerfile 还用 `sed` 替换 `uv.lock` 中的 `files.pythonhosted.org`
 | # | 改进项 | 模块 | 预期收益 |
 |---|--------|------|----------|
 | 1 | **清理 SQLite 迁移残留** | Go 后端 | 减少 ~2000 行注释代码，降低认知负担 |
-| 2 | **为 oma-platform 添加 Docker healthcheck** | 部署 | 提升部署可靠性 |
+| 2 | **为 meta-harness 添加 Docker healthcheck** | 部署 | 提升部署可靠性 |
 | 3 | **移除 `DATABASE_URL` 默认硬编码凭据** | 部署/安全 | 消除安全隐患 |
 | 4 | **`BETTER_AUTH_SECRET` 未设置时强制报错** | Auth | 避免会话失效事故 |
 | 5 | **替换 Harness 中的 `print(stderr)` 为结构化日志** | Harness | 提升生产可观测性 |

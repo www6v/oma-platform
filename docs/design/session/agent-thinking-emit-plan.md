@@ -33,7 +33,7 @@ Reference TS: `piPy-env/pi/packages/ai` (types + anthropic provider), `pi/packag
 - `pi_ai.models_json`: `thinkingFormat` qwen/zai/… defaults `reasoning=True` when omitted
 - `pi_agent.agent_loop`: forward thinking_* via `message_update` + `assistantMessageEvent`
 
-### harness (`oma-platform/harness`)
+### harness (`meta-harness/harness`)
 
 - `emit.py`: map `assistantMessageEvent` → `agent.thinking_stream_*` / `agent.thinking_chunk`; `message_end` thinking blocks → `agent.thinking` (+ `providerOptions.anthropic.signature`)
 - `turn.py`: pass `thinking_level` from `agent.metadata.thinking_level` into `CreateAgentSessionOptions`

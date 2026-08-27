@@ -1,6 +1,6 @@
 # Session Events（会话事件）
 
-本文用通俗语言说明 oma-platform 中 **Session Event** 是什么、在系统里如何流转，以及客户端 / Console / Harness 各自该关注哪些事件类型。
+本文用通俗语言说明 meta-harness 中 **Session Event** 是什么、在系统里如何流转，以及客户端 / Console / Harness 各自该关注哪些事件类型。
 
 ## 一句话总结
 

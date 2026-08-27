@@ -1,6 +1,6 @@
 # Sub-agent（子 Agent）
 
-本文说明 OMA 中 **Sub-agent** 是什么、主 Agent 如何委派任务给它，以及 oma-platform 中的实现方式。
+本文说明 OMA 中 **Sub-agent** 是什么、主 Agent 如何委派任务给它，以及 meta-harness 中的实现方式。
 
 ## 一句话总结
 
@@ -40,7 +40,7 @@
 
 ## 三类委派目标
 
-oma-platform 支持三类委派目标（与 open-managed-agents 对齐，并增加角色模板）：
+meta-harness 支持三类委派目标（与 open-managed-agents 对齐，并增加角色模板）：
 
 ### 1. 具名 Sub-agent（`call_agent_<id>`）
 
@@ -310,7 +310,7 @@ curl -sS -X POST "$BASE/v1/agents" \
 |------|----------------|
 | **单轮问答、翻译、摘要** | 主 Agent 直接回答，无委派开销 |
 | **子 Agent 需要 MCP / 浏览器** | 用**具名** Sub-agent 并配好 `mcp_servers`；不要用 `general_subagent` |
-| **子 Agent 还要再派子 Agent** | oma-platform 当前不支持；考虑扁平化任务或等嵌套委派落地 |
+| **子 Agent 还要再派子 Agent** | meta-harness 当前不支持；考虑扁平化任务或等嵌套委派落地 |
 | **极低延迟交互** | 避免委派（多一整轮 LLM）；或把步骤合并进主 prompt |
 | **需要与用户持续多轮对话的子角色** | Sub-agent 只做**单轮**隔离 turn；长期角色应做成独立 Session / 独立 Agent |
 | **强依赖完整主对话上下文** | Sub-agent **看不到**主线程历史，须在 `message` / `task` 里写全上下文 |
@@ -394,7 +394,7 @@ sequenceDiagram
 - **Go 层不跑 Sub-agent 逻辑**，只负责解析 `callable_agents` / `default_subagent_roles`、把 `sub_agents` 配置传给 harness，并持久化/广播 harness 产出的事件。
 - **Python harness** 在 `pi_subagent.delegate` 中处理委派；同步模式 `await` 子 turn 后把文本塞回 tool result，后台模式立即返回并在 turn 结束前等待 `background_tasks`。
 
-## oma-platform 实现
+## meta-harness 实现
 
 ### 1. Agent 配置与解析（Go）
 
@@ -536,7 +536,7 @@ subAgents, err := harness.ResolveSubAgents(
 
 ## 行为约束与差异
 
-| 约束 | oma-platform | open-managed-agents (CF) |
+| 约束 | meta-harness | open-managed-agents (CF) |
 |------|--------------|--------------------------|
 | 沙箱 | 共享 workdir | 共享 sandbox |
 | 子对话历史 | 隔离（仅一条 user.message） | 隔离 `InMemoryHistory` |

@@ -8,7 +8,7 @@
 
 ## Goal
 
-Port Anthropic cookbook **verify_with_outcome_grader** to oma-platform:
+Port Anthropic cookbook **verify_with_outcome_grader** to meta-harness:
 
 1. Accept `user.define_outcome` and persist active outcome state
 2. After each harness turn, run LLM-as-judge (or test fake evaluator)

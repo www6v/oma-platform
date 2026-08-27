@@ -3,7 +3,7 @@
 **Status:** APPROVED (2026-07-11)
 **Date:** 2026-07-11
 **Branch:** `harness`
-**Scope:** `oma-platform` Go server + reference to `open-managed-agents` ACP runtime
+**Scope:** `meta-harness` Go server + reference to `open-managed-agents` ACP runtime
 
 ## Implementation Status (2026-07-12 update)
 
@@ -84,7 +84,7 @@
 
 ## 1. Problem
 
-Today `oma-platform` ships **one** harness implementation: the **pipy HTTP sidecar**.
+Today `meta-harness` ships **one** harness implementation: the **pipy HTTP sidecar**.
 `cmd/oma-server/main.go:145` constructs a single `&harness.HTTPClient{BaseURL: harnessURL}`
 at startup and threads it through every session. All sessions — regardless of the
 agent's `_oma.harness` metadata — use the same pipy client.
@@ -439,7 +439,7 @@ out-of-date, that's a separate task.
 
 ## Appendix A: Mapping to `open-managed-agents` Reference
 
-| open-managed-agents | oma-platform |
+| open-managed-agents | meta-harness |
 |---------------------|--------------|
 | `packages/acp-runtime/src/known-agents.ts` | `internal/runtime/known_agents.go` (this plan) |
 | `packages/acp-runtime/src/types.ts::Spawner` | bridge daemon (out of scope here) |

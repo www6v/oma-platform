@@ -37,7 +37,7 @@
 | `session_thread_id` | 线程唯一 ID |
 | `agent_id` / `agent_name` | 该线程上运行的 Agent（子线程通常是另一个 Agent 配置） |
 | `parent_thread_id` | 父线程；主线程为 `null` |
-| `status` | `active` 或 `archived`（oma-platform 当前主要从事件派生，归档逻辑待完善） |
+| `status` | `active` 或 `archived`（meta-harness 当前主要从事件派生，归档逻辑待完善） |
 
 ### 事件如何「贴标签」
 
@@ -79,7 +79,7 @@ runSubAgent()
 4. **中断可 per-thread**：`user.interrupt` 可带 `session_thread_id`，只取消该子 Agent 的在途 turn，不影响兄弟线程。
 5. **嵌套委派**：子 Agent 再委派时，新线程的 `parent_thread_id` 指向当前子线程，Console 可渲染成树形 Tab。
 
-在 open-managed-agents（Cloudflare 版）中，上述逻辑由 `SessionDO.runSubAgent()` 实现。oma-platform 已在 harness 侧实现 **P2-1（call_agent 委派）**：`call_agent_*` / `general_subagent` 工具会发出 `session.thread_created`，并在隔离子线程中跑一轮 turn。
+在 open-managed-agents（Cloudflare 版）中，上述逻辑由 `SessionDO.runSubAgent()` 实现。meta-harness 已在 harness 侧实现 **P2-1（call_agent 委派）**：`call_agent_*` / `general_subagent` 工具会发出 `session.thread_created`，并在隔离子线程中跑一轮 turn。
 
 ## 数据流示意
 
@@ -106,13 +106,13 @@ flowchart TB
     User --> PendingQ
 ```
 
-## oma-platform 实现
+## meta-harness 实现
 
 ### 设计选择：从 Event Log **派生**，不单独建 threads 表
 
 Cloudflare 版 `SessionDO` 在 SQLite 里有 `threads` 表，并在 `runSubAgent` 时 `INSERT` 一行。
 
-oma-platform（Go）采用更轻的 **派生模型**（T11 / P1-7 已完成）：
+meta-harness（Go）采用更轻的 **派生模型**（T11 / P1-7 已完成）：
 
 - 不维护独立的 `threads` 表。
 - 读取 Session 的全部 `session_events`，扫描 `session.thread_created` 类型事件，动态拼出线程列表。
@@ -203,7 +203,7 @@ open-managed-agents Console（`SessionDetail.tsx`）的消费方式：
 
 ## 与 open-managed-agents 的对应
 
-| 能力 | open-managed-agents (CF) | oma-platform (Go) |
+| 能力 | open-managed-agents (CF) | meta-harness (Go) |
 |------|--------------------------|-------------------|
 | 线程存储 | `threads` SQL 表 + 内存 Map | 从 `session_events` 派生 |
 | 创建子线程 | `runSubAgent()` → INSERT + 事件 | harness `call_agent` 扩展发出 `session.thread_created` |

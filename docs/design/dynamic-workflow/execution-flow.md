@@ -1,6 +1,6 @@
 # Dynamic Workflow 执行流程
 
-本文说明 oma-platform 中 **Dynamic Workflows** 的定义、端到端执行链路，以及与 Console、Go 平台、harness 扩展、OMA Session 的协作方式。
+本文说明 meta-harness 中 **Dynamic Workflows** 的定义、端到端执行链路，以及与 Console、Go 平台、harness 扩展、OMA Session 的协作方式。
 
 ## 一句话
 
@@ -312,7 +312,7 @@ main.py
 
 - 上游 JS 参考（生成与执行）：[`piPy-dynamic-workflows/docs/upstream-js-generation-and-execution.md`](../../../../piPy-dynamic-workflows/docs/upstream-js-generation-and-execution.md)
 - Orchestration 对照（piPy vs 上游）：[`piPy-dynamic-workflows/docs/orchestration-comparison.md`](../../../../piPy-dynamic-workflows/docs/orchestration-comparison.md)
-- 平台 README：`oma-platform/README.md`（Dynamic workflows 概述）
+- 平台 README：`meta-harness/README.md`（Dynamic workflows 概述）
 - 扩展 README：`piPy-dynamic-workflows/README.md`
 - 扩展架构：`piPy-dynamic-workflows/v1/ARCHITECTURE.md`
 - 迁移设计：`piPy-dynamic-workflows/migrate/t-wangwei07-master-design-20260626-182600.md`

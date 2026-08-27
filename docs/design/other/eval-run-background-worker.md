@@ -1,6 +1,6 @@
 # Eval Run Background Worker
 
-本文说明 oma-platform 中 **Eval run background worker** 的职责、工作流程，以及与源项目 `open-managed-agents` 的对应关系。
+本文说明 meta-harness 中 **Eval run background worker** 的职责、工作流程，以及与源项目 `open-managed-agents` 的对应关系。
 
 ## 一句话
 
@@ -50,7 +50,7 @@ pending → running → completed（或 failed）
 
 ## 与 open-managed-agents 的对应
 
-| 维度 | open-managed-agents (CF) | oma-platform |
+| 维度 | open-managed-agents (CF) | meta-harness |
 |------|--------------------------|--------------|
 | 触发方式 | cron `tickEvalRuns` | 进程内 goroutine + `time.Ticker` |
 | 实现位置 | integrations / cron 路径 | `internal/eval/worker.go` |

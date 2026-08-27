@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 将 oma-platform 的 harness 分发从两层结构（Kind → managed agent id）扁平化为一级 Kind，并以一级 Kind `deepseek` 接入 DeepSeek 官方 Agent Harness（dsh web 网关）。
+**Goal:** 将 meta-harness 的 harness 分发从两层结构（Kind → managed agent id）扁平化为一级 Kind，并以一级 Kind `deepseek` 接入 DeepSeek 官方 Agent Harness（dsh web 网关）。
 
 **Architecture:** 行为保持型重构先行（Task 2-6：registry 平铺客户端 + legacy 归一化，既有测试全绿为门禁），然后纯增量接入 DeepSeekClient（HTTP RPC + WebSocket 事件流，隔离在单文件），最后前端、docker、E2E 收尾。存量 `managed` + `runtime_binding` 数据靠 `ClientFor` 分发期归一化兼容，无数据库迁移。
 
@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Go 测试命令：`go test ./...`（在 `oma-platform/` 根目录执行）；定向测试用 `go test ./internal/harness/... -run TestXxx -v`
+- Go 测试命令：`go test ./...`（在 `meta-harness/` 根目录执行）；定向测试用 `go test ./internal/harness/... -run TestXxx -v`
 - 前端测试命令：`npm test`（在 `console/` 目录，vitest run）；类型检查 `npm run typecheck`
 - 重构阶段（Task 2-6）是行为保持型：任何既有测试失败都是缺陷，不是"测试需要更新"；仅当测试直接引用被删除的符号（`ManagedFactory` 字段、`NewManagedFactory` 等）时才按本计划给出的代码改写
 - dsh web 网关**无鉴权**（spike 待确认）：docker 中不暴露宿主端口，仅内部网络
@@ -1306,7 +1306,7 @@ dsh **禁止 `--host 0.0.0.0`**（startup.ts 刻意拒绝）。容器内绑定 e
 ENTRYPOINT ["sh", "-c", "ip=$(hostname -i | awk '{print $1}') && exec pnpm dsh web --host \"$ip\" --trusted-host \"$ip\" --trusted-host dsh"]
 ```
 
-compose `healthcheck` 改为 `wget -qO- http://127.0.0.1:3080/ || exit 1`（容器内 loopback 请求经 Host 围栏放行）。注意：`oma-platform` 访问 `http://dsh:3080` 时 Host 头为 `dsh:3080`，靠 `--trusted-host dsh` 放行。
+compose `healthcheck` 改为 `wget -qO- http://127.0.0.1:3080/ || exit 1`（容器内 loopback 请求经 Host 围栏放行）。注意：`meta-harness` 访问 `http://dsh:3080` 时 Host 头为 `dsh:3080`，靠 `--trusted-host dsh` 放行。
 
 ### A.7 凭证
 
@@ -2133,7 +2133,7 @@ git commit -m "feat(harness): wire deepseek kind into registry, main and env"
 
 **Interfaces:**
 - Consumes: Task 1 spike 报告的监听地址配置项（Step 2 使用）
-- Produces: compose 内 `dsh` 服务，`oma-platform` 经 `http://dsh:3080` 访问；宿主不暴露 dsh 端口
+- Produces: compose 内 `dsh` 服务，`meta-harness` 经 `http://dsh:3080` 访问；宿主不暴露 dsh 端口
 
 - [ ] **Step 1: 编写 Dockerfile.dsh**
 
@@ -2196,14 +2196,14 @@ CMD ["pnpm", "dsh", "web"]
 
 `volumes:` 顶层段（docker-compose.yml:168-169）追加 `dsh-data:`。
 
-`oma-platform` 服务的 `environment:` 段追加（docker-compose.yml:65-86）：
+`meta-harness` 服务的 `environment:` 段追加（docker-compose.yml:65-86）：
 
 ```yaml
       # DeepSeek harness gateway (dsh web) — in-network URL.
       OMA_DEEPSEEK_GATEWAY_URL: http://dsh:3080
 ```
 
-`oma-platform` 的 `depends_on:` 追加：
+`meta-harness` 的 `depends_on:` 追加：
 
 ```yaml
       dsh:
@@ -2255,7 +2255,7 @@ exec pnpm dsh web
 - [ ] **Step 4: 验证构建（不启动全栈）**
 
 Run: `docker compose -f deploy/docker-compose.yml build dsh`
-Expected: 构建成功。若 dsh 默认绑定 127.0.0.1 导致容器内 oma-platform 连不上，按 Task 1 Step 2 的结论调整 CMD（bind flag 或 socat）。
+Expected: 构建成功。若 dsh 默认绑定 127.0.0.1 导致容器内 meta-harness 连不上，按 Task 1 Step 2 的结论调整 CMD（bind flag 或 socat）。
 
 - [ ] **Step 5: Commit**
 
@@ -2495,7 +2495,7 @@ Expected: PASS。
 2. console 创建 agent：Cloud / Hermes / OpenClaw / DeepSeek / Bring-your-own-daemon 选项齐全；保存 DeepSeek agent 后 `_oma.harness="deepseek"` 无 runtime_binding
 3. DeepSeek agent 会话流式渲染（WS 路径）；若 spike 降级为非流式，确认非流式结果正常
 4. `OMA_DEEPSEEK_ENABLED=0` 重启后端 → DeepSeek 选项置灰；hermes/openclaw/piPy 行为不变
-5. `docker compose up` 后 `docker compose ps` 显示 dsh healthy；`docker compose exec oma-platform wget -qO- http://dsh:3080/ | head -c 200` 连通
+5. `docker compose up` 后 `docker compose ps` 显示 dsh healthy；`docker compose exec meta-harness wget -qO- http://dsh:3080/ | head -c 200` 连通
 6. `go test ./...` 与 `npm test` 全绿
 
 - [ ] **Step 3: 更新实施状态文档**
