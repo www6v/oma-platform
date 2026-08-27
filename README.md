@@ -1,4 +1,4 @@
-# oma-platform
+# meta-harness
 
 > 中文文档：[readme-zh.md](./readme-zh.md)
 
@@ -335,7 +335,7 @@ See [SDK-PLAN.md](https://github.com/www6v/oma-sdk/blob/master/SDK-PLAN.md) and 
 
 The OMA Console SPA in `console/` is served on the same port as the API when `CONSOLE_DIR` is set. `./start-console.sh` builds `console/dist/` if missing, starts the better-auth sidecar, and proxies `/auth/*` for email/password sign-in.
 
-**Coverage:** Agents, sessions, environments, model cards, skills, vaults, files, integrations, evals, dreams, runtimes, memory stores, and **dynamic workflows** (`/workflows`, plugin `console/src/plugins/dynamic-workflows/`) are wired to oma-platform APIs. Managed harness dropdown (OpenClaw / Hermes) follows `GET /v1/config/harnesses`. Browser tools, `/v1/cap-cli/oauth` (Vault CLI tab), and some CF-only features remain deferred — see [MVP-MIGRATION-PLAN.md](./docs/api-migrate/MVP-MIGRATION-PLAN.md).
+**Coverage:** Agents, sessions, environments, model cards, skills, vaults, files, integrations, evals, dreams, runtimes, memory stores, and **dynamic workflows** (`/workflows`, plugin `console/src/plugins/dynamic-workflows/`) are wired to meta-harness APIs. Managed harness dropdown (OpenClaw / Hermes) follows `GET /v1/config/harnesses`. Browser tools, `/v1/cap-cli/oauth` (Vault CLI tab), and some CF-only features remain deferred — see [MVP-MIGRATION-PLAN.md](./docs/api-migrate/MVP-MIGRATION-PLAN.md).
 
 ## Configuration
 

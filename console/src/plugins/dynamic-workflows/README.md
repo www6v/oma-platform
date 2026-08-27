@@ -2,7 +2,7 @@
 
 ## 📋 Overview
 
-This plugin integrates the pipy-dynamic-workflows backend into the oma-platform console, providing a complete UI for creating, editing, executing, and monitoring workflows.
+This plugin integrates the pipy-dynamic-workflows backend into the meta-harness console, providing a complete UI for creating, editing, executing, and monitoring workflows.
 
 ## 🎯 Features
 
@@ -260,4 +260,4 @@ To test the integration:
 
 ## 📝 License
 
-Part of the oma-platform project.
+Part of the meta-harness project.

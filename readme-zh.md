@@ -1,4 +1,4 @@
-# oma-platform
+# meta-harness
 
 > English: [README.md](./README.md)
 
@@ -332,7 +332,7 @@ session = client.sessions.create(agent=agent.id)
 
 当设置 `CONSOLE_DIR` 时，本仓库 `console/` 下的 OMA Console SPA 与 API 同端口提供服务。`./start-console.sh` 会在缺少 `console/dist/` 时自动构建，启动 better-auth 侧车并代理 `/auth/*`，支持邮箱密码注册登录。
 
-**覆盖范围：** Agents、sessions、environments、model cards、skills、vaults、files、integrations、evals、dreams、runtimes、memory stores，以及 **dynamic workflows**（`/workflows`，插件 `console/src/plugins/dynamic-workflows/`）已对接 oma-platform API。Managed harness 下拉（OpenClaw / Hermes）跟随 `GET /v1/config/harnesses`。browser tools、`/v1/cap-cli/oauth`（Vault CLI tab）及部分 CF 专属能力仍延后 — 详见 [MVP-MIGRATION-PLAN.md](./docs/api-migrate/MVP-MIGRATION-PLAN.md)。
+**覆盖范围：** Agents、sessions、environments、model cards、skills、vaults、files、integrations、evals、dreams、runtimes、memory stores，以及 **dynamic workflows**（`/workflows`，插件 `console/src/plugins/dynamic-workflows/`）已对接 meta-harness API。Managed harness 下拉（OpenClaw / Hermes）跟随 `GET /v1/config/harnesses`。browser tools、`/v1/cap-cli/oauth`（Vault CLI tab）及部分 CF 专属能力仍延后 — 详见 [MVP-MIGRATION-PLAN.md](./docs/api-migrate/MVP-MIGRATION-PLAN.md)。
 
 ## 配置项
 
