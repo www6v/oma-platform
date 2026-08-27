@@ -1162,22 +1162,22 @@ function BasicTab({
               managedAgent: "",
             });
           }}
-          placeholder="— Cloud (run on OMA) —"
+          placeholder="— Cloud (piPy) —"
         >
-          <SelectOption value="__cloud__">— Cloud (run on OMA) —</SelectOption>
+          <SelectOption value="__managed_deepseek__" disabled={!managedHarness.deepseek}>
+            — DeepSeek harness —
+            {!managedHarness.deepseek ? " — disabled" : ""}
+          </SelectOption>
+          <SelectOption value="__cloud__">— Cloud (piPy) —</SelectOption>
           <SelectGroup>
             <SelectGroupLabel>Managed (platform-hosted)</SelectGroupLabel>
             <SelectOption value="__managed_hermes__" disabled={!managedHarness.hermes}>
-              Hermes (Nous Research)
+              — Hermes (Nous Research) —
               {!managedHarness.hermes ? " — disabled" : ""}
             </SelectOption>
             <SelectOption value="__managed_openclaw__" disabled={!managedHarness.openclaw}>
-              OpenClaw
+              — OpenClaw —
               {!managedHarness.openclaw ? " — disabled" : ""}
-            </SelectOption>
-            <SelectOption value="__managed_deepseek__" disabled={!managedHarness.deepseek}>
-              DeepSeek
-              {!managedHarness.deepseek ? " — disabled" : ""}
             </SelectOption>
           </SelectGroup>
           {runtimes.length > 0 && (
@@ -1735,31 +1735,6 @@ function AgentsTab({
         </label>
       </div>
 
-      {/* Team coordination — opt-in via agent metadata. */}
-      <div className="rounded-md border border-border bg-bg-surface px-3 py-3">
-        <label className="flex items-start gap-2 text-sm cursor-pointer">
-          <input
-            type="checkbox"
-            checked={form.enableTeamTools}
-            onChange={(e) => setForm({ ...form, enableTeamTools: e.target.checked })}
-            className="accent-brand mt-0.5"
-          />
-          <div>
-            <div className="font-medium text-fg">Enable team tools</div>
-            <p className="text-xs text-fg-subtle mt-0.5">
-              Exposes{" "}
-              <span className="font-mono">team_create</span>,{" "}
-              <span className="font-mono">spawn_teammate</span>,{" "}
-              <span className="font-mono">send_team_message</span>, and{" "}
-              <span className="font-mono">read_team_messages</span>. The lead agent
-              creates teams and spawns teammates from the session{" "}
-              <span className="font-medium">Conversation</span> tab; members and mailbox
-              appear under Session → <span className="font-medium">Team</span>.
-            </p>
-          </div>
-        </label>
-      </div>
-
       <div>
         <label className="text-sm font-medium text-fg block">Callable Agents</label>
         <p className="text-xs text-fg-subtle mb-2">
@@ -1814,6 +1789,32 @@ function AgentsTab({
           Create other agents first to enable multi-agent delegation.
         </p>
       )}
+
+      <div className="border-t border-border pt-5">
+        <div className="rounded-md border border-border bg-bg-surface px-3 py-3">
+          <label className="flex items-start gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.enableTeamTools}
+              onChange={(e) => setForm({ ...form, enableTeamTools: e.target.checked })}
+              className="accent-brand mt-0.5"
+            />
+            <div>
+              <div className="font-medium text-fg">Enable team tools</div>
+              <p className="text-xs text-fg-subtle mt-0.5">
+                Exposes{" "}
+                <span className="font-mono">team_create</span>,{" "}
+                <span className="font-mono">spawn_teammate</span>,{" "}
+                <span className="font-mono">send_team_message</span>, and{" "}
+                <span className="font-mono">read_team_messages</span>. The lead agent
+                creates teams and spawns teammates from the session{" "}
+                <span className="font-medium">Conversation</span> tab; members and mailbox
+                appear under Session → <span className="font-medium">Team</span>.
+              </p>
+            </div>
+          </label>
+        </div>
+      </div>
     </div>
   );
 }
